@@ -3,45 +3,63 @@
 
 set -e
 
-# Extract host and port from DATABASE_URL
-# Assumes format: postgres://username:password@host:port/database
+echo "Starting application setup..."
+
+# Print environment for debugging (redacted)
+echo "Environment variables available: $(env | grep -v PASSWORD | grep -v SECRET | cut -d= -f1 | tr '\n' ' ')"
+echo "PYTHONPATH: $PYTHONPATH"
+echo "DJANGO_SETTINGS_MODULE: $DJANGO_SETTINGS_MODULE"
+echo "PORT: ${PORT:-8000}"
+echo "DATABASE_URL: $(echo $DATABASE_URL | sed 's/\(postgres:\/\/[^:]*\):[^@]*\(@.*\)/\1:REDACTED\2/')"
+
+# Make sure port is set
+PORT=${PORT:-8000}
+
+# Try to connect to the database if DATABASE_URL is available
 if [ -n "$DATABASE_URL" ]; then
-  # Extract host and port from DATABASE_URL
-  DB_HOST=$(echo $DATABASE_URL | sed -e 's/^.*@//' -e 's/:.*//' -e 's/\/.*//')
-  DB_PORT=$(echo $DATABASE_URL | sed -e 's/^.*://' -e 's/\/.*//')
-else
-  # Default values if DATABASE_URL is not set
-  DB_HOST=${DB_HOST:-localhost}
-  DB_PORT=${DB_PORT:-5432}
-fi
-
-echo "Waiting for database at $DB_HOST:$DB_PORT..."
-
-# Wait for the database to be ready
-RETRIES=30
-until [ $RETRIES -eq 0 ]; do
-  echo "Checking database connection..."
-  timeout 1 bash -c "cat < /dev/null > /dev/tcp/$DB_HOST/$DB_PORT" 2>/dev/null
+  echo "DATABASE_URL is set, checking connection..."
   
-  result=$?
-  if [ $result -eq 0 ]; then
-    echo "Database is available."
-    break
+  # Parse connection details
+  if [[ $DATABASE_URL == postgres* ]]; then
+    # PostgreSQL URL
+    PROTO="$(echo $DATABASE_URL | grep :// | sed -e's,^\(.*://\).*,\1,g')"
+    URL="$(echo ${DATABASE_URL/$PROTO/})"
+    USER="$(echo $URL | grep @ | cut -d@ -f1 | cut -d: -f1)"
+    HOST="$(echo ${URL/$USER@/} | cut -d/ -f1 | cut -d: -f1)"
+    PORT="$(echo ${URL/$USER@/} | cut -d/ -f1 | cut -d: -f2)"
+    PORT="${PORT:-5432}"
+    
+    echo "Checking PostgreSQL connection to $HOST:$PORT..."
+    
+    # Try to connect using nc
+    for i in $(seq 1 30); do
+      echo "Attempt $i: Checking database connection..."
+      nc -z -w1 $HOST $PORT > /dev/null 2>&1
+      
+      if [ $? -eq 0 ]; then
+        echo "Database is available!"
+        break
+      fi
+      
+      if [ $i -eq 30 ]; then
+        echo "Could not connect to database after 30 attempts. Will try to start anyway."
+      else
+        echo "Database is not yet available. Retrying in 1 second..."
+        sleep 1
+      fi
+    done
+  else
+    echo "Non-PostgreSQL DATABASE_URL detected. Skipping connection check."
   fi
-  
-  echo "Database is unavailable - sleeping"
-  RETRIES=$((RETRIES-1))
-  sleep 1
-done
-
-if [ $RETRIES -eq 0 ]; then
-  echo "Could not connect to database after multiple attempts. Continuing anyway..."
+else
+  echo "No DATABASE_URL detected. Skipping database connection check."
 fi
 
-# Apply migrations if possible
-echo "Applying migrations..."
+# Try applying migrations (but don't fail if they fail)
+echo "Attempting to apply database migrations..."
+python manage.py showmigrations --list || echo "Failed to check migrations status"
 python manage.py migrate --noinput || echo "Migrations failed, but continuing..."
 
-# Execute the command passed to this script
-echo "Starting application..."
+# Start the application
+echo "Starting Django application on port ${PORT}..."
 exec "$@" 
