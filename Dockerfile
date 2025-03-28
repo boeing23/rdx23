@@ -11,7 +11,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     libpq-dev \
     netcat-traditional \
-    procps \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
@@ -25,17 +24,15 @@ COPY . .
 # Ensure scripts are executable
 RUN chmod +x wait-for-it.sh entrypoint.sh
 
-# Make health check script
-RUN echo '#!/bin/bash\ncurl -f http://localhost:${PORT:-8000}/health/ || exit 1' > /healthcheck.sh && chmod +x /healthcheck.sh
-
 # Collect static files with fallback
 RUN python manage.py collectstatic --noinput || echo "Static collection failed but continuing"
 
 # Health check
-HEALTHCHECK --interval=5s --timeout=3s --retries=3 CMD /healthcheck.sh
+HEALTHCHECK --interval=5s --timeout=3s --retries=3 \
+  CMD curl -f http://localhost:$PORT/health/ || exit 1
 
 # Set the default port
 ENV PORT=8000
 
-# Start command
-CMD ["./entrypoint.sh"] 
+# Django start command - simplified for reliability
+CMD gunicorn carpool_project.wsgi:application --bind 0.0.0.0:$PORT --timeout 120 --workers 1 --log-level debug 
