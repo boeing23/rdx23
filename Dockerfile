@@ -4,6 +4,7 @@ WORKDIR /app
 
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
+ENV PRODUCTION=True
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -19,12 +20,12 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy project
 COPY . .
 
-# Create a script to wait for database and run migrations
+# Ensure wait-for-it.sh is executable
 COPY wait-for-it.sh /wait-for-it.sh
 RUN chmod +x /wait-for-it.sh
 
-# Collect static files
-RUN python manage.py collectstatic --noinput
+# Collect static files with fallback
+RUN python manage.py collectstatic --noinput || true
 
-# Run gunicorn with increased timeout and workers
-CMD ["gunicorn", "carpool_project.wsgi:application", "--bind", "0.0.0.0:$PORT", "--timeout", "120", "--workers", "4", "--log-level", "debug"] 
+# Start command using wait-for-it
+CMD /wait-for-it.sh gunicorn carpool_project.wsgi:application --bind 0.0.0.0:${PORT:-8000} --timeout 120 --workers 3 --log-level debug 
