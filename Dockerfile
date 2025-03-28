@@ -12,8 +12,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN pip install --no-cache-dir psutil
 
 # Copy only the debug server
-COPY debug_server.py .
-RUN chmod +x debug_server.py
+COPY debug_server.py /app/
+RUN chmod +x /app/debug_server.py
+RUN ls -la /app/
 
 # Set the default port
 ENV PORT=8000
@@ -22,5 +23,5 @@ ENV PORT=8000
 HEALTHCHECK --interval=5s --timeout=3s --start-period=5s --retries=3 \
   CMD curl -f http://localhost:$PORT/ || exit 1
 
-# Make sure the container doesn't exit
-CMD ["python", "debug_server.py"] 
+# Make sure the container doesn't exit - using absolute path
+CMD ["python", "/app/debug_server.py"] 
