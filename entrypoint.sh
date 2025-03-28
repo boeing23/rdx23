@@ -16,4 +16,4 @@ fi
 
 # Start application with wait-for-it
 echo "Starting application on port $PORT"
-exec "./wait-for-it.sh" gunicorn carpool_project.wsgi:application --bind "0.0.0.0:$PORT" --timeout 120 --workers 2 --log-level debug 
+exec "./wait-for-it.sh" gunicorn carpool_project.wsgi:application --bind "0.0.0.0:$PORT" --timeout 120 --workers 1 --log-level debug 
