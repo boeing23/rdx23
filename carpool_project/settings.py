@@ -185,6 +185,28 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:3006",  # Additional React port
     "http://127.0.0.1:3006",
     "https://ridex-frontend.up.railway.app",
+    "https://rdx23-production-frontend.up.railway.app"
+]
+
+CORS_ALLOW_METHODS = [
+    "DELETE",
+    "GET",
+    "OPTIONS",
+    "PATCH",
+    "POST",
+    "PUT",
+]
+
+CORS_ALLOW_HEADERS = [
+    "accept",
+    "accept-encoding",
+    "authorization",
+    "content-type",
+    "dnt",
+    "origin",
+    "user-agent",
+    "x-csrftoken",
+    "x-requested-with",
 ]
 
 # Geocoding API settings
