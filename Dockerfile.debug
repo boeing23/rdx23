@@ -5,11 +5,15 @@ WORKDIR /app
 # Install basic utilities
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
+    procps \
     && rm -rf /var/lib/apt/lists/*
 
+# Install psutil for monitoring
+RUN pip install --no-cache-dir psutil
+
 # Copy only the debug server
-COPY simple_server.py .
-RUN chmod +x simple_server.py
+COPY debug_server.py .
+RUN chmod +x debug_server.py
 
 # Set the default port
 ENV PORT=8000
@@ -18,5 +22,5 @@ ENV PORT=8000
 HEALTHCHECK --interval=5s --timeout=3s --start-period=5s --retries=3 \
   CMD curl -f http://localhost:$PORT/ || exit 1
 
-# Start command
-CMD ["python", "simple_server.py"] 
+# Make sure the container doesn't exit
+CMD ["python", "debug_server.py"] 
