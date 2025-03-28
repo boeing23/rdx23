@@ -71,8 +71,31 @@ CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOWED_ORIGINS = [
     "https://ridex-frontend.up.railway.app",
     "https://rdx23-production-frontend.up.railway.app",
+    "https://compassionate-nurturing-production.up.railway.app",
     "http://localhost:3000",
     "http://localhost:3006"
+]
+
+# Make sure these are also set
+CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOW_METHODS = [
+    "DELETE",
+    "GET", 
+    "OPTIONS",
+    "PATCH",
+    "POST", 
+    "PUT",
+]
+CORS_ALLOW_HEADERS = [
+    "accept",
+    "accept-encoding",
+    "authorization",
+    "content-type",
+    "dnt",
+    "origin",
+    "user-agent",
+    "x-csrftoken",
+    "x-requested-with",
 ]
 
 # Very verbose logging for debugging
