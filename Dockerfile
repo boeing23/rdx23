@@ -10,7 +10,6 @@ ENV PRODUCTION=True
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     libpq-dev \
-    netcat-traditional \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
@@ -21,15 +20,15 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy project
 COPY . .
 
-# Ensure scripts are executable
-RUN chmod +x wait-for-it.sh entrypoint.sh
+# Print directory contents for debugging
+RUN echo "=== Files in /app ===" && ls -la
 
 # Collect static files with fallback
 RUN python manage.py collectstatic --noinput || echo "Static collection failed but continuing"
 
 # Health check
 HEALTHCHECK --interval=5s --timeout=3s --retries=3 \
-  CMD curl -f http://localhost:$PORT/health/ || exit 1
+  CMD curl -f http://localhost:$PORT/ || exit 1
 
 # Set the default port
 ENV PORT=8000
