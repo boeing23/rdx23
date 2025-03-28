@@ -2,26 +2,40 @@ FROM python:3.10-slim
 
 WORKDIR /app
 
-# Install basic utilities
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+ENV PRODUCTION=True
+
+# Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl \
+    build-essential \
+    libpq-dev \
+    netcat-traditional \
     procps \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Install psutil for monitoring
-RUN pip install --no-cache-dir psutil
+# Copy requirements and install dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy only the debug server
-COPY debug_server.py /app/
-RUN chmod +x /app/debug_server.py
-RUN ls -la /app/
+# Copy project
+COPY . .
+
+# Ensure scripts are executable
+RUN chmod +x wait-for-it.sh entrypoint.sh
+
+# Make health check script
+RUN echo '#!/bin/bash\ncurl -f http://localhost:${PORT:-8000}/health/ || exit 1' > /healthcheck.sh && chmod +x /healthcheck.sh
+
+# Collect static files with fallback
+RUN python manage.py collectstatic --noinput || echo "Static collection failed but continuing"
+
+# Health check
+HEALTHCHECK --interval=5s --timeout=3s --retries=3 CMD /healthcheck.sh
 
 # Set the default port
 ENV PORT=8000
 
-# Health check that uses curl
-HEALTHCHECK --interval=5s --timeout=3s --start-period=5s --retries=3 \
-  CMD curl -f http://localhost:$PORT/ || exit 1
-
-# Make sure the container doesn't exit - using absolute path
-CMD ["python", "/app/debug_server.py"] 
+# Start command
+CMD ["./entrypoint.sh"] 
