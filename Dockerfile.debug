@@ -1,0 +1,22 @@
+FROM python:3.10-slim
+
+WORKDIR /app
+
+# Install basic utilities
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy only the debug server
+COPY simple_server.py .
+RUN chmod +x simple_server.py
+
+# Set the default port
+ENV PORT=8000
+
+# Health check that uses curl
+HEALTHCHECK --interval=5s --timeout=3s --start-period=5s --retries=3 \
+  CMD curl -f http://localhost:$PORT/ || exit 1
+
+# Start command
+CMD ["python", "simple_server.py"] 
