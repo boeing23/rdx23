@@ -64,7 +64,7 @@ function Navbar() {
             color: 'white' 
           }}
         >
-          RideX
+          ChalBe
         </Typography>
         {isAuthenticated ? (
           <>

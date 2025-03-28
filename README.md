@@ -1,6 +1,6 @@
-# RideX
+# ChalBe
 
-A web-based carpool matching system for Blacksburg, VA residents using geopy for route calculations.
+A carpooling application that helps users find and share rides easily.
 
 ## Features
 

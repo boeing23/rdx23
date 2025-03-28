@@ -17,7 +17,7 @@ function Home() {
   return (
     <Box sx={{ mt: 4, textAlign: 'center' }}>
       <Typography variant="h3" gutterBottom>
-        RideX
+        ChalBe
       </Typography>
       <Typography variant="h5" color="textSecondary" gutterBottom>
         Find and share rides easily
