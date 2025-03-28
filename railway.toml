@@ -1,0 +1,10 @@
+[build]
+builder = "nixpacks"
+buildCommand = "python manage.py collectstatic --noinput"
+
+[deploy]
+startCommand = "gunicorn carpool_project.wsgi:application"
+healthcheckPath = "/"
+healthcheckTimeout = 100
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 3 

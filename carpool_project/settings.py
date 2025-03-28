@@ -15,6 +15,7 @@ from pathlib import Path
 from datetime import timedelta
 from decouple import config
 import environ
+import dj_database_url
 
 env = environ.Env()
 environ.Env.read_env()
@@ -32,7 +33,7 @@ SECRET_KEY = config('SECRET_KEY')
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = config('DEBUG', default=False, cast=bool)
 
-ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1', cast=lambda v: [s.strip() for s in v.split(',')])
+ALLOWED_HOSTS = ['localhost', '127.0.0.1', '.railway.app']
 
 
 # Application definition
@@ -98,13 +99,11 @@ WSGI_APPLICATION = "carpool_project.wsgi.application"
 # https://docs.djangoproject.com/en/5.0/ref/settings/#databases
 
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'carpool_db',
-        'USER': 'boeing23',
-        'HOST': 'localhost',
-        'PORT': '5432',
-    }
+    'default': dj_database_url.config(
+        default='sqlite:///db.sqlite3',
+        conn_max_age=600,
+        conn_health_checks=True
+    )
 }
 
 
@@ -185,6 +184,7 @@ CORS_ALLOWED_ORIGINS = [
     "http://127.0.0.1:3000",
     "http://localhost:3006",  # Additional React port
     "http://127.0.0.1:3006",
+    "https://ridex-frontend.up.railway.app",
 ]
 
 # Geocoding API settings
