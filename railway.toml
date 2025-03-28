@@ -1,8 +1,0 @@
-[build]
-builder = "nixpacks"
-buildCommand = "pip install -r requirements.txt"
-
-[deploy]
-startCommand = "gunicorn carpool_project.wsgi:application"
-healthcheckPath = "/"
-healthcheckTimeout = 300 
