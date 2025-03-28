@@ -90,7 +90,8 @@ function Register() {
     }
 
     try {
-      console.log('Sending registration data:', {
+      console.log('Sending registration data to:', `${API_BASE_URL}/api/users/register/`);
+      console.log('Registration data:', {
         ...formData,
         password: '[HIDDEN]',
         password2: '[HIDDEN]'
@@ -121,27 +122,42 @@ function Register() {
         })
       });
 
+      console.log('Response status:', response.status);
+      
+      // Check if response is OK before trying to parse JSON
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Error response:', errorText);
+        
+        try {
+          // Try to parse as JSON if possible
+          const errorData = JSON.parse(errorText);
+          setError(errorData.detail || 'Registration failed');
+        } catch (e) {
+          // If not JSON, show the raw error or a generic message
+          setError(`Registration failed: ${errorText.substring(0, 100)}...`);
+        }
+        return;
+      }
+      
       const data = await response.json();
       console.log('Registration response:', data);
 
-      if (response.ok) {
-        // Store token and user type
-        localStorage.setItem('token', data.token);
-        localStorage.setItem('userType', JSON.stringify(data.user_type));
-        console.log('Registration successful. User type:', data.user_type);
-        console.log('Stored user type in localStorage:', localStorage.getItem('userType'));
-        // Navigate based on user type
-        if (data.user_type === 'DRIVER') {
-          navigate('/offer');
-        } else {
-          navigate('/rides');
-        }
+      // Store token and user type
+      localStorage.setItem('token', data.token);
+      localStorage.setItem('userType', JSON.stringify(data.user_type));
+      console.log('Registration successful. User type:', data.user_type);
+      console.log('Stored user type in localStorage:', localStorage.getItem('userType'));
+      
+      // Navigate based on user type
+      if (data.user_type === 'DRIVER') {
+        navigate('/offer');
       } else {
-        setError(data.detail || 'Registration failed');
+        navigate('/rides');
       }
     } catch (err) {
       console.error('Registration error:', err);
-      setError('Network error during registration');
+      setError('Network error during registration. Please check the console for details.');
     }
   };
 
