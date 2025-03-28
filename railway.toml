@@ -8,4 +8,4 @@ healthcheckTimeout = 300
 numReplicas = 1
 restartPolicyMaxRetries = 10
 restartPolicyType = "ON_FAILURE"
-startCommand = "gunicorn carpool_project.wsgi:application --bind 0.0.0.0:${PORT:-8000} --timeout 120 --workers 1 --log-level debug" 
+startCommand = "./startup.sh" 

@@ -8,8 +8,18 @@ from pathlib import Path
 from datetime import timedelta
 import dj_database_url
 
+# Print version info
+print("Initializing Django settings...", file=sys.stderr)
+print(f"Python version: {sys.version}", file=sys.stderr)
+print(f"Current directory: {os.getcwd()}", file=sys.stderr)
+
 # Import all settings from the base settings file
-from .settings import *
+try:
+    from .settings import *
+    print("Successfully imported base settings", file=sys.stderr)
+except Exception as e:
+    print(f"ERROR importing base settings: {e}", file=sys.stderr)
+    raise
 
 # Override settings for production
 DEBUG = os.environ.get('DEBUG', 'False') == 'True'
@@ -25,14 +35,21 @@ SECRET_KEY = os.environ.get('SECRET_KEY', 'temporary-key-for-build-only')
 ALLOWED_HOSTS = ['localhost', '127.0.0.1', '.railway.app', '*']
 
 # Database - use DATABASE_URL from environment
-DATABASES = {
-    'default': dj_database_url.config(
-        default='sqlite:///db.sqlite3',
-        conn_max_age=600,
-        conn_health_checks=True,
-        ssl_require=True
-    )
-}
+try:
+    DATABASES = {
+        'default': dj_database_url.config(
+            default='sqlite:///db.sqlite3',
+            conn_max_age=600,
+            conn_health_checks=True,
+            ssl_require=True
+        )
+    }
+    print(f"Database engine: {DATABASES['default']['ENGINE']}", file=sys.stderr)
+    print(f"Database name: {DATABASES['default'].get('NAME', 'unknown')}", file=sys.stderr)
+    print(f"Database host: {DATABASES['default'].get('HOST', 'unknown')}", file=sys.stderr)
+except Exception as e:
+    print(f"ERROR configuring database: {e}", file=sys.stderr)
+    raise
 
 # Static files
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
@@ -58,13 +75,13 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:3006"
 ]
 
-# Simplified logging
+# Very verbose logging for debugging
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
     'formatters': {
         'verbose': {
-            'format': '{levelname} {asctime} {module} {message}',
+            'format': '{asctime} {levelname} {module} {message}',
             'style': '{',
         },
     },
@@ -85,12 +102,23 @@ LOGGING = {
             'level': 'DEBUG',
             'propagate': False,
         },
+        'django.db.backends': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'gunicorn': {
+            'handlers': ['console'],
+            'level': 'INFO',
+        },
     },
     'root': {
         'handlers': ['console'],
         'level': 'INFO',
     },
 }
+
+print("Django settings loaded successfully", file=sys.stderr)
 
 # Security settings - relaxed for troubleshooting
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')

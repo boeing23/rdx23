@@ -20,6 +20,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy project
 COPY . .
 
+# Make startup script executable
+RUN chmod +x startup.sh
+
 # Print directory contents for debugging
 RUN echo "=== Files in /app ===" && ls -la
 
@@ -33,5 +36,5 @@ HEALTHCHECK --interval=5s --timeout=3s --retries=3 \
 # Set the default port
 ENV PORT=8000
 
-# Django start command - using shell form for proper variable expansion
-CMD gunicorn carpool_project.wsgi:application --bind 0.0.0.0:${PORT:-8000} --timeout 120 --workers 1 --log-level debug 
+# Using startup script with enhanced logging
+CMD ["./startup.sh"] 
