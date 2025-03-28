@@ -88,18 +88,31 @@ def register_user(request):
     """
     Register a new user
     """
-    serializer = UserSerializer(data=request.data)
-    if serializer.is_valid():
-        print("Registration data:", request.data)
-        user = serializer.save()
-        print("Created user type:", user.user_type)
-        refresh = RefreshToken.for_user(user)
+    try:
+        print("Registration request received with data type:", type(request.data))
+        print("Registration request data:", request.data)
+        
+        serializer = UserSerializer(data=request.data)
+        if serializer.is_valid():
+            print("Registration data is valid")
+            user = serializer.save()
+            print("User saved successfully:", user.id, user.username, user.user_type)
+            refresh = RefreshToken.for_user(user)
+            return Response({
+                'user': UserSerializer(user).data,
+                'token': str(refresh.access_token),
+                'user_type': user.user_type
+            }, status=status.HTTP_201_CREATED)
+        else:
+            print("Registration data validation failed:", serializer.errors)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    except Exception as e:
+        print(f"Unexpected error in registration: {str(e)}")
+        import traceback
+        print(traceback.format_exc())
         return Response({
-            'user': UserSerializer(user).data,
-            'token': str(refresh.access_token),
-            'user_type': user.user_type
-        }, status=status.HTTP_201_CREATED)
-    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            'detail': f'Server error: {str(e)}' 
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 @api_view(['POST'])
 @permission_classes([AllowAny])

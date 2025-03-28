@@ -64,36 +64,47 @@ class UserSerializer(serializers.ModelSerializer):
         return data
 
     def create(self, validated_data):
-        password2 = validated_data.pop('password2', None)  # Remove password2 before creating user
-        
-        # Extract driver-specific fields
-        driver_fields = {
-            'vehicle_make': validated_data.pop('vehicle_make', ''),
-            'vehicle_model': validated_data.pop('vehicle_model', ''),
-            'vehicle_year': validated_data.pop('vehicle_year', None),
-            'vehicle_color': validated_data.pop('vehicle_color', ''),
-            'license_plate': validated_data.pop('license_plate', ''),
-            'max_passengers': validated_data.pop('max_passengers', None)
-        }
-        
-        # Create the user with explicit user type
-        user = User.objects.create_user(
-            username=validated_data['username'],
-            email=validated_data['email'],
-            password=validated_data['password'],
-            first_name=validated_data.get('first_name', ''),
-            last_name=validated_data.get('last_name', ''),
-            phone_number=validated_data.get('phone_number', ''),
-            user_type=validated_data['user_type']  # Use the validated user type
-        )
-        
-        # Update driver-specific fields if user is a driver
-        if user.user_type == 'DRIVER':
-            for field, value in driver_fields.items():
-                setattr(user, field, value)
-            user.save()
-        
-        return user
+        try:
+            print("Starting user creation with data:", validated_data)
+            password2 = validated_data.pop('password2', None)  # Remove password2 before creating user
+            
+            # Extract driver-specific fields
+            driver_fields = {
+                'vehicle_make': validated_data.pop('vehicle_make', ''),
+                'vehicle_model': validated_data.pop('vehicle_model', ''),
+                'vehicle_year': validated_data.pop('vehicle_year', None),
+                'vehicle_color': validated_data.pop('vehicle_color', ''),
+                'license_plate': validated_data.pop('license_plate', ''),
+                'max_passengers': validated_data.pop('max_passengers', None)
+            }
+            
+            print("Creating user with:", validated_data)
+            # Create the user with explicit user type
+            user = User.objects.create_user(
+                username=validated_data['username'],
+                email=validated_data['email'],
+                password=validated_data['password'],
+                first_name=validated_data.get('first_name', ''),
+                last_name=validated_data.get('last_name', ''),
+                phone_number=validated_data.get('phone_number', ''),
+                user_type=validated_data['user_type']  # Use the validated user type
+            )
+            
+            print("User created successfully, updating driver fields:", driver_fields)
+            # Update driver-specific fields if user is a driver
+            if user.user_type == 'DRIVER':
+                for field, value in driver_fields.items():
+                    print(f"Setting {field} to {value}")
+                    setattr(user, field, value)
+                user.save()
+            
+            print("User creation completed successfully")
+            return user
+        except Exception as e:
+            print(f"ERROR in user creation: {str(e)}")
+            import traceback
+            print(traceback.format_exc())
+            raise
 
     def update(self, instance, validated_data):
         # Remove password2 if it exists
