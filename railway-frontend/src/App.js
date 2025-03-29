@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, Navigate } from 'react-router-dom';
-import { AppBar, Toolbar, Button, Container, Box } from '@mui/material';
+import { AppBar, Toolbar, Button, Container, Box, useTheme, useMediaQuery } from '@mui/material';
 import Typography from '@mui/material/Typography';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faCar } from '@fortawesome/free-solid-svg-icons';
 import Login from './components/Login';
 import Register from './components/Register';
 import RideList from './components/RideList';
@@ -14,19 +16,94 @@ import AcceptedRides from './components/AcceptedRides';
 import './App.css';
 
 function Home() {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+
   return (
-    <Box sx={{ mt: 4, textAlign: 'center' }}>
-      <Typography variant="h3" gutterBottom>
+    <Box 
+      sx={{ 
+        mt: 4, 
+        textAlign: 'center',
+        minHeight: 'calc(100vh - 64px)',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: 'linear-gradient(135deg, #800000 0%, #4a0000 100%)',
+        color: 'white',
+        p: { xs: 2, sm: 4 }
+      }}
+    >
+      <Box sx={{ mb: 4 }}>
+        <FontAwesomeIcon 
+          icon={faCar} 
+          size="4x" 
+          style={{ 
+            color: 'white',
+            marginBottom: '1rem',
+            animation: 'float 3s ease-in-out infinite'
+          }}
+        />
+      </Box>
+      <Typography 
+        variant={isMobile ? "h4" : "h3"} 
+        gutterBottom
+        sx={{ 
+          fontWeight: 'bold',
+          mb: 2
+        }}
+      >
         ChalBe
       </Typography>
-      <Typography variant="h5" color="textSecondary" gutterBottom>
+      <Typography 
+        variant={isMobile ? "h6" : "h5"} 
+        color="rgba(255, 255, 255, 0.9)" 
+        gutterBottom
+        sx={{ mb: 4 }}
+      >
         Find and share rides easily
       </Typography>
-      <Box sx={{ mt: 4 }}>
-        <Button variant="contained" color="primary" component={Link} to="/login" sx={{ mr: 2 }}>
+      <Box 
+        sx={{ 
+          mt: 4,
+          display: 'flex',
+          flexDirection: { xs: 'column', sm: 'row' },
+          gap: { xs: 2, sm: 0 },
+          '& > *': {
+            minWidth: { xs: '100%', sm: 'auto' },
+            mx: { xs: 0, sm: 1 }
+          }
+        }}
+      >
+        <Button 
+          variant="contained" 
+          color="primary" 
+          component={Link} 
+          to="/login"
+          sx={{ 
+            bgcolor: 'white',
+            color: '#800000',
+            '&:hover': {
+              bgcolor: 'rgba(255, 255, 255, 0.9)'
+            }
+          }}
+        >
           Login
         </Button>
-        <Button variant="outlined" color="primary" component={Link} to="/register">
+        <Button 
+          variant="outlined" 
+          color="inherit" 
+          component={Link} 
+          to="/register"
+          sx={{ 
+            borderColor: 'white',
+            color: 'white',
+            '&:hover': {
+              borderColor: 'white',
+              bgcolor: 'rgba(255, 255, 255, 0.1)'
+            }
+          }}
+        >
           Register
         </Button>
       </Box>
