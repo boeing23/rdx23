@@ -18,6 +18,7 @@ import requests
 from geopy.geocoders import Nominatim
 from geopy.distance import great_circle
 from .services import send_ride_match_notification, send_ride_accepted_notification
+import math
 
 logger = logging.getLogger(__name__)
 
@@ -56,113 +57,147 @@ def get_route_distance(start_coords, end_coords):
         logger.error(f"Error calculating route distance: {str(e)}")
         return None
 
+def find_optimal_dropoff(driver_route, rider_pickup, rider_dest):
+    """
+    Find the optimal drop-off point for a rider on a driver's route.
+    
+    Parameters:
+    driver_route: List of (lat, lon) coordinates representing the driver's route from A to B
+    rider_pickup: (lat, lon) coordinate of the rider's pickup location C
+    rider_dest: (lat, lon) coordinate of the rider's destination
+    
+    Returns:
+    optimal_dropoff: (lat, lon) coordinate of the optimal drop-off point
+    distance_to_dest: Distance from drop-off to rider's destination in kilometers
+    """
+    # Helper function to calculate distance between two points using Haversine formula
+    def calculate_distance(point1, point2):
+        return great_circle(point1, point2).kilometers
+    
+    # Find the point on driver's route where rider can be picked up
+    # This would be the closest point on driver's route to rider's pickup location
+    min_dist = float('inf')
+    pickup_index = 0
+    
+    for i, point in enumerate(driver_route):
+        dist = calculate_distance(point, rider_pickup)
+        if dist < min_dist:
+            min_dist = dist
+            pickup_index = i
+    
+    # For each point on driver's route after the pickup point
+    min_total_distance = float('inf')
+    optimal_dropoff = None
+    
+    for i in range(pickup_index, len(driver_route)):
+        potential_dropoff = driver_route[i]
+        
+        # Calculate distance from this drop-off point to rider's destination
+        dist_to_dest = calculate_distance(potential_dropoff, rider_dest)
+        
+        # If this is better than our current best, update
+        if dist_to_dest < min_total_distance:
+            min_total_distance = dist_to_dest
+            optimal_dropoff = potential_dropoff
+    
+    return optimal_dropoff, min_total_distance
+
 def calculate_route_overlap(driver_start, driver_end, rider_pickup, rider_dropoff):
     """
     Calculate the overlap between driver's route and rider's route.
     Returns tuple of (overlap_percentage, nearest_dropoff_point)
     """
     try:
-        # Get the full route for the driver
-        driver_response = requests.get(
-            f"https://api.openrouteservice.org/v2/directions/driving-car",
-            params={
-                'api_key': ORS_API_KEY,
-                'start': f"{driver_start[0]},{driver_start[1]}",
-                'end': f"{driver_end[0]},{driver_end[1]}"
-            },
-            headers={
-                'Accept': 'application/geo+json;charset=UTF-8',
-                'Content-Type': 'application/json'
+        # Get coordinates of the driver's route
+        # For simplicity, we'll create a straight-line route with multiple points
+        # In a real implementation, you would get the actual route from a routing service
+        driver_route = generate_route(driver_start, driver_end)
+        
+        # Get coordinates of the rider's route
+        rider_route = generate_route(rider_pickup, rider_dropoff)
+        
+        # Convert longitude, latitude to latitude, longitude for calculations
+        driver_route_lat_lng = [(lat, lng) for lng, lat in driver_route]
+        rider_route_lat_lng = [(lat, lng) for lng, lat in rider_route]
+        rider_pickup_lat_lng = (rider_pickup[1], rider_pickup[0])
+        rider_dropoff_lat_lng = (rider_dropoff[1], rider_dropoff[0])
+        
+        # Find optimal dropoff point
+        optimal_dropoff, distance_to_dest = find_optimal_dropoff(
+            driver_route_lat_lng,
+            rider_pickup_lat_lng,
+            rider_dropoff_lat_lng
+        )
+        
+        # Convert optimal_dropoff back to (lng, lat) format for storage
+        if optimal_dropoff:
+            optimal_dropoff_lng_lat = (optimal_dropoff[1], optimal_dropoff[0])
+        else:
+            optimal_dropoff_lng_lat = None
+        
+        # Calculate overlap percentage based on route similarity
+        overlap_percentage = calculate_overlap_percentage(driver_route_lat_lng, rider_route_lat_lng)
+        
+        # Create nearest dropoff point object
+        if optimal_dropoff:
+            nearest_dropoff_point = {
+                'coordinates': optimal_dropoff_lng_lat,
+                'distance_to_destination': distance_to_dest,
+                'unit': 'kilometers'
             }
-        )
+        else:
+            nearest_dropoff_point = None
         
-        if driver_response.status_code != 200:
-            logger.error(f"Failed to get driver route: {driver_response.text}")
-            return 0, None
-            
-        driver_route = driver_response.json()
-        
-        # Get the full route for the rider
-        rider_response = requests.get(
-            f"https://api.openrouteservice.org/v2/directions/driving-car",
-            params={
-                'api_key': ORS_API_KEY,
-                'start': f"{rider_pickup[0]},{rider_pickup[1]}",
-                'end': f"{rider_dropoff[0]},{rider_dropoff[1]}"
-            },
-            headers={
-                'Accept': 'application/geo+json;charset=UTF-8',
-                'Content-Type': 'application/json'
-            }
-        )
-        
-        if rider_response.status_code != 200:
-            logger.error(f"Failed to get rider route: {rider_response.text}")
-            return 0, None
-            
-        rider_route = rider_response.json()
-        
-        # Extract coordinates from both routes
-        driver_coords = driver_route['features'][0]['geometry']['coordinates']
-        rider_coords = rider_route['features'][0]['geometry']['coordinates']
-        
-        # Calculate total distances
-        driver_distance = sum(
-            great_circle(
-                (driver_coords[i][1], driver_coords[i][0]),
-                (driver_coords[i+1][1], driver_coords[i+1][0])
-            ).miles
-            for i in range(len(driver_coords)-1)
-        )
-        
-        rider_distance = sum(
-            great_circle(
-                (rider_coords[i][1], rider_coords[i][0]),
-                (rider_coords[i+1][1], rider_coords[i+1][0])
-            ).miles
-            for i in range(len(rider_coords)-1)
-        )
-        
-        # Find the nearest point on driver's route to rider's dropoff
-        nearest_point = None
-        min_distance = float('inf')
-        
-        for i in range(len(driver_coords)):
-            dist = great_circle(
-                (driver_coords[i][1], driver_coords[i][0]),
-                (rider_dropoff[1], rider_dropoff[0])
-            ).miles
-            
-            if dist < min_distance:
-                min_distance = dist
-                nearest_point = {
-                    'coordinates': [driver_coords[i][0], driver_coords[i][1]],
-                    'distance_to_destination': dist
-                }
-        
-        # Calculate overlap
-        overlap_distance = 0
-        for i in range(len(driver_coords)-1):
-            for j in range(len(rider_coords)-1):
-                # Check if segments intersect
-                if segments_intersect(
-                    (driver_coords[i][0], driver_coords[i][1]),
-                    (driver_coords[i+1][0], driver_coords[i+1][1]),
-                    (rider_coords[j][0], rider_coords[j][1]),
-                    (rider_coords[j+1][0], rider_coords[j+1][1])
-                ):
-                    overlap_distance += great_circle(
-                        (driver_coords[i][1], driver_coords[i][0]),
-                        (driver_coords[i+1][1], driver_coords[i+1][0])
-                    ).miles
-        
-        overlap_percentage = (overlap_distance / rider_distance) * 100
-        
-        return overlap_percentage, nearest_point
+        return overlap_percentage, nearest_dropoff_point
         
     except Exception as e:
         logger.error(f"Error calculating route overlap: {str(e)}")
         return 0, None
+
+def generate_route(start, end, num_points=10):
+    """
+    Generate a route between start and end points with num_points.
+    This is a simplified version - in production you would use a routing service.
+    
+    Parameters:
+    start: (lng, lat) tuple
+    end: (lng, lat) tuple
+    num_points: Number of points to generate along the route
+    
+    Returns:
+    route: List of (lng, lat) coordinates
+    """
+    route = []
+    for i in range(num_points):
+        fraction = i / (num_points - 1)
+        lng = start[0] + fraction * (end[0] - start[0])
+        lat = start[1] + fraction * (end[1] - start[1])
+        route.append((lng, lat))
+    return route
+
+def calculate_overlap_percentage(route1, route2, threshold_distance=0.5):
+    """
+    Calculate the percentage of route2 that overlaps with route1.
+    A point is considered overlapping if it's within threshold_distance km of any point in route1.
+    
+    Parameters:
+    route1, route2: Lists of (lat, lng) coordinates
+    threshold_distance: Maximum distance (in km) for points to be considered overlapping
+    
+    Returns:
+    overlap_percentage: Percentage of route2 that overlaps with route1
+    """
+    overlapping_points = 0
+    total_points = len(route2)
+    
+    for point2 in route2:
+        for point1 in route1:
+            distance = great_circle(point1, point2).kilometers
+            if distance <= threshold_distance:
+                overlapping_points += 1
+                break
+    
+    return (overlapping_points / total_points) * 100 if total_points > 0 else 0
 
 def calculate_matching_score(overlap_percentage, time_diff, available_seats, seats_needed):
     """
