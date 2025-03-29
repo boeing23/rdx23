@@ -119,10 +119,31 @@ const OfferRide = () => {
         throw new Error('Please search and select valid locations using the search buttons.');
       }
 
+      // Validate numeric fields
+      if (parseInt(formData.available_seats) < 1) {
+        throw new Error('Available seats must be at least 1.');
+      }
+
+      if (parseFloat(formData.price_per_seat) < 0) {
+        throw new Error('Price per seat cannot be negative.');
+      }
+
+      // Validate departure time is in the future
+      const departureTime = new Date(formData.departure_time);
+      const now = new Date();
+      if (departureTime <= now) {
+        throw new Error('Departure time must be in the future.');
+      }
+
       // Format the data for submission
       const submitData = {
-        ...formData,
-        departure_time: formData.departure_time.toISOString(),
+        start_location: formData.start_location,
+        end_location: formData.end_location,
+        start_latitude: parseFloat(formData.start_latitude),
+        start_longitude: parseFloat(formData.start_longitude),
+        end_latitude: parseFloat(formData.end_latitude),
+        end_longitude: parseFloat(formData.end_longitude),
+        departure_time: departureTime.toISOString(),
         available_seats: parseInt(formData.available_seats),
         price_per_seat: parseFloat(formData.price_per_seat)
       };
@@ -156,17 +177,15 @@ const OfferRide = () => {
         console.error('Error request data:', err.request);
       }
 
-      // Existing error handling logic...
+      // Handle different types of errors
       if (err.response) {
         // Server responded with error
         const errorData = err.response.data;
         let errorMessage = 'Error creating ride offer. ';
         
         if (typeof errorData === 'string') {
-          // Handle plain string errors
           errorMessage = errorData;
         } else if (typeof errorData === 'object' && errorData !== null) {
-          // Handle standard DRF error formats
           if (errorData.detail) {
             errorMessage = errorData.detail;
           } else if (errorData.error) {
@@ -176,24 +195,19 @@ const OfferRide = () => {
           } else if (errorData.non_field_errors) {
             errorMessage = errorData.non_field_errors.join(', ');
           } else {
-            // Handle field-specific errors (dictionary)
             const fieldErrors = Object.entries(errorData)
               .map(([field, errors]) => `${field}: ${Array.isArray(errors) ? errors.join(', ') : String(errors)}`)
               .join('\n');
-            // Use fieldErrors only if it's not empty, otherwise use a generic message
-            errorMessage = fieldErrors ? fieldErrors : 'An unknown server error occurred.'; 
+            errorMessage = fieldErrors || 'An unknown server error occurred.';
           }
         } else {
-          // Fallback for unexpected error types
           errorMessage = 'An unexpected server error format was received.';
         }
         
         setError(errorMessage);
       } else if (err.request) {
-        // Request made but no response
         setError('No response from server. Please check your connection and try again.');
       } else {
-        // Something else went wrong (e.g., setup error)
         setError(err.message || 'An unexpected error occurred. Please try again.');
       }
     } finally {
