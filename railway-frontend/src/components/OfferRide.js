@@ -146,7 +146,17 @@ const OfferRide = () => {
         throw new Error('Failed to create ride offer.');
       }
     } catch (err) {
-      console.error('Error offering ride:', err);
+      // Log the raw error object and response for detailed debugging
+      console.error('Raw error object:', err);
+      if (err.response) {
+        console.error('Backend response data:', err.response.data);
+        console.error('Backend response status:', err.response.status);
+        console.error('Backend response headers:', err.response.headers);
+      } else if (err.request) {
+        console.error('Error request data:', err.request);
+      }
+
+      // Existing error handling logic...
       if (err.response) {
         // Server responded with error
         const errorData = err.response.data;
