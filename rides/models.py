@@ -101,22 +101,24 @@ class RideRequest(models.Model):
         ('PENDING', 'Pending'),
         ('ACCEPTED', 'Accepted'),
         ('REJECTED', 'Rejected'),
+        ('COMPLETED', 'Completed'),
         ('CANCELLED', 'Cancelled')
     ]
 
-    ride = models.ForeignKey(Ride, on_delete=models.CASCADE, related_name='requests')
     rider = models.ForeignKey(User, on_delete=models.CASCADE, related_name='ride_requests')
+    ride = models.ForeignKey(Ride, on_delete=models.CASCADE, related_name='ride_requests')
     pickup_location = models.CharField(max_length=255)
     dropoff_location = models.CharField(max_length=255)
     pickup_latitude = models.FloatField()
     pickup_longitude = models.FloatField()
     dropoff_latitude = models.FloatField()
     dropoff_longitude = models.FloatField()
+    departure_time = models.DateTimeField(null=True, blank=True)
     seats_needed = models.IntegerField()
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING')
-    departure_time = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    nearest_dropoff_point = models.JSONField(null=True, blank=True, help_text="Information about the nearest point on driver's route to rider's destination")
 
     class Meta:
         ordering = ['-created_at']

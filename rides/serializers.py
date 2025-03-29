@@ -135,9 +135,10 @@ class RideRequestSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'rider', 'ride', 'pickup_location', 'dropoff_location',
             'pickup_latitude', 'pickup_longitude', 'dropoff_latitude',
-            'dropoff_longitude', 'seats_needed', 'status', 'departure_time'
+            'dropoff_longitude', 'departure_time', 'seats_needed',
+            'status', 'created_at', 'updated_at', 'nearest_dropoff_point'
         ]
-        read_only_fields = ['id', 'status']
+        read_only_fields = ['id', 'created_at', 'updated_at']
 
     def get_rider(self, obj):
         if obj.rider:

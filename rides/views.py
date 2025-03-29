@@ -58,54 +58,111 @@ def get_route_distance(start_coords, end_coords):
 
 def calculate_route_overlap(driver_start, driver_end, rider_pickup, rider_dropoff):
     """
-    Calculate route overlap percentage using simplified geospatial method.
-    
-    This relaxed version accepts more matches with greater tolerance for pickup/dropoff locations.
-    
-    :return: Percentage of route overlap (0-100)
+    Calculate the overlap between driver's route and rider's route.
+    Returns tuple of (overlap_percentage, nearest_dropoff_point)
     """
     try:
-        # Use great circle distance for initial overlap calculation
-        from geopy.distance import great_circle
+        # Get the full route for the driver
+        driver_response = requests.get(
+            f"https://api.openrouteservice.org/v2/directions/driving-car",
+            params={
+                'api_key': ORS_API_KEY,
+                'start': f"{driver_start[0]},{driver_start[1]}",
+                'end': f"{driver_end[0]},{driver_end[1]}"
+            },
+            headers={
+                'Accept': 'application/geo+json;charset=UTF-8',
+                'Content-Type': 'application/json'
+            }
+        )
         
-        # Check if rider's pickup and dropoff are reasonably close to driver's route
-        start_pickup_distance = great_circle(driver_start, rider_pickup).miles
-        start_dropoff_distance = great_circle(driver_start, rider_dropoff).miles
-        end_pickup_distance = great_circle(driver_end, rider_pickup).miles
-        end_dropoff_distance = great_circle(driver_end, rider_dropoff).miles
-        
-        logger.info(f"Distance calculations: start_pickup={start_pickup_distance:.2f}mi, "
-                   f"start_dropoff={start_dropoff_distance:.2f}mi, "
-                   f"end_pickup={end_pickup_distance:.2f}mi, "
-                   f"end_dropoff={end_dropoff_distance:.2f}mi")
-        
-        # More relaxed distance check (within 15 miles of route instead of 10)
-        if (start_pickup_distance <= 15 and end_dropoff_distance <= 15) or \
-           (start_dropoff_distance <= 15 and end_pickup_distance <= 15):
-            # Calculate a more generous overlap value
-            # Check if the direction of travel is similar
-            driver_direction = (driver_end[0] - driver_start[0], driver_end[1] - driver_start[1])
-            rider_direction = (rider_dropoff[0] - rider_pickup[0], rider_dropoff[1] - rider_pickup[1])
+        if driver_response.status_code != 200:
+            logger.error(f"Failed to get driver route: {driver_response.text}")
+            return 0, None
             
-            # Simple dot product to check if directions are similar
-            dot_product = (driver_direction[0] * rider_direction[0] + 
-                           driver_direction[1] * rider_direction[1])
-            
-            # If dot product is positive, directions are similar (less than 90 degrees apart)
-            if dot_product > 0:
-                return 75  # Higher default overlap for compatible directions
-            
-            return 60  # Default medium overlap if points are near route
+        driver_route = driver_response.json()
         
-        # If the pickup or dropoff is very close to start or end
-        if min(start_pickup_distance, end_pickup_distance) <= 5 or \
-           min(start_dropoff_distance, end_dropoff_distance) <= 5:
-            return 50  # Still a decent overlap if at least one point is very close
+        # Get the full route for the rider
+        rider_response = requests.get(
+            f"https://api.openrouteservice.org/v2/directions/driving-car",
+            params={
+                'api_key': ORS_API_KEY,
+                'start': f"{rider_pickup[0]},{rider_pickup[1]}",
+                'end': f"{rider_dropoff[0]},{rider_dropoff[1]}"
+            },
+            headers={
+                'Accept': 'application/geo+json;charset=UTF-8',
+                'Content-Type': 'application/json'
+            }
+        )
         
-        return 30  # Provide some small overlap value even for less ideal matches
+        if rider_response.status_code != 200:
+            logger.error(f"Failed to get rider route: {rider_response.text}")
+            return 0, None
+            
+        rider_route = rider_response.json()
+        
+        # Extract coordinates from both routes
+        driver_coords = driver_route['features'][0]['geometry']['coordinates']
+        rider_coords = rider_route['features'][0]['geometry']['coordinates']
+        
+        # Calculate total distances
+        driver_distance = sum(
+            great_circle(
+                (driver_coords[i][1], driver_coords[i][0]),
+                (driver_coords[i+1][1], driver_coords[i+1][0])
+            ).miles
+            for i in range(len(driver_coords)-1)
+        )
+        
+        rider_distance = sum(
+            great_circle(
+                (rider_coords[i][1], rider_coords[i][0]),
+                (rider_coords[i+1][1], rider_coords[i+1][0])
+            ).miles
+            for i in range(len(rider_coords)-1)
+        )
+        
+        # Find the nearest point on driver's route to rider's dropoff
+        nearest_point = None
+        min_distance = float('inf')
+        
+        for i in range(len(driver_coords)):
+            dist = great_circle(
+                (driver_coords[i][1], driver_coords[i][0]),
+                (rider_dropoff[1], rider_dropoff[0])
+            ).miles
+            
+            if dist < min_distance:
+                min_distance = dist
+                nearest_point = {
+                    'coordinates': [driver_coords[i][0], driver_coords[i][1]],
+                    'distance_to_destination': dist
+                }
+        
+        # Calculate overlap
+        overlap_distance = 0
+        for i in range(len(driver_coords)-1):
+            for j in range(len(rider_coords)-1):
+                # Check if segments intersect
+                if segments_intersect(
+                    (driver_coords[i][0], driver_coords[i][1]),
+                    (driver_coords[i+1][0], driver_coords[i+1][1]),
+                    (rider_coords[j][0], rider_coords[j][1]),
+                    (rider_coords[j+1][0], rider_coords[j+1][1])
+                ):
+                    overlap_distance += great_circle(
+                        (driver_coords[i][1], driver_coords[i][0]),
+                        (driver_coords[i+1][1], driver_coords[i+1][0])
+                    ).miles
+        
+        overlap_percentage = (overlap_distance / rider_distance) * 100
+        
+        return overlap_percentage, nearest_point
+        
     except Exception as e:
-        logger.error(f"Route overlap calculation error: {e}")
-        return 0
+        logger.error(f"Error calculating route overlap: {str(e)}")
+        return 0, None
 
 def calculate_matching_score(overlap_percentage, time_diff, available_seats, seats_needed):
     """
@@ -151,7 +208,7 @@ def find_suitable_rides(rides, ride_request_data):
         rider_pickup = (ride_request_data['pickup_longitude'], ride_request_data['pickup_latitude'])
         rider_dropoff = (ride_request_data['dropoff_longitude'], ride_request_data['dropoff_latitude'])
         
-        overlap_percentage = calculate_route_overlap(
+        overlap_percentage, nearest_point = calculate_route_overlap(
             driver_start, driver_end, rider_pickup, rider_dropoff
         )
         
@@ -168,7 +225,8 @@ def find_suitable_rides(rides, ride_request_data):
                 'ride': ride,
                 'overlap_percentage': overlap_percentage,
                 'matching_score': matching_score,
-                'time_diff': time_diff
+                'time_diff': time_diff,
+                'nearest_dropoff_point': nearest_point
             })
     
     # Sort rides by matching score (descending)
@@ -272,14 +330,14 @@ class RideViewSet(viewsets.ModelViewSet):
             rider_pickup = (pending_request.pickup_longitude, pending_request.pickup_latitude)
             rider_dropoff = (pending_request.dropoff_longitude, pending_request.dropoff_latitude)
             
-            overlap_percentage = calculate_route_overlap(
+            overlap_percentage, nearest_point = calculate_route_overlap(
                 driver_start, driver_end, rider_pickup, rider_dropoff
             )
             
             logger.info(f"Pending request {pending_request.id} route overlap: {overlap_percentage}%")
             
-            # If there's a good match (40% or more overlap), create a ride request
-            if overlap_percentage >= 40:
+            # If there's a good match (60% or more overlap), create a ride request
+            if overlap_percentage >= 60:
                 logger.info(f"Found match for pending request {pending_request.id} with ride {ride.id}")
                 
                 # Create a ride request
@@ -294,7 +352,8 @@ class RideViewSet(viewsets.ModelViewSet):
                     dropoff_longitude=pending_request.dropoff_longitude,
                     departure_time=pending_request.departure_time,
                     seats_needed=pending_request.seats_needed,
-                    status='PENDING'
+                    status='PENDING',
+                    nearest_dropoff_point=nearest_point
                 )
                 
                 # Create notifications
@@ -421,7 +480,7 @@ class RideRequestViewSet(viewsets.ModelViewSet):
             rider_pickup = (ride_request_data['pickup_longitude'], ride_request_data['pickup_latitude'])
             rider_dropoff = (ride_request_data['dropoff_longitude'], ride_request_data['dropoff_latitude'])
             
-            overlap_percentage = calculate_route_overlap(
+            overlap_percentage, nearest_point = calculate_route_overlap(
                 driver_start, driver_end, rider_pickup, rider_dropoff
             )
             
@@ -442,7 +501,8 @@ class RideRequestViewSet(viewsets.ModelViewSet):
                     'ride': ride,
                     'overlap_percentage': overlap_percentage,
                     'matching_score': matching_score,
-                    'time_diff': time_diff
+                    'time_diff': time_diff,
+                    'nearest_dropoff_point': nearest_point
                 })
             else:
                 logger.info(f"Ride ID {ride.id} excluded due to low route overlap ({overlap_percentage}% < 40%)")
@@ -531,7 +591,8 @@ class RideRequestViewSet(viewsets.ModelViewSet):
             ride_request = serializer.save(
                 rider=request.user,
                 ride=matched_ride,
-                status='PENDING'
+                status='PENDING',
+                nearest_dropoff_point=best_match['nearest_dropoff_point']
             )
             
             logger.info(f"Created ride request: {ride_request.id}")
