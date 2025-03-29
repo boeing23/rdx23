@@ -31,7 +31,7 @@ def send_ride_notification_email(recipient_email, subject, message, html_message
         logger.exception("Email sending exception details:")
         return False
 
-def send_ride_match_notification(ride_request):
+def send_ride_match_notification(ride_request, notify_driver=True):
     """
     Send notification when a ride request is matched with a driver
     """
@@ -68,27 +68,6 @@ def send_ride_match_notification(ride_request):
     The RideX Team
     """
 
-    # Send notification to driver
-    driver_subject = "RideX: New Ride Match Available!"
-    driver_message = f"""
-    Hello {driver.first_name},
-
-    A new ride request has been matched with your route.
-
-    Ride Details:
-    - From: {ride_request.pickup_location}
-    - To: {ride_request.dropoff_location}
-    - Departure Time: {ride_request.departure_time}
-    - Rider: {ride_request.rider.first_name} {ride_request.rider.last_name}
-    - Seats Needed: {ride_request.seats_needed}
-    - Rider's Phone: {ride_request.rider.phone_number if hasattr(ride_request.rider, 'phone_number') else "Not provided"}
-
-    The rider will be notified and can accept the match.
-
-    Best regards,
-    The RideX Team
-    """
-
     # Create email template directory if it doesn't exist
     os.makedirs('rides/templates/rides/email', exist_ok=True)
     
@@ -97,16 +76,11 @@ def send_ride_match_notification(ride_request):
             'subject': rider_subject,
             'message': rider_message.replace('\n', '<br>'),
         })
-        driver_html = render_to_string('rides/email/notification.html', {
-            'subject': driver_subject,
-            'message': driver_message.replace('\n', '<br>'),
-        })
     except Exception as e:
         logger.error(f"Failed to render email template: {str(e)}")
         rider_html = None
-        driver_html = None
 
-    # Send emails to both rider and driver
+    # Send email to rider
     send_ride_notification_email(
         ride_request.rider.email,
         rider_subject,
@@ -114,12 +88,44 @@ def send_ride_match_notification(ride_request):
         rider_html
     )
 
-    send_ride_notification_email(
-        driver.email,
-        driver_subject,
-        driver_message,
-        driver_html
-    )
+    # Only send notification to driver if requested
+    if notify_driver:
+        # Send notification to driver
+        driver_subject = "RideX: New Ride Match Available!"
+        driver_message = f"""
+        Hello {driver.first_name},
+
+        A new ride request has been matched with your route.
+
+        Ride Details:
+        - From: {ride_request.pickup_location}
+        - To: {ride_request.dropoff_location}
+        - Departure Time: {ride_request.departure_time}
+        - Rider: {ride_request.rider.first_name} {ride_request.rider.last_name}
+        - Seats Needed: {ride_request.seats_needed}
+        - Rider's Phone: {ride_request.rider.phone_number if hasattr(ride_request.rider, 'phone_number') else "Not provided"}
+
+        The rider will be notified and can accept the match.
+
+        Best regards,
+        The RideX Team
+        """
+
+        try:
+            driver_html = render_to_string('rides/email/notification.html', {
+                'subject': driver_subject,
+                'message': driver_message.replace('\n', '<br>'),
+            })
+        except Exception as e:
+            logger.error(f"Failed to render email template: {str(e)}")
+            driver_html = None
+
+        send_ride_notification_email(
+            driver.email,
+            driver_subject,
+            driver_message,
+            driver_html
+        )
 
 def send_ride_accepted_notification(ride_request):
     """

@@ -299,15 +299,6 @@ class RideViewSet(viewsets.ModelViewSet):
                 
                 # Create notifications
                 Notification.objects.create(
-                    recipient=ride.driver,
-                    sender=pending_request.rider,
-                    message=f"New ride request from {pending_request.rider.first_name} {pending_request.rider.last_name} for your ride from {ride.start_location} to {ride.end_location}",
-                    ride=ride,
-                    ride_request=ride_request,
-                    notification_type='RIDE_REQUEST'
-                )
-                
-                Notification.objects.create(
                     recipient=pending_request.rider,
                     sender=ride.driver,
                     message=f"Found a matching ride for your pending request! Driver: {ride.driver.first_name} {ride.driver.last_name}",
@@ -316,9 +307,9 @@ class RideViewSet(viewsets.ModelViewSet):
                     notification_type='RIDE_MATCH'
                 )
                 
-                # Send email notification for ride match
+                # Send email notification only to the rider
                 try:
-                    send_ride_match_notification(ride_request)
+                    send_ride_match_notification(ride_request, notify_driver=False)
                 except Exception as e:
                     logger.error(f"Failed to send email notification for ride match: {str(e)}")
                 
@@ -547,21 +538,10 @@ class RideRequestViewSet(viewsets.ModelViewSet):
             
             # Check if notifications already exist to prevent duplicates
             existing_notifications = Notification.objects.filter(
-                Q(recipient=matched_ride.driver, ride_request=ride_request, notification_type='RIDE_REQUEST') |
                 Q(recipient=ride_request.rider, ride_request=ride_request, notification_type='RIDE_MATCH')
             )
             
             if not existing_notifications.exists():
-                # Create a notification for the driver
-                Notification.objects.create(
-                    recipient=matched_ride.driver,
-                    sender=ride_request.rider,
-                    message=f"New ride request from {ride_request.rider.first_name} {ride_request.rider.last_name} for your ride from {matched_ride.start_location} to {matched_ride.end_location}",
-                    ride=matched_ride,
-                    ride_request=ride_request,
-                    notification_type='RIDE_REQUEST'
-                )
-                
                 # Create a notification for the rider with match details
                 Notification.objects.create(
                     recipient=ride_request.rider,
@@ -572,9 +552,9 @@ class RideRequestViewSet(viewsets.ModelViewSet):
                     notification_type='RIDE_MATCH'
                 )
             
-            # Send email notification for ride match
+            # Send email notification only to the rider
             try:
-                send_ride_match_notification(ride_request)
+                send_ride_match_notification(ride_request, notify_driver=False)
             except Exception as e:
                 logger.error(f"Failed to send email notification for ride match: {str(e)}")
             
@@ -733,6 +713,8 @@ class RideRequestViewSet(viewsets.ModelViewSet):
         # Send email notification for ride accepted
         logger.info(f"Attempting to send email notifications for ride request {pk}")
         try:
+            # Send notification to both rider and driver
+            send_ride_match_notification(ride_request, notify_driver=True)
             email_sent = send_ride_accepted_notification(ride_request)
             logger.info(f"Email notification result: {email_sent}")
         except Exception as e:
