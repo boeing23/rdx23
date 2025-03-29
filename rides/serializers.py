@@ -128,56 +128,82 @@ class RideSerializer(serializers.ModelSerializer):
 
 class RideRequestSerializer(serializers.ModelSerializer):
     rider = serializers.SerializerMethodField()
-    ride = serializers.SerializerMethodField()
-
+    ride_details = serializers.SerializerMethodField()
+    nearest_dropoff_info = serializers.SerializerMethodField()
+    
     class Meta:
         model = RideRequest
         fields = [
-            'id', 'rider', 'ride', 'pickup_location', 'dropoff_location',
+            'id', 'rider', 'ride', 'ride_details', 'pickup_location', 'dropoff_location',
             'pickup_latitude', 'pickup_longitude', 'dropoff_latitude',
             'dropoff_longitude', 'departure_time', 'seats_needed',
-            'status', 'created_at', 'updated_at', 'nearest_dropoff_point'
+            'status', 'created_at', 'updated_at', 'nearest_dropoff_point', 'nearest_dropoff_info'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
 
     def get_rider(self, obj):
-        if obj.rider:
-            return {
-                'id': obj.rider.id,
-                'username': obj.rider.username,
-                'email': obj.rider.email,
-                'phone_number': obj.rider.phone_number,
-                'first_name': obj.rider.first_name,
-                'last_name': obj.rider.last_name
+        return {
+            'id': obj.rider.id,
+            'username': obj.rider.username,
+            'first_name': obj.rider.first_name,
+            'last_name': obj.rider.last_name,
+            'email': obj.rider.email,
+            'phone_number': getattr(obj.rider, 'phone_number', None)
+        }
+    
+    def get_ride_details(self, obj):
+        return {
+            'id': obj.ride.id,
+            'start_location': obj.ride.start_location,
+            'end_location': obj.ride.end_location,
+            'departure_time': obj.ride.departure_time,
+            'driver': {
+                'id': obj.ride.driver.id,
+                'username': obj.ride.driver.username,
+                'first_name': obj.ride.driver.first_name,
+                'last_name': obj.ride.driver.last_name,
+                'email': obj.ride.driver.email,
+                'phone_number': getattr(obj.ride.driver, 'phone_number', None)
             }
-        return None
-
-    def get_ride(self, obj):
-        if obj.ride:
+        }
+    
+    def get_nearest_dropoff_info(self, obj):
+        """Format the nearest_dropoff_point data in a user-friendly way"""
+        if not obj.nearest_dropoff_point:
+            return None
+            
+        try:
+            dropoff_point = obj.nearest_dropoff_point
+            
+            # Extract coordinates
+            coordinates = dropoff_point.get('coordinates', [0, 0])
+            latitude = coordinates[1] if len(coordinates) > 1 else 0
+            longitude = coordinates[0] if len(coordinates) > 0 else 0
+            
+            # Get distance
+            distance = dropoff_point.get('distance_to_destination', 0)
+            unit = dropoff_point.get('unit', 'kilometers')
+            
+            # Get address
+            address = dropoff_point.get('address', 'Unknown location')
+            
+            # Format distance for display
+            formatted_distance = f"{distance:.2f} {unit}"
+            if distance < 1:
+                formatted_distance = f"{distance * 1000:.0f} meters"
+            
             return {
-                'id': obj.ride.id,
-                'driver': {
-                    'id': obj.ride.driver.id,
-                    'username': obj.ride.driver.username,
-                    'email': obj.ride.driver.email,
-                    'phone_number': obj.ride.driver.phone_number,
-                    'first_name': obj.ride.driver.first_name,
-                    'last_name': obj.ride.driver.last_name,
-                    'vehicle_make': obj.ride.driver.vehicle_make,
-                    'vehicle_model': obj.ride.driver.vehicle_model,
-                    'vehicle_year': obj.ride.driver.vehicle_year,
-                    'vehicle_color': obj.ride.driver.vehicle_color,
-                    'license_plate': obj.ride.driver.license_plate,
-                    'max_passengers': obj.ride.driver.max_passengers
+                'coordinates': {
+                    'latitude': latitude,
+                    'longitude': longitude
                 },
-                'start_location': obj.ride.start_location,
-                'end_location': obj.ride.end_location,
-                'departure_time': obj.ride.departure_time,
-                'available_seats': obj.ride.available_seats,
-                'price_per_seat': obj.ride.price_per_seat,
-                'status': obj.ride.status
+                'distance_to_destination': formatted_distance,
+                'address': address,
+                'message': f"The driver can drop you off at {address}, which is {formatted_distance} from your destination."
             }
-        return None
+        except Exception as e:
+            logger.error(f"Error formatting nearest_dropoff_info: {str(e)}")
+            return None
 
     def validate(self, data):
         logger.info(f"Validating ride request data: {data}")

@@ -57,93 +57,159 @@ def get_route_distance(start_coords, end_coords):
         logger.error(f"Error calculating route distance: {str(e)}")
         return None
 
-def find_optimal_dropoff(driver_route, rider_pickup, rider_dest):
+def closest_point_on_segment(p1, p2, d):
     """
-    Find the optimal drop-off point for a rider on a driver's route.
+    Find the closest point on a line segment (p1, p2) to point d.
     
     Parameters:
-    driver_route: List of (lat, lon) coordinates representing the driver's route from A to B
-    rider_pickup: (lat, lon) coordinate of the rider's pickup location C
-    rider_dest: (lat, lon) coordinate of the rider's destination
+    p1, p2: Endpoints of the line segment, each a (lat, lng) tuple
+    d: Target point, a (lat, lng) tuple
     
     Returns:
-    optimal_dropoff: (lat, lon) coordinate of the optimal drop-off point
-    distance_to_dest: Distance from drop-off to rider's destination in kilometers
+    Closest point on the segment to d
     """
-    # Helper function to calculate distance between two points using Haversine formula
-    def calculate_distance(point1, point2):
-        return great_circle(point1, point2).kilometers
+    # Vector from p1 to p2
+    segment_vec = (p2[0] - p1[0], p2[1] - p1[1])
+    # Vector from p1 to d
+    vec_p1d = (d[0] - p1[0], d[1] - p1[1])
+    # Compute projection scalar
+    t = (vec_p1d[0] * segment_vec[0] + vec_p1d[1] * segment_vec[1]) / (segment_vec[0]**2 + segment_vec[1]**2 + 1e-8)
+    t = max(0, min(1, t))  # Clamp to segment
+    # Projection point
+    closest = (p1[0] + t * segment_vec[0], p1[1] + t * segment_vec[1])
+    return closest
+
+def find_optimal_dropoff(driver_route, rider_pickup, rider_dropoff):
+    """
+    Find the optimal drop-off point for a rider along a driver's route.
     
-    # Find the point on driver's route where rider can be picked up
-    # This would be the closest point on driver's route to rider's pickup location
-    min_dist = float('inf')
+    Parameters:
+    driver_route: List of (lat, lng) coordinates representing the driver's route
+    rider_pickup: (lat, lng) coordinate of the rider's pickup location
+    rider_dropoff: (lat, lng) coordinate of the rider's destination
+    
+    Returns:
+    Tuple of (optimal_dropoff_point, distance_to_destination, pickup_index)
+    - optimal_dropoff_point: (lat, lng) coordinate of the optimal drop-off
+    - distance_to_destination: Distance in km from drop-off to destination
+    - pickup_index: Index in driver_route that's nearest to the pickup location
+    """
+    # Find the index on driver's route closest to pickup point
+    min_pickup_dist = float('inf')
     pickup_index = 0
     
     for i, point in enumerate(driver_route):
-        dist = calculate_distance(point, rider_pickup)
-        if dist < min_dist:
-            min_dist = dist
+        dist = great_circle(point, rider_pickup).kilometers
+        if dist < min_pickup_dist:
+            min_pickup_dist = dist
             pickup_index = i
     
-    # For each point on driver's route after the pickup point
-    min_total_distance = float('inf')
-    optimal_dropoff = None
+    # Find the optimal drop-off point after the pickup point
+    min_dist = float('inf')
+    optimal_point = None
     
-    for i in range(pickup_index, len(driver_route)):
-        potential_dropoff = driver_route[i]
-        
-        # Calculate distance from this drop-off point to rider's destination
-        dist_to_dest = calculate_distance(potential_dropoff, rider_dest)
-        
-        # If this is better than our current best, update
-        if dist_to_dest < min_total_distance:
-            min_total_distance = dist_to_dest
-            optimal_dropoff = potential_dropoff
+    # Only consider segments after the pickup point
+    for i in range(pickup_index, len(driver_route) - 1):
+        p1 = driver_route[i]
+        p2 = driver_route[i + 1]
+        closest = closest_point_on_segment(p1, p2, rider_dropoff)
+        dist = great_circle(closest, rider_dropoff).kilometers
+        if dist < min_dist:
+            min_dist = dist
+            optimal_point = closest
     
-    return optimal_dropoff, min_total_distance
+    if not optimal_point:
+        # Fallback to final point if no optimal point found
+        optimal_point = driver_route[-1]
+        min_dist = great_circle(optimal_point, rider_dropoff).kilometers
+    
+    return optimal_point, min_dist, pickup_index
 
 def calculate_route_overlap(driver_start, driver_end, rider_pickup, rider_dropoff):
     """
-    Calculate the overlap between driver's route and rider's route.
+    Calculate the overlap between driver's route and rider's route using improved algorithm.
     Returns tuple of (overlap_percentage, nearest_dropoff_point)
     """
     try:
-        # Get coordinates of the driver's route
-        # For simplicity, we'll create a straight-line route with multiple points
-        # In a real implementation, you would get the actual route from a routing service
-        driver_route = generate_route(driver_start, driver_end)
+        # Generate routes
+        driver_route = generate_route(driver_start, driver_end, num_points=20)
+        rider_route = generate_route(rider_pickup, rider_dropoff, num_points=20)
         
-        # Get coordinates of the rider's route
-        rider_route = generate_route(rider_pickup, rider_dropoff)
-        
-        # Convert longitude, latitude to latitude, longitude for calculations
+        # Convert to (lat, lng) format for calculations
         driver_route_lat_lng = [(lat, lng) for lng, lat in driver_route]
         rider_route_lat_lng = [(lat, lng) for lng, lat in rider_route]
         rider_pickup_lat_lng = (rider_pickup[1], rider_pickup[0])
         rider_dropoff_lat_lng = (rider_dropoff[1], rider_dropoff[0])
         
-        # Find optimal dropoff point
-        optimal_dropoff, distance_to_dest = find_optimal_dropoff(
+        # Find optimal dropoff using the projection method
+        optimal_dropoff, distance_to_dest, pickup_index = find_optimal_dropoff(
             driver_route_lat_lng,
             rider_pickup_lat_lng,
             rider_dropoff_lat_lng
         )
         
+        # Calculate rider's total route distance
+        rider_distance = 0
+        for i in range(len(rider_route_lat_lng) - 1):
+            rider_distance += great_circle(rider_route_lat_lng[i], rider_route_lat_lng[i+1]).kilometers
+        
+        # Estimate the driver's route distance
+        driver_distance = 0
+        for i in range(len(driver_route_lat_lng) - 1):
+            driver_distance += great_circle(driver_route_lat_lng[i], driver_route_lat_lng[i+1]).kilometers
+        
+        # Calculate pickup and dropoff distances
+        pickup_distance = great_circle(rider_pickup_lat_lng, driver_route_lat_lng[pickup_index]).kilometers
+        dropoff_distance = distance_to_dest  # Already calculated
+        
+        # Calculate overlap using distance ratios and proximity
+        # Basic idea: higher overlap when dropoff is close to destination and pickup is along driver's route
+        
+        # Maximum allowed distances for 100% overlap score component
+        MAX_PICKUP_DIST = 2.0  # km
+        MAX_DROPOFF_DIST = 3.0  # km
+        
+        # Calculate proximity scores (0-100)
+        pickup_score = max(0, 100 - (pickup_distance * 100 / MAX_PICKUP_DIST))
+        dropoff_score = max(0, 100 - (dropoff_distance * 100 / MAX_DROPOFF_DIST))
+        
+        # Direction alignment - calculate dot product of route vectors
+        driver_vector = (driver_end[0] - driver_start[0], driver_end[1] - driver_start[1])
+        rider_vector = (rider_dropoff[0] - rider_pickup[0], rider_dropoff[1] - rider_pickup[1])
+        
+        # Calculate magnitudes
+        driver_mag = math.sqrt(driver_vector[0]**2 + driver_vector[1]**2)
+        rider_mag = math.sqrt(rider_vector[0]**2 + rider_vector[1]**2)
+        
+        # Calculate normalized dot product (cosine similarity)
+        if driver_mag > 0 and rider_mag > 0:
+            dot_product = (driver_vector[0] * rider_vector[0] + driver_vector[1] * rider_vector[1])
+            cosine_sim = dot_product / (driver_mag * rider_mag)
+            # Convert to percentage (-1 to 1) -> (0 to 100)
+            direction_score = (cosine_sim + 1) * 50
+        else:
+            direction_score = 0
+        
+        # Combine scores with weights
+        overlap_percentage = (
+            0.4 * direction_score +
+            0.3 * pickup_score +
+            0.3 * dropoff_score
+        )
+        
+        logger.info(f"Direction score: {direction_score:.2f}%, " +
+                   f"Pickup score: {pickup_score:.2f}%, " +
+                   f"Dropoff score: {dropoff_score:.2f}%, " +
+                   f"Final overlap: {overlap_percentage:.2f}%")
+        
         # Convert optimal_dropoff back to (lng, lat) format for storage
         if optimal_dropoff:
             optimal_dropoff_lng_lat = (optimal_dropoff[1], optimal_dropoff[0])
-        else:
-            optimal_dropoff_lng_lat = None
-        
-        # Calculate overlap percentage based on route similarity
-        overlap_percentage = calculate_overlap_percentage(driver_route_lat_lng, rider_route_lat_lng)
-        
-        # Create nearest dropoff point object
-        if optimal_dropoff:
             nearest_dropoff_point = {
                 'coordinates': optimal_dropoff_lng_lat,
                 'distance_to_destination': distance_to_dest,
-                'unit': 'kilometers'
+                'unit': 'kilometers',
+                'address': get_address_from_coordinates(optimal_dropoff_lng_lat[0], optimal_dropoff_lng_lat[1])
             }
         else:
             nearest_dropoff_point = None
@@ -152,9 +218,10 @@ def calculate_route_overlap(driver_start, driver_end, rider_pickup, rider_dropof
         
     except Exception as e:
         logger.error(f"Error calculating route overlap: {str(e)}")
+        logger.exception("Exception details:")
         return 0, None
 
-def generate_route(start, end, num_points=10):
+def generate_route(start, end, num_points=20):
     """
     Generate a route between start and end points with num_points.
     This is a simplified version - in production you would use a routing service.
@@ -175,29 +242,25 @@ def generate_route(start, end, num_points=10):
         route.append((lng, lat))
     return route
 
-def calculate_overlap_percentage(route1, route2, threshold_distance=0.5):
-    """
-    Calculate the percentage of route2 that overlaps with route1.
-    A point is considered overlapping if it's within threshold_distance km of any point in route1.
-    
-    Parameters:
-    route1, route2: Lists of (lat, lng) coordinates
-    threshold_distance: Maximum distance (in km) for points to be considered overlapping
-    
-    Returns:
-    overlap_percentage: Percentage of route2 that overlaps with route1
-    """
-    overlapping_points = 0
-    total_points = len(route2)
-    
-    for point2 in route2:
-        for point1 in route1:
-            distance = great_circle(point1, point2).kilometers
-            if distance <= threshold_distance:
-                overlapping_points += 1
-                break
-    
-    return (overlapping_points / total_points) * 100 if total_points > 0 else 0
+def get_address_from_coordinates(longitude, latitude):
+    """Get address from coordinates using reverse geocoding"""
+    try:
+        response = requests.get(
+            "https://nominatim.openstreetmap.org/reverse",
+            params={
+                'format': 'json',
+                'lat': latitude,
+                'lon': longitude
+            },
+            headers={'User-Agent': 'ChalBe/1.0'}
+        )
+        if response.status_code == 200:
+            data = response.json()
+            return data.get('display_name', 'Unknown location')
+        return 'Unknown location'
+    except Exception as e:
+        logger.error(f"Error reverse geocoding: {str(e)}")
+        return 'Unknown location'
 
 def calculate_matching_score(overlap_percentage, time_diff, available_seats, seats_needed):
     """
@@ -322,97 +385,106 @@ class RideViewSet(viewsets.ModelViewSet):
     
     def check_pending_requests(self, ride):
         """Check for pending ride requests that might match the new ride"""
-        from .models import PendingRideRequest
+        logger.info(f"Checking pending requests for ride {ride.id}")
         
-        logger.info(f"Checking pending ride requests for new ride: {ride.id}")
+        # Get ride details
+        driver_start = (ride.start_longitude, ride.start_latitude)
+        driver_end = (ride.end_longitude, ride.end_latitude)
         
-        # Only check for pending requests that are:
-        # 1. Not yet matched
-        # 2. Departure time is in the future
-        # 3. Not expired
-        pending_requests = PendingRideRequest.objects.filter(
-            status='PENDING',
-            departure_time__gt=timezone.now()
-        )
+        # Get all pending requests
+        pending_requests = PendingRideRequest.objects.filter(status='PENDING')
         
-        logger.info(f"Found {pending_requests.count()} pending requests to check")
+        # Track all matching riders with their dropoff distance
+        matching_riders = []
         
         for pending_request in pending_requests:
-            # For each pending request, check if the new ride is a good match
-            ride_request_data = {
-                'pickup_latitude': pending_request.pickup_latitude,
-                'pickup_longitude': pending_request.pickup_longitude,
-                'dropoff_latitude': pending_request.dropoff_latitude,
-                'dropoff_longitude': pending_request.dropoff_longitude,
-                'departure_time': pending_request.departure_time,
-                'seats_needed': pending_request.seats_needed
-            }
-            
-            # Basic compatibility checks
-            if ride.available_seats < pending_request.seats_needed:
-                logger.info(f"Pending request {pending_request.id} skipped: Not enough seats")
+            try:
+                # Skip if ride doesn't have enough seats
+                if ride.available_seats < pending_request.seats_needed:
+                    continue
+                
+                # Get rider pickup and dropoff coordinates
+                rider_pickup = (pending_request.pickup_longitude, pending_request.pickup_latitude)
+                rider_dropoff = (pending_request.dropoff_longitude, pending_request.dropoff_latitude)
+                
+                # Calculate route overlap
+                overlap_percentage, nearest_point = calculate_route_overlap(
+                    driver_start, driver_end, rider_pickup, rider_dropoff
+                )
+                
+                logger.info(f"Pending request {pending_request.id} route overlap: {overlap_percentage}%")
+                
+                # If there's a good match (40% or more overlap), add to matching riders
+                if overlap_percentage >= 40:
+                    logger.info(f"Found match for pending request {pending_request.id} with ride {ride.id}")
+                    
+                    # Add to matching riders with distance info
+                    if nearest_point:
+                        matching_riders.append({
+                            'request': pending_request,
+                            'overlap': overlap_percentage,
+                            'distance_to_dest': nearest_point['distance_to_destination'],
+                            'nearest_point': nearest_point
+                        })
+            except Exception as e:
+                logger.error(f"Error processing pending request {pending_request.id}: {str(e)}")
                 continue
-            
-            # Time compatibility (within 15 minutes)
-            time_diff = abs((ride.departure_time - pending_request.departure_time).total_seconds() / 60)
-            if time_diff > 15:
-                logger.info(f"Pending request {pending_request.id} skipped: Time difference too large ({time_diff} minutes)")
+        
+        # Sort matching riders by distance to destination (ascending)
+        matching_riders.sort(key=lambda x: x['distance_to_dest'])
+        
+        # Process the best matches first (up to ride's available seats)
+        available_seats = ride.available_seats
+        for match in matching_riders:
+            if available_seats < match['request'].seats_needed:
+                # Skip if not enough seats
                 continue
+                
+            pending_request = match['request']
+            nearest_point = match['nearest_point']
             
-            # Calculate route overlap
-            driver_start = (ride.start_longitude, ride.start_latitude)
-            driver_end = (ride.end_longitude, ride.end_latitude)
-            rider_pickup = (pending_request.pickup_longitude, pending_request.pickup_latitude)
-            rider_dropoff = (pending_request.dropoff_longitude, pending_request.dropoff_latitude)
-            
-            overlap_percentage, nearest_point = calculate_route_overlap(
-                driver_start, driver_end, rider_pickup, rider_dropoff
+            # Create a ride request
+            ride_request = RideRequest.objects.create(
+                rider=pending_request.rider,
+                ride=ride,
+                pickup_location=pending_request.pickup_location,
+                dropoff_location=pending_request.dropoff_location,
+                pickup_latitude=pending_request.pickup_latitude,
+                pickup_longitude=pending_request.pickup_longitude,
+                dropoff_latitude=pending_request.dropoff_latitude,
+                dropoff_longitude=pending_request.dropoff_longitude,
+                departure_time=pending_request.departure_time,
+                seats_needed=pending_request.seats_needed,
+                status='PENDING',
+                nearest_dropoff_point=nearest_point
             )
             
-            logger.info(f"Pending request {pending_request.id} route overlap: {overlap_percentage}%")
+            # Create notification for the rider
+            Notification.objects.create(
+                recipient=pending_request.rider,
+                sender=ride.driver,
+                message=f"Found a matching ride for your pending request! Driver: {ride.driver.first_name} {ride.driver.last_name}",
+                ride=ride,
+                ride_request=ride_request,
+                notification_type='RIDE_MATCH'
+            )
             
-            # If there's a good match (60% or more overlap), create a ride request
-            if overlap_percentage >= 60:
-                logger.info(f"Found match for pending request {pending_request.id} with ride {ride.id}")
-                
-                # Create a ride request
-                ride_request = RideRequest.objects.create(
-                    rider=pending_request.rider,
-                    ride=ride,
-                    pickup_location=pending_request.pickup_location,
-                    dropoff_location=pending_request.dropoff_location,
-                    pickup_latitude=pending_request.pickup_latitude,
-                    pickup_longitude=pending_request.pickup_longitude,
-                    dropoff_latitude=pending_request.dropoff_latitude,
-                    dropoff_longitude=pending_request.dropoff_longitude,
-                    departure_time=pending_request.departure_time,
-                    seats_needed=pending_request.seats_needed,
-                    status='PENDING',
-                    nearest_dropoff_point=nearest_point
-                )
-                
-                # Create notifications
-                Notification.objects.create(
-                    recipient=pending_request.rider,
-                    sender=ride.driver,
-                    message=f"Found a matching ride for your pending request! Driver: {ride.driver.first_name} {ride.driver.last_name}",
-                    ride=ride,
-                    ride_request=ride_request,
-                    notification_type='RIDE_MATCH'
-                )
-                
-                # Send email notification only to the rider
-                try:
-                    send_ride_match_notification(ride_request, notify_driver=False)
-                except Exception as e:
-                    logger.error(f"Failed to send email notification for ride match: {str(e)}")
-                
-                # Update the pending request
-                pending_request.status = 'MATCHED'
-                pending_request.matched_ride_request = ride_request
-                pending_request.save()
-                
-                logger.info(f"Created ride request {ride_request.id} for pending request {pending_request.id}")
+            # Send email notification only to the rider
+            try:
+                send_ride_match_notification(ride_request, notify_driver=False)
+            except Exception as e:
+                logger.error(f"Failed to send email notification for ride match: {str(e)}")
+            
+            # Update available seats
+            available_seats -= pending_request.seats_needed
+            
+            # Update pending request status
+            pending_request.status = 'MATCHED'
+            pending_request.save()
+            
+            # Break if no more seats
+            if available_seats <= 0:
+                break
 
     @action(detail=False, methods=['get'])
     def search(self, request):
