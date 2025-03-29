@@ -152,8 +152,11 @@ const OfferRide = () => {
         const errorData = err.response.data;
         let errorMessage = 'Error creating ride offer. ';
         
-        // Handle different types of validation errors
-        if (typeof errorData === 'object') {
+        if (typeof errorData === 'string') {
+          // Handle plain string errors
+          errorMessage = errorData;
+        } else if (typeof errorData === 'object' && errorData !== null) {
+          // Handle standard DRF error formats
           if (errorData.detail) {
             errorMessage = errorData.detail;
           } else if (errorData.error) {
@@ -163,12 +166,16 @@ const OfferRide = () => {
           } else if (errorData.non_field_errors) {
             errorMessage = errorData.non_field_errors.join(', ');
           } else {
-            // Handle field-specific errors
+            // Handle field-specific errors (dictionary)
             const fieldErrors = Object.entries(errorData)
-              .map(([field, errors]) => `${field}: ${Array.isArray(errors) ? errors.join(', ') : errors}`)
+              .map(([field, errors]) => `${field}: ${Array.isArray(errors) ? errors.join(', ') : String(errors)}`)
               .join('\n');
-            errorMessage = fieldErrors;
+            // Use fieldErrors only if it's not empty, otherwise use a generic message
+            errorMessage = fieldErrors ? fieldErrors : 'An unknown server error occurred.'; 
           }
+        } else {
+          // Fallback for unexpected error types
+          errorMessage = 'An unexpected server error format was received.';
         }
         
         setError(errorMessage);
@@ -176,7 +183,7 @@ const OfferRide = () => {
         // Request made but no response
         setError('No response from server. Please check your connection and try again.');
       } else {
-        // Something else went wrong
+        // Something else went wrong (e.g., setup error)
         setError(err.message || 'An unexpected error occurred. Please try again.');
       }
     } finally {
