@@ -341,13 +341,15 @@ const RequestRide = () => {
   }, [showMatchDialog, matchDetails]);
 
   return (
-    <Container>
-      <Typography variant="h4" className="page-title" gutterBottom sx={{ mt: 3 }}>
-        Request a Ride
-      </Typography>
-      <Typography variant="subtitle1" color="textSecondary" gutterBottom>
-        Enter your ride details and we'll match you with available drivers
-      </Typography>
+    <Container sx={{ px: 4, py: 3 }}>
+      <Box sx={{ textAlign: 'center', mb: 4 }}>
+        <Typography variant="h4" className="page-title" gutterBottom>
+          Request a Ride
+        </Typography>
+        <Typography variant="subtitle1" color="textSecondary" gutterBottom sx={{ textAlign: 'center' }}>
+          Enter your ride details and we'll match you with available drivers
+        </Typography>
+      </Box>
 
       {error && (
         <Alert severity="info" sx={{ mb: 2 }}>
@@ -361,7 +363,7 @@ const RequestRide = () => {
         </Alert>
       )}
 
-      <Paper sx={{ p: 3 }}>
+      <Paper sx={{ p: 4, borderRadius: '12px' }}>
         <form onSubmit={handleSubmit}>
           <Grid container spacing={3}>
             <Grid item xs={12}>
@@ -383,7 +385,9 @@ const RequestRide = () => {
                       </IconButton>
                     </InputAdornment>
                   ),
+                  sx: { borderRadius: '12px' }
                 }}
+                sx={{ '& .MuiOutlinedInput-root': { borderRadius: '12px' } }}
               />
             </Grid>
 
@@ -406,7 +410,9 @@ const RequestRide = () => {
                       </IconButton>
                     </InputAdornment>
                   ),
+                  sx: { borderRadius: '12px' }
                 }}
+                sx={{ '& .MuiOutlinedInput-root': { borderRadius: '12px' } }}
               />
             </Grid>
 
@@ -419,7 +425,8 @@ const RequestRide = () => {
                   slotProps={{
                     textField: {
                       fullWidth: true,
-                      required: true
+                      required: true,
+                      sx: { '& .MuiOutlinedInput-root': { borderRadius: '12px' } }
                     }
                   }}
                   minDateTime={new Date()}
@@ -436,12 +443,13 @@ const RequestRide = () => {
                 value={seatsNeeded}
                 onChange={(e) => setSeatsNeeded(parseInt(e.target.value))}
                 inputProps={{ min: 1 }}
+                sx={{ '& .MuiOutlinedInput-root': { borderRadius: '12px' } }}
               />
             </Grid>
 
             {routeData && (
               <Grid item xs={12}>
-                <Paper sx={{ p: 2, bgcolor: 'grey.50' }}>
+                <Paper sx={{ p: 2, bgcolor: 'grey.50', borderRadius: '12px' }}>
                   <Typography variant="h6" gutterBottom>
                     Route Information
                   </Typography>
@@ -463,6 +471,12 @@ const RequestRide = () => {
                 size="large"
                 fullWidth
                 disabled={loading || !pickupCoordinates || !dropoffCoordinates || !departureTime}
+                sx={{ 
+                  borderRadius: '12px',
+                  py: 1.5,
+                  textTransform: 'none',
+                  fontWeight: 600
+                }}
               >
                 {loading ? 'Requesting...' : 'Request Ride'}
               </Button>

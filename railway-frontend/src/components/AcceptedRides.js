@@ -19,9 +19,14 @@ import {
   ListItemIcon,
   ListItemText,
   ListItemSecondaryAction,
-  IconButton
+  IconButton,
+  Avatar,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions
 } from '@mui/material';
-import { Schedule, DirectionsCar, LocationOn, Person, Phone, Email, Event, AccessTime, ArrowForward, Cancel, CheckCircle } from '@mui/icons-material';
+import { Schedule, DirectionsCar, LocationOn, Person, Phone, Email, Event, AccessTime, ArrowForward, Cancel, CheckCircle, Check } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { API_BASE_URL } from '../config';
 import { format } from 'date-fns';
@@ -33,6 +38,8 @@ const AcceptedRides = () => {
   const [tabValue, setTabValue] = useState(0);
   const [userType, setUserType] = useState('');
   const [selectedRide, setSelectedRide] = useState(null);
+  const [openCancelDialog, setOpenCancelDialog] = useState(false);
+  const [openCompleteDialog, setOpenCompleteDialog] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -205,6 +212,25 @@ const AcceptedRides = () => {
     }
   };
 
+  const handleOpenCancelDialog = (ride) => {
+    setSelectedRide(ride);
+    setOpenCancelDialog(true);
+  };
+
+  const handleCloseCancelDialog = () => {
+    setSelectedRide(null);
+    setOpenCancelDialog(false);
+  };
+
+  const handleOpenCompleteDialog = (ride) => {
+    setSelectedRide(ride);
+    setOpenCompleteDialog(true);
+  };
+
+  const handleCloseCompleteDialog = () => {
+    setOpenCompleteDialog(false);
+  };
+
   if (loading) {
     return (
       <Container>
@@ -222,7 +248,7 @@ const AcceptedRides = () => {
   }
 
   return (
-    <Container maxWidth="lg" sx={{ mt: 4, mb: 8 }}>
+    <Container maxWidth="lg" sx={{ px: 4, py: 3 }}>
       <Typography variant="h4" className="page-title" gutterBottom>
         My Trips
       </Typography>
@@ -230,7 +256,12 @@ const AcceptedRides = () => {
       {acceptedRides.length === 0 ? (
         <Alert severity="info">You don't have any trips yet.</Alert>
       ) : (
-        <Box sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' }, gap: 3 }}>
+        <Box sx={{ 
+          display: 'flex', 
+          flexDirection: { xs: 'column', md: 'row' }, 
+          gap: 3,
+          mt: 4
+        }}>
           {/* Left Side - Vertical List of Trips */}
           <Box 
             sx={{ 
@@ -242,7 +273,18 @@ const AcceptedRides = () => {
             <Typography variant="h6" gutterBottom>
               Your Rides
             </Typography>
-            <List sx={{ width: '100%', bgcolor: 'background.paper' }}>
+            <List 
+              sx={{ 
+                width: '100%', 
+                bgcolor: 'background.paper',
+                mt: 2,
+                '& .MuiListItem-root': {
+                  mb: 2,
+                  borderRadius: '12px',
+                  transition: 'all 0.2s ease',
+                }
+              }}
+            >
               {acceptedRides.map((ride) => (
                 <ListItem 
                   key={ride.id}
@@ -250,13 +292,16 @@ const AcceptedRides = () => {
                   button
                   onClick={() => handleRideClick(ride)}
                   sx={{ 
-                    mb: 1, 
-                    borderRadius: 1,
+                    mb: 1.5, 
+                    borderRadius: '12px',
                     bgcolor: selectedRide?.id === ride.id ? 'rgba(128, 0, 0, 0.08)' : 'white',
                     border: '1px solid #eee',
                     '&:hover': {
                       bgcolor: 'rgba(128, 0, 0, 0.05)',
-                    }
+                      transform: 'translateY(-2px)',
+                      boxShadow: '0 4px 8px rgba(0,0,0,0.05)'
+                    },
+                    py: 1.5
                   }}
                 >
                   <ListItemIcon sx={{ minWidth: 40 }}>
@@ -305,7 +350,7 @@ const AcceptedRides = () => {
           {/* Right Side - Selected Ride Details */}
           {selectedRide && (
             <Box sx={{ width: { xs: '100%', md: '70%' } }}>
-              <Paper elevation={2} sx={{ p: 3, borderRadius: 2 }}>
+              <Paper elevation={2} sx={{ p: 4, borderRadius: '12px' }}>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
                   <Typography variant="h5" component="h2">
                     Trip Details
@@ -501,7 +546,7 @@ const AcceptedRides = () => {
                           variant="outlined"
                           color="error"
                           startIcon={<Cancel />}
-                          onClick={() => handleCancelRide(selectedRide.id)}
+                          onClick={() => handleOpenCancelDialog(selectedRide)}
                         >
                           Cancel Ride
                         </Button>
@@ -519,11 +564,187 @@ const AcceptedRides = () => {
                     </Grid>
                   )}
                 </Grid>
+
+                <Divider sx={{ my: 3 }} />
+
+                {/* Contact Information Section */}
+                <Typography variant="h6" gutterBottom>
+                  Contact Information
+                </Typography>
+                
+                <Grid container spacing={3} sx={{ mb: 3 }}>
+                  {selectedRide.user_type === 'RIDER' && selectedRide.driver && (
+                    <Grid item xs={12} sm={6}>
+                      <Paper 
+                        elevation={0} 
+                        sx={{ 
+                          p: 2, 
+                          border: '1px solid #eee', 
+                          borderRadius: '12px',
+                          bgcolor: 'rgba(128, 0, 0, 0.02)' 
+                        }}
+                      >
+                        <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                          <Avatar sx={{ bgcolor: '#800000', mr: 2 }}>
+                            <Person />
+                          </Avatar>
+                          <Typography variant="subtitle1" fontWeight="bold">
+                            Driver
+                          </Typography>
+                        </Box>
+                        <Typography variant="body1">
+                          {selectedRide.driver?.full_name || 'Not assigned yet'}
+                        </Typography>
+                        <Typography variant="body2" color="textSecondary">
+                          {selectedRide.driver?.email || ''}
+                        </Typography>
+                        <Typography variant="body2" color="textSecondary">
+                          {selectedRide.driver?.phone_number || ''}
+                        </Typography>
+                      </Paper>
+                    </Grid>
+                  )}
+                  
+                  {selectedRide.user_type === 'DRIVER' && selectedRide.rider && (
+                    <Grid item xs={12} sm={6}>
+                      <Paper 
+                        elevation={0} 
+                        sx={{ 
+                          p: 2, 
+                          border: '1px solid #eee', 
+                          borderRadius: '12px',
+                          bgcolor: 'rgba(128, 0, 0, 0.02)' 
+                        }}
+                      >
+                        <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                          <Avatar sx={{ bgcolor: '#800000', mr: 2 }}>
+                            <Person />
+                          </Avatar>
+                          <Typography variant="subtitle1" fontWeight="bold">
+                            Rider
+                          </Typography>
+                        </Box>
+                        <Typography variant="body1">
+                          {selectedRide.rider?.full_name || 'Not assigned yet'}
+                        </Typography>
+                        <Typography variant="body2" color="textSecondary">
+                          {selectedRide.rider?.email || ''}
+                        </Typography>
+                        <Typography variant="body2" color="textSecondary">
+                          {selectedRide.rider?.phone_number || ''}
+                        </Typography>
+                      </Paper>
+                    </Grid>
+                  )}
+                </Grid>
+
+                <Divider sx={{ my: 3 }} />
+
+                {/* Action Buttons */}
+                <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2, mt: 3 }}>
+                  {selectedRide.status === 'ACCEPTED' && (
+                    <Button
+                      variant="outlined"
+                      color="error"
+                      onClick={() => handleOpenCancelDialog(selectedRide)}
+                      startIcon={<Cancel />}
+                      sx={{ borderRadius: '8px' }}
+                    >
+                      Cancel Ride
+                    </Button>
+                  )}
+                  
+                  {selectedRide.status === 'ACCEPTED' && selectedRide.user_type === 'DRIVER' && (
+                    <Button
+                      variant="contained"
+                      sx={{ 
+                        bgcolor: '#800000', 
+                        '&:hover': { bgcolor: '#600000' },
+                        borderRadius: '8px'
+                      }}
+                      onClick={() => handleCompleteRide(selectedRide.id)}
+                      startIcon={<Check />}
+                    >
+                      Complete Ride
+                    </Button>
+                  )}
+                </Box>
               </Paper>
             </Box>
           )}
         </Box>
       )}
+
+      {/* Cancel Dialog */}
+      <Dialog
+        open={openCancelDialog}
+        onClose={handleCloseCancelDialog}
+        maxWidth="xs"
+        fullWidth
+        PaperProps={{
+          sx: { borderRadius: '12px', p: 1 }
+        }}
+      >
+        <DialogTitle>Cancel Ride</DialogTitle>
+        <DialogContent>
+          <Typography variant="body1">
+            Are you sure you want to cancel this ride? This action cannot be undone.
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ p: 2 }}>
+          <Button onClick={handleCloseCancelDialog} sx={{ borderRadius: '8px' }}>
+            No, Keep Ride
+          </Button>
+          <Button 
+            variant="contained" 
+            color="error" 
+            onClick={() => {
+              handleCancelRide(selectedRide.id);
+              handleCloseCancelDialog();
+            }}
+            sx={{ borderRadius: '8px' }}
+          >
+            Yes, Cancel Ride
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Complete Dialog */}
+      <Dialog
+        open={openCompleteDialog}
+        onClose={handleCloseCompleteDialog}
+        maxWidth="xs"
+        fullWidth
+        PaperProps={{
+          sx: { borderRadius: '12px', p: 1 }
+        }}
+      >
+        <DialogTitle>Complete Ride</DialogTitle>
+        <DialogContent>
+          <Typography variant="body1">
+            Are you sure you want to mark this ride as completed? This action cannot be undone.
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ p: 2 }}>
+          <Button onClick={handleCloseCompleteDialog} sx={{ borderRadius: '8px' }}>
+            Cancel
+          </Button>
+          <Button 
+            variant="contained" 
+            sx={{ 
+              bgcolor: '#800000', 
+              '&:hover': { bgcolor: '#600000' },
+              borderRadius: '8px'
+            }}
+            onClick={() => {
+              handleCompleteRide(selectedRide.id);
+              handleCloseCompleteDialog();
+            }}
+          >
+            Complete Ride
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Container>
   );
 };
