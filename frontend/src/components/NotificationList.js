@@ -28,6 +28,10 @@ function NotificationList() {
     try {
       const token = localStorage.getItem('token');
       console.log('Getting token from localStorage:', token ? 'Token exists' : 'No token found');
+      if (token) {
+        console.log('Token length:', token.length);
+        console.log('Token prefix:', token.substring(0, 10) + '...');
+      }
       return token;
     } catch (error) {
       console.error('Error getting token from localStorage:', error);
@@ -45,11 +49,14 @@ function NotificationList() {
       }
 
       console.log('Fetching notifications with token');
+      const headers = {
+        'Authorization': `Bearer ${token}`,
+        'Accept': 'application/json'
+      };
+      console.log('Request headers:', headers);
+
       const response = await fetch(`${API_BASE_URL}/api/rides/notifications/`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Accept': 'application/json'
-        }
+        headers: headers
       });
 
       console.log('Notifications response status:', response.status);

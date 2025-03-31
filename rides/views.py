@@ -1029,6 +1029,12 @@ class NotificationViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
+        # Log authentication details
+        logger.info(f"Notification request from user: {self.request.user.username}")
+        logger.info(f"User authenticated: {self.request.user.is_authenticated}")
+        logger.info(f"Request headers: {dict(self.request.headers)}")
+        logger.info(f"Auth header: {self.request.headers.get('Authorization', 'Not found')}")
+        
         # Log notification retrieval for debugging
         notifications = Notification.objects.filter(recipient=self.request.user).order_by('-created_at')
         logger.info(f"Retrieved {notifications.count()} notifications for user {self.request.user.username}")

@@ -43,7 +43,7 @@ function Login() {
       console.log('Backend health check passed');
 
       console.log('Attempting login...');
-      const response = await fetch(`${API_BASE_URL}/api/auth/login/`, {
+      const response = await fetch(`${API_BASE_URL}/api/users/login/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -61,6 +61,14 @@ function Login() {
         localStorage.setItem('token', data.token);
         localStorage.setItem('userType', JSON.stringify(data.user_type));
         console.log('Token and user data stored successfully');
+        console.log('Token length:', data.token ? data.token.length : 0);
+        console.log('User type:', data.user_type);
+
+        // Verify storage
+        const storedToken = localStorage.getItem('token');
+        const storedUserType = localStorage.getItem('userType');
+        console.log('Verification - Stored token exists:', !!storedToken);
+        console.log('Verification - Stored user type:', storedUserType);
 
         // Redirect based on user type
         if (data.user_type === 'driver') {
