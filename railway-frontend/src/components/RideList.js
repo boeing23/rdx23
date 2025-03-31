@@ -147,9 +147,15 @@ const RideList = () => {
   }
 
   return (
-    <Box sx={{ mt: 4 }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
-        <Typography variant="h4" gutterBottom>
+    <Box sx={{ px: 4, py: 3 }}>
+      <Box sx={{ 
+        display: 'flex', 
+        flexDirection: 'column', 
+        alignItems: 'center', 
+        mb: 5,
+        textAlign: 'center'
+      }}>
+        <Typography variant="h4" className="page-title" gutterBottom>
           Available Rides
         </Typography>
         {userType === 'RIDER' && (
@@ -164,7 +170,7 @@ const RideList = () => {
           </Button>
         )}
       </Box>
-      <Grid container spacing={3}>
+      <Grid container spacing={4}>
         {rides.length === 0 && (
           <Grid item xs={12}>
             <Typography variant="h6" color="textSecondary" align="center">
