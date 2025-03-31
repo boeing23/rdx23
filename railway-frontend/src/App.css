@@ -58,6 +58,14 @@ a {
   background-color: #f8f1f1; /* Light maroon for accent backgrounds */
 }
 
+/* Page title styling */
+.page-title {
+  text-align: center;
+  margin-bottom: 1.5rem;
+  color: #800000;
+  font-weight: 600;
+}
+
 /* Animations */
 @keyframes float {
   0% {

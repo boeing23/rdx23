@@ -200,9 +200,14 @@ const OfferRide = () => {
         
         setError(errorMessage);
       } else if (err.request) {
+        // No response from server
         setError('No response from server. Please check your connection and try again.');
+      } else if (err.message) {
+        // Error in the request itself
+        setError(err.message);
       } else {
-        setError(err.message || 'An unexpected error occurred. Please try again.');
+        // Unexpected error
+        setError('An unexpected error occurred. Please try again.');
       }
     } finally {
       setLoading(false);
@@ -210,15 +215,13 @@ const OfferRide = () => {
   };
 
   return (
-    <Container maxWidth="md">
-      <Box sx={{ mt: 4, mb: 4 }}>
-        <Typography variant="h4" gutterBottom>
-          Offer a Ride
-        </Typography>
-        <Typography variant="subtitle1" color="textSecondary" gutterBottom>
-          Only drivers can offer rides
-        </Typography>
-      </Box>
+    <Container maxWidth="md" sx={{ mt: 4, mb: 8 }}>
+      <Typography variant="h4" className="page-title" gutterBottom>
+        Offer a Ride
+      </Typography>
+      <Typography variant="subtitle1" color="textSecondary" gutterBottom>
+        Only drivers can offer rides
+      </Typography>
 
       {error && (
         <Alert severity="error" sx={{ mb: 2 }}>

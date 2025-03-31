@@ -198,15 +198,32 @@ const AcceptedRides = () => {
 
     // Helper function to get full name
     const getFullName = (user) => {
-      if (!user) return 'N/A';
-      const firstName = user.first_name || '';
-      const lastName = user.last_name || '';
-      return `${firstName} ${lastName}`.trim() || 'N/A';
+      if (!user) return 'Unknown User';
+      return `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.email || 'Unknown User';
+    };
+
+    const getPhoneNumber = (user) => {
+      return user && user.phone_number ? user.phone_number : 'No phone number provided';
+    };
+
+    const getEmail = (user) => {
+      return user && user.email ? user.email : 'No email provided';
     };
 
     return (
       <Grid item xs={12} md={6} key={ride.id}>
-        <Card>
+        <Card 
+          sx={{ 
+            mb: 3, 
+            overflow: 'visible',
+            boxShadow: '0 4px 8px rgba(0,0,0,0.1)',
+            transition: 'transform 0.3s ease',
+            '&:hover': {
+              transform: 'translateY(-5px)',
+              boxShadow: '0 8px 16px rgba(0,0,0,0.1)'
+            }
+          }}
+        >
           <CardContent>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
               <Typography variant="h6">Trip Details</Typography>
@@ -248,12 +265,12 @@ const AcceptedRides = () => {
                 
                 <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
                   <Email sx={{ mr: 1 }} />
-                  <Typography>{driverInfo.email || 'No email provided'}</Typography>
+                  <Typography>{getEmail(driverInfo)}</Typography>
                 </Box>
                 
                 <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
                   <Phone sx={{ mr: 1 }} />
-                  <Typography>{driverInfo.phone_number || 'No phone provided'}</Typography>
+                  <Typography>{getPhoneNumber(driverInfo)}</Typography>
                 </Box>
                 
                 <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
@@ -275,12 +292,12 @@ const AcceptedRides = () => {
                 
                 <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
                   <Email sx={{ mr: 1 }} />
-                  <Typography>{riderInfo.email || 'No email provided'}</Typography>
+                  <Typography>{getEmail(riderInfo)}</Typography>
                 </Box>
                 
                 <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
                   <Phone sx={{ mr: 1 }} />
-                  <Typography>{riderInfo.phone_number || 'No phone provided'}</Typography>
+                  <Typography>{getPhoneNumber(riderInfo)}</Typography>
                 </Box>
 
                 <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
@@ -318,8 +335,8 @@ const AcceptedRides = () => {
   };
 
   return (
-    <Container>
-      <Typography variant="h4" gutterBottom sx={{ mt: 3 }}>
+    <Container maxWidth="lg" sx={{ mt: 4, mb: 8 }}>
+      <Typography variant="h4" className="page-title" gutterBottom>
         My Trips
       </Typography>
       

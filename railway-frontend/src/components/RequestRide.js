@@ -341,15 +341,13 @@ const RequestRide = () => {
   }, [showMatchDialog, matchDetails]);
 
   return (
-    <Container maxWidth="md">
-      <Box sx={{ mt: 4, mb: 4 }}>
-        <Typography variant="h4" gutterBottom>
-          Request a Ride
-        </Typography>
-        <Typography variant="subtitle1" color="textSecondary" gutterBottom>
-          Enter your ride details and we'll match you with available drivers
-        </Typography>
-      </Box>
+    <Container>
+      <Typography variant="h4" className="page-title" gutterBottom sx={{ mt: 3 }}>
+        Request a Ride
+      </Typography>
+      <Typography variant="subtitle1" color="textSecondary" gutterBottom>
+        Enter your ride details and we'll match you with available drivers
+      </Typography>
 
       {error && (
         <Alert severity="info" sx={{ mb: 2 }}>
