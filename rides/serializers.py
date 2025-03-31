@@ -141,6 +141,9 @@ class RideRequestSerializer(serializers.ModelSerializer):
             'status', 'created_at', 'updated_at', 'nearest_dropoff_point', 'nearest_dropoff_info'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
+        extra_kwargs = {
+            'ride': {'required': False}  # Make ride field optional during creation
+        }
 
     def get_rider(self, obj):
         return {
