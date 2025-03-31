@@ -37,14 +37,30 @@ def send_ride_match_notification(ride_request, notify_driver=True):
     """
     driver = ride_request.ride.driver
     
-    # Get vehicle info safely
-    vehicle_info = "Not provided"
-    if hasattr(driver, 'vehicle') and driver.vehicle:
-        vehicle = driver.vehicle
-        vehicle_info = f"{vehicle.make} {vehicle.model} ({vehicle.year}, {vehicle.color})"
-        license_plate = vehicle.license_plate if hasattr(vehicle, 'license_plate') else "Not provided"
-    else:
-        license_plate = "Not provided"
+    # Get vehicle info directly from driver model fields
+    vehicle_make = getattr(driver, 'vehicle_make', '')
+    vehicle_model = getattr(driver, 'vehicle_model', '')
+    vehicle_year = getattr(driver, 'vehicle_year', '')
+    vehicle_color = getattr(driver, 'vehicle_color', '')
+    license_plate = getattr(driver, 'license_plate', '')
+    
+    # Format vehicle info
+    vehicle_parts = []
+    if vehicle_year:
+        vehicle_parts.append(str(vehicle_year))
+    if vehicle_make:
+        vehicle_parts.append(vehicle_make)
+    if vehicle_model:
+        vehicle_parts.append(vehicle_model)
+    
+    # Add color in parentheses if available
+    vehicle_info = " ".join(vehicle_parts)
+    if vehicle_color and vehicle_info:
+        vehicle_info += f" ({vehicle_color})"
+    
+    # Use fallback if no vehicle info is available
+    if not vehicle_info.strip():
+        vehicle_info = "Not provided"
     
     # Send notification to rider
     rider_subject = "ChalBe: Your Ride Request Has Been Matched!"
@@ -59,7 +75,7 @@ def send_ride_match_notification(ride_request, notify_driver=True):
     - Departure Time: {ride_request.departure_time}
     - Driver: {driver.first_name} {driver.last_name}
     - Vehicle: {vehicle_info}
-    - License Plate: {license_plate}
+    - License Plate: {license_plate or "Not provided"}
     - Driver's Phone: {driver.phone_number if hasattr(driver, 'phone_number') else "Not provided"}
 
     Please log in to your ChalBe account to accept the ride.
@@ -140,14 +156,30 @@ def send_ride_accepted_notification(ride_request):
     logger.info(f"Sending ride accepted notification to rider: {rider_email}")
     logger.info(f"Sending ride accepted notification to driver: {driver_email}")
     
-    # Get vehicle info safely
-    vehicle_info = "Not provided"
-    if hasattr(driver, 'vehicle') and driver.vehicle:
-        vehicle = driver.vehicle
-        vehicle_info = f"{vehicle.make} {vehicle.model} ({vehicle.year}, {vehicle.color})"
-        license_plate = vehicle.license_plate if hasattr(vehicle, 'license_plate') else "Not provided"
-    else:
-        license_plate = "Not provided"
+    # Get vehicle info directly from driver model fields
+    vehicle_make = getattr(driver, 'vehicle_make', '')
+    vehicle_model = getattr(driver, 'vehicle_model', '')
+    vehicle_year = getattr(driver, 'vehicle_year', '')
+    vehicle_color = getattr(driver, 'vehicle_color', '')
+    license_plate = getattr(driver, 'license_plate', '')
+    
+    # Format vehicle info
+    vehicle_parts = []
+    if vehicle_year:
+        vehicle_parts.append(str(vehicle_year))
+    if vehicle_make:
+        vehicle_parts.append(vehicle_make)
+    if vehicle_model:
+        vehicle_parts.append(vehicle_model)
+    
+    # Add color in parentheses if available
+    vehicle_info = " ".join(vehicle_parts)
+    if vehicle_color and vehicle_info:
+        vehicle_info += f" ({vehicle_color})"
+    
+    # Use fallback if no vehicle info is available
+    if not vehicle_info.strip():
+        vehicle_info = "Not provided"
     
     # Send notification to rider
     rider_subject = "ChalBe: Your Ride Request Has Been Accepted!"
@@ -162,7 +194,7 @@ def send_ride_accepted_notification(ride_request):
     - Departure Time: {ride_request.departure_time}
     - Driver: {driver.first_name} {driver.last_name}
     - Vehicle: {vehicle_info}
-    - License Plate: {license_plate}
+    - License Plate: {license_plate or "Not provided"}
     - Driver's Phone: {driver.phone_number if hasattr(driver, 'phone_number') else "Not provided"}
 
     Please arrive at the pickup location on time. If you need to contact your driver, you can use the phone number provided above.
