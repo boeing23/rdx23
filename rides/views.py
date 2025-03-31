@@ -162,6 +162,18 @@ def calculate_route_overlap(driver_start, driver_end, rider_pickup, rider_dropof
         rider_pickup_lat_lng = (rider_pickup[1], rider_pickup[0])  # Convert from (lng, lat) to (lat, lng)
         rider_dropoff_lat_lng = (rider_dropoff[1], rider_dropoff[0])  # Convert from (lng, lat) to (lat, lng)
         
+        # Convert original coordinates to lat, lng format for vector calculations
+        driver_start_lat_lng = (driver_start[1], driver_start[0])
+        driver_end_lat_lng = (driver_end[1], driver_end[0])
+        
+        # Check if the rider's destination is within a reasonable distance from driver's route
+        direct_distance_to_rider_dest = great_circle(driver_end_lat_lng, rider_dropoff_lat_lng).kilometers
+        logger.info(f"Direct distance from driver's destination to rider's destination: {direct_distance_to_rider_dest:.2f}km")
+        
+        # Calculate if the rider's destination is "on the way" or requires a significant detour
+        # We'll use the detour ratio: (distance to pickup + distance from pickup to drop-off) / (direct driver route)
+        direct_driver_distance = great_circle(driver_start_lat_lng, driver_end_lat_lng).kilometers
+        
         # Find optimal dropoff using the projection method
         optimal_dropoff, distance_to_dest, pickup_index = find_optimal_dropoff(
             driver_route_lat_lng,
@@ -192,10 +204,65 @@ def calculate_route_overlap(driver_start, driver_end, rider_pickup, rider_dropof
         logger.info(f"Route distances - Driver: {driver_distance:.2f}km, Rider: {rider_distance:.2f}km")
         logger.info(f"Pickup distance: {pickup_distance:.2f}km, Dropoff distance: {dropoff_distance:.2f}km")
         
-        # Adjusted thresholds based on typical city block sizes
-        MAX_PICKUP_DIST = 1.0  # km (about 10 city blocks)
-        MAX_DROPOFF_DIST = 1.5  # km (about 15 city blocks)
+        # Special case: Check if this is a case of shared start points but very different destinations
+        # Consider the rider's relative travel direction compared to the driver
+        is_shared_start_point = pickup_distance < 0.1  # Within 100 meters
         
+        # Use different thresholds based on the ride scenario
+        if is_shared_start_point:
+            # For shared starting points, we're more lenient about drop-off distance
+            # since it might be a case where driver can extend their trip
+            MAX_PICKUP_DIST = 1.0  # km (about 10 city blocks)
+            MAX_DROPOFF_DIST = 4.0  # km (more lenient for extending the route)
+            
+            # Calculate if driver's route can be reasonably extended to accommodate rider
+            # by checking if rider's destination is in the general direction of the driver's route
+            driver_direction = (driver_end_lat_lng[0] - driver_start_lat_lng[0], 
+                               driver_end_lat_lng[1] - driver_start_lat_lng[1])
+            rider_direction = (rider_dropoff_lat_lng[0] - rider_pickup_lat_lng[0],
+                              rider_dropoff_lat_lng[1] - rider_pickup_lat_lng[1])
+            
+            # Normalize vectors
+            driver_mag = math.sqrt(driver_direction[0]**2 + driver_direction[1]**2)
+            rider_mag = math.sqrt(rider_direction[0]**2 + rider_direction[1]**2)
+            
+            # Additional logging for diagnosing the direction vectors
+            logger.info(f"Driver direction vector: {driver_direction}, magnitude: {driver_mag:.2f}")
+            logger.info(f"Rider direction vector: {rider_direction}, magnitude: {rider_mag:.2f}")
+            
+            if driver_mag > 0 and rider_mag > 0:
+                # Normalize
+                driver_dir_norm = (driver_direction[0]/driver_mag, driver_direction[1]/driver_mag)
+                rider_dir_norm = (rider_direction[0]/rider_mag, rider_direction[1]/rider_mag)
+                
+                # Calculate cosine similarity (dot product of normalized vectors)
+                cosine_sim = (driver_dir_norm[0] * rider_dir_norm[0] + driver_dir_norm[1] * rider_dir_norm[1])
+                logger.info(f"Direction similarity (cosine): {cosine_sim:.4f}")
+                
+                # If the directions are similar enough (cos > 0.7, or angle < ~45 degrees)
+                if cosine_sim > 0.7:
+                    logger.info("Rider's destination is in a similar direction as driver's route - route extension possible")
+                    # Give a bonus to the drop-off score
+                    MAX_DROPOFF_DIST = 5.0  # Even more lenient
+                    
+                    # For cases where the driver's route is shorter than the rider's,
+                    # consider a potential extension of the driver's route
+                    if direct_driver_distance < rider_distance and direct_distance_to_rider_dest <= 5.0:
+                        logger.info("Rider's route is longer but driver could potentially extend their route")
+                        
+                        # Improve the dropoff distance calculation
+                        # Instead of using the existing end of driver's route, calculate as if
+                        # the driver might extend their route to accommodate the rider
+                        extension_dropoff_distance = min(dropoff_distance, direct_distance_to_rider_dest)
+                        logger.info(f"Potential extension drop-off distance: {extension_dropoff_distance:.2f}km")
+                        
+                        # Use the better of the two distances
+                        dropoff_distance = extension_dropoff_distance
+        else:
+            # Regular case - standard thresholds for typical ride-sharing
+            MAX_PICKUP_DIST = 1.0  # km (about 10 city blocks)
+            MAX_DROPOFF_DIST = 2.0  # km (about 20 city blocks)
+            
         # Calculate proximity scores (0-100)
         pickup_score = max(0, 100 - (pickup_distance * 100 / MAX_PICKUP_DIST))
         dropoff_score = max(0, 100 - (dropoff_distance * 100 / MAX_DROPOFF_DIST))
@@ -222,15 +289,32 @@ def calculate_route_overlap(driver_start, driver_end, rider_pickup, rider_dropof
         # How much extra distance driver has to travel compared to their original route
         total_detour = pickup_distance + dropoff_distance
         detour_factor = total_detour / max(driver_distance, 0.1)  # Avoid division by zero
+        
+        # Adjust the detour calculation for shared-start scenarios
+        if is_shared_start_point:
+            # If they start from the same point, the "detour" is more about extending the trip
+            # rather than deviating from the route
+            detour_factor = dropoff_distance / max(direct_driver_distance, 0.1)
+            logger.info(f"Adjusted detour factor for shared starting point: {detour_factor:.2f}")
+        
         detour_score = max(0, 100 - (detour_factor * 100))
         
-        # Combine scores with weights, emphasize pickup and dropoff proximity more
-        overlap_percentage = (
-            0.3 * direction_score +  # Direction alignment
-            0.3 * pickup_score +     # Pickup proximity
-            0.3 * dropoff_score +    # Dropoff proximity
-            0.1 * detour_score       # Minimize detour
-        )
+        # Combine scores with weights
+        # For shared starting points, emphasize direction alignment more
+        if is_shared_start_point:
+            overlap_percentage = (
+                0.4 * direction_score +  # Direction alignment is more important
+                0.3 * pickup_score +     # Pickup proximity
+                0.2 * dropoff_score +    # Dropoff proximity
+                0.1 * detour_score       # Minimize detour
+            )
+        else:
+            overlap_percentage = (
+                0.3 * direction_score +  # Direction alignment
+                0.3 * pickup_score +     # Pickup proximity
+                0.3 * dropoff_score +    # Dropoff proximity
+                0.1 * detour_score       # Minimize detour
+            )
         
         # Ensure overlap_percentage is between 0 and 100
         overlap_percentage = max(0, min(100, overlap_percentage))
