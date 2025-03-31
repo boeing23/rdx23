@@ -14,6 +14,7 @@ const theme = createTheme({
   },
   typography: {
     fontFamily: [
+      '"Uber Move"',
       '-apple-system',
       'BlinkMacSystemFont',
       '"Segoe UI"',
@@ -25,6 +26,35 @@ const theme = createTheme({
       '"Segoe UI Emoji"',
       '"Segoe UI Symbol"',
     ].join(','),
+    h1: {
+      fontFamily: '"Uber Move", sans-serif',
+      fontWeight: 700,
+    },
+    h2: {
+      fontFamily: '"Uber Move", sans-serif',
+      fontWeight: 700,
+    },
+    h3: {
+      fontFamily: '"Uber Move", sans-serif',
+      fontWeight: 700,
+    },
+    h4: {
+      fontFamily: '"Uber Move", sans-serif',
+      fontWeight: 700,
+    },
+    h5: {
+      fontFamily: '"Uber Move", sans-serif',
+      fontWeight: 600,
+    },
+    h6: {
+      fontFamily: '"Uber Move", sans-serif',
+      fontWeight: 600,
+    },
+    button: {
+      fontFamily: '"Uber Move", sans-serif',
+      fontWeight: 500,
+      textTransform: 'none',
+    }
   },
 });
 
