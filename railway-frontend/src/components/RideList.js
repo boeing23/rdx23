@@ -41,7 +41,27 @@ const RideList = () => {
       
       console.log('RideList - API response received:', response.status);
       console.log('RideList - Number of rides:', response.data.length);
-      setRides(response.data);
+      
+      // Filter rides to only show available ones
+      // Remove rides that are completed, cancelled, or in the past
+      const now = new Date();
+      const availableRides = response.data.filter(ride => {
+        // Check if ride is not completed or cancelled
+        const isActiveStatus = ride.status !== 'COMPLETED' && ride.status !== 'CANCELLED';
+        
+        // Check if departure time is in the future
+        const departureTime = new Date(ride.departure_time);
+        const isFutureRide = departureTime > now;
+        
+        // Check if there are seats available
+        const hasAvailableSeats = ride.available_seats > 0;
+        
+        // Only show active, future rides with available seats
+        return isActiveStatus && isFutureRide && hasAvailableSeats;
+      });
+      
+      console.log('RideList - Filtered to', availableRides.length, 'available rides');
+      setRides(availableRides);
     } catch (err) {
       console.error('RideList - Error details:', {
         message: err.message,
@@ -145,6 +165,13 @@ const RideList = () => {
         )}
       </Box>
       <Grid container spacing={3}>
+        {rides.length === 0 && (
+          <Grid item xs={12}>
+            <Typography variant="h6" color="textSecondary" align="center">
+              No available rides at the moment
+            </Typography>
+          </Grid>
+        )}
         {rides.map((ride) => (
           <Grid item xs={12} sm={6} md={4} lg={3} key={ride.id}>
             <div className="ride-tablet">
@@ -273,13 +300,6 @@ const RideList = () => {
             </div>
           </Grid>
         ))}
-        {rides.length === 0 && (
-          <Grid item xs={12}>
-            <Typography variant="h6" color="textSecondary" align="center">
-              No rides available at the moment
-            </Typography>
-          </Grid>
-        )}
       </Grid>
     </Box>
   );
