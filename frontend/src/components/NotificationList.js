@@ -27,14 +27,16 @@ function NotificationList() {
   const getToken = () => {
     try {
       const token = localStorage.getItem('token');
-      console.log('Getting token from localStorage:', token ? 'Token exists' : 'No token found');
+      console.log('Token from localStorage:', token ? 'Present' : 'Missing');
       if (token) {
         console.log('Token length:', token.length);
-        console.log('Token prefix:', token.substring(0, 10) + '...');
+        // Log first few characters of token (for debugging)
+        console.log('Token preview:', token.substring(0, 10) + '...');
+        return token;
       }
-      return token;
+      return null;
     } catch (error) {
-      console.error('Error getting token from localStorage:', error);
+      console.error('Error retrieving token from localStorage:', error);
       return null;
     }
   };
@@ -43,23 +45,26 @@ function NotificationList() {
     try {
       const token = getToken();
       if (!token) {
-        console.log('No authentication token found, redirecting to login');
+        console.error('No authentication token found');
         setError('Please log in to view notifications');
+        // Clear any invalid data
+        localStorage.removeItem('token');
+        localStorage.removeItem('userType');
+        window.location.href = '/login';
         return;
       }
 
-      console.log('Fetching notifications with token');
-      const headers = {
-        'Authorization': `Bearer ${token}`,
-        'Accept': 'application/json'
-      };
-      console.log('Request headers:', headers);
-
+      console.log('Fetching notifications with token...');
       const response = await fetch(`${API_BASE_URL}/api/rides/notifications/`, {
-        headers: headers
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
       });
 
-      console.log('Notifications response status:', response.status);
+      console.log('Response status:', response.status);
       console.log('Response headers:', Object.fromEntries(response.headers.entries()));
 
       if (response.ok) {

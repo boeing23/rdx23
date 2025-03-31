@@ -59,7 +59,8 @@ function Login() {
         console.log('Login successful, storing token and user data');
         // Store the token and user data
         localStorage.setItem('token', data.token);
-        localStorage.setItem('userType', JSON.stringify(data.user_type));
+        // Store userType as a string, not JSON
+        localStorage.setItem('userType', data.user_type);
         console.log('Token and user data stored successfully');
         console.log('Token length:', data.token ? data.token.length : 0);
         console.log('User type:', data.user_type);
