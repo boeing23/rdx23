@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { Box, Card, CardContent, Typography, Button, Grid, Alert } from '@mui/material';
+import { Box, Card, CardContent, Typography, Button, Grid, Alert, Chip } from '@mui/material';
+import { LocationOn, AccessTime, People, DirectionsCar, Person, Email, Phone, Place } from '@mui/icons-material';
 import { API_BASE_URL } from '../config';
+import './RideTablet.css';
 
 const RideList = () => {
   console.log('RideList - Component rendering');
@@ -126,7 +128,7 @@ const RideList = () => {
 
   return (
     <Box sx={{ mt: 4 }}>
-      <div className="flex justify-between items-center mb-6">
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
         <Typography variant="h4" gutterBottom>
           Available Rides
         </Typography>
@@ -136,40 +138,59 @@ const RideList = () => {
             color="primary"
             onClick={() => navigate('/request-ride')}
             sx={{ mt: 2 }}
+            startIcon={<DirectionsCar />}
           >
             Request New Ride
           </Button>
         )}
-      </div>
+      </Box>
       <Grid container spacing={3}>
         {rides.map((ride) => (
           <Grid item xs={12} md={6} key={ride.id}>
-            <Card>
-              <CardContent>
-                <div className="flex justify-between items-start">
-                  <div>
-                    <Typography variant="h6">
+            <div className="ride-tablet">
+              <div className="ride-tablet-content">
+                <div className="ride-details">
+                  <div className="location-text">
+                    <LocationOn className="location-icon" />
+                    <Typography variant="subtitle1">
                       From: {ride.start_location}
                     </Typography>
-                    <Typography variant="h6">
+                  </div>
+                  <div className="location-text">
+                    <LocationOn className="location-icon" />
+                    <Typography variant="subtitle1">
                       To: {ride.end_location}
                     </Typography>
-                    <Typography color="textSecondary">
-                      Date: {new Date(ride.departure_time).toLocaleDateString()}
-                    </Typography>
-                    <Typography color="textSecondary">
-                      Time: {new Date(ride.departure_time).toLocaleTimeString()}
-                    </Typography>
-                    <Typography color="textSecondary">
-                      Available Seats: {ride.available_seats}
+                  </div>
+                  <div className="time-details">
+                    <AccessTime className="time-icon" />
+                    <Typography variant="body2">
+                      {new Date(ride.departure_time).toLocaleDateString()} at {new Date(ride.departure_time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                     </Typography>
                   </div>
+                  <Box display="flex" alignItems="center">
+                    <People color="primary" sx={{ mr: 1 }} />
+                    <Chip 
+                      label={`${ride.available_seats} seat${ride.available_seats !== 1 ? 's' : ''} available`}
+                      color={ride.available_seats > 0 ? "success" : "error"}
+                      size="small"
+                      variant="outlined"
+                    />
+                  </Box>
+                  {ride.price_per_seat > 0 && (
+                    <Typography variant="body2" sx={{ mt: 1 }}>
+                      Price per seat: ${ride.price_per_seat.toFixed(2)}
+                    </Typography>
+                  )}
+                  
                   {userType === 'RIDER' && (
                     <Button
                       variant="contained"
                       color="primary"
                       onClick={() => handleRequestRide(ride.id)}
-                      sx={{ mt: 2 }}
+                      className="action-button"
+                      fullWidth
+                      startIcon={<DirectionsCar />}
                     >
                       Request Ride
                     </Button>
@@ -177,38 +198,56 @@ const RideList = () => {
                 </div>
 
                 {userType === 'DRIVER' && ride.requests && ride.requests.length > 0 && (
-                  <div className="mt-4">
+                  <div className="ride-requests-section">
                     <Typography variant="h6" gutterBottom>
                       Ride Requests
                     </Typography>
                     {ride.requests.map((request) => (
-                      <div key={request.id} className="border-t pt-4 mt-4">
-                        <div className="flex justify-between items-start">
-                          <div>
-                            <Typography variant="body1">
-                              Rider: {request.rider_details.first_name} {request.rider_details.last_name}
+                      <div key={request.id} className="request-item">
+                        <div>
+                          <Box display="flex" alignItems="center" mb={1}>
+                            <Person sx={{ mr: 1, color: "#800000" }} />
+                            <Typography variant="subtitle2">
+                              {request.rider_details.first_name} {request.rider_details.last_name}
                             </Typography>
+                          </Box>
+                          <Box display="flex" alignItems="center" mb={0.5}>
+                            <Email sx={{ mr: 1, fontSize: "0.9rem", color: "#555" }} />
                             <Typography variant="body2">
-                              Email: {request.rider_details.email}
+                              {request.rider_details.email}
                             </Typography>
+                          </Box>
+                          <Box display="flex" alignItems="center" mb={0.5}>
+                            <Phone sx={{ mr: 1, fontSize: "0.9rem", color: "#555" }} />
                             <Typography variant="body2">
-                              Phone: {request.rider_details.phone_number}
+                              {request.rider_details.phone_number}
                             </Typography>
+                          </Box>
+                          <Box display="flex" alignItems="center" mb={0.5}>
+                            <Place sx={{ mr: 1, fontSize: "0.9rem", color: "#555" }} />
                             <Typography variant="body2">
                               Pickup: {request.pickup_location}
                             </Typography>
+                          </Box>
+                          <Box display="flex" alignItems="center" mb={0.5}>
+                            <Place sx={{ mr: 1, fontSize: "0.9rem", color: "#555" }} />
                             <Typography variant="body2">
                               Dropoff: {request.dropoff_location}
                             </Typography>
+                          </Box>
+                          <Box display="flex" alignItems="center" mb={0.5}>
+                            <People sx={{ mr: 1, fontSize: "0.9rem", color: "#555" }} />
                             <Typography variant="body2">
                               Seats Needed: {request.seats_needed}
                             </Typography>
-                          </div>
+                          </Box>
+                          
                           {request.status === 'PENDING' && (
-                            <div className="space-x-2">
+                            <div className="request-actions">
                               <Button
                                 variant="contained"
                                 color="success"
+                                size="small"
                                 onClick={() => handleAcceptRequest(request.id)}
                               >
                                 Accept
@@ -216,6 +255,7 @@ const RideList = () => {
                               <Button
                                 variant="contained"
                                 color="error"
+                                size="small"
                                 onClick={() => handleRejectRequest(request.id)}
                               >
                                 Reject
@@ -227,8 +267,8 @@ const RideList = () => {
                     ))}
                   </div>
                 )}
-              </CardContent>
-            </Card>
+              </div>
+            </div>
           </Grid>
         ))}
         {rides.length === 0 && (
