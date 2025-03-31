@@ -655,9 +655,215 @@ class IsRiderOrDriver(permissions.BasePermission):
         return is_allowed
 
 class RideViewSet(viewsets.ModelViewSet):
-    queryset = Ride.objects.all()
     serializer_class = RideSerializer
-    permission_classes = [permissions.IsAuthenticated, IsDriverOrReadOnly]
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        if hasattr(user, 'user_type') and user.user_type == 'driver':
+            return Ride.objects.filter(driver=user)
+        else:
+            return Ride.objects.filter(status='SCHEDULED').exclude(driver=user)
+            
+    @action(detail=False, methods=['get'])
+    def debug_ride_matching(self, request):
+        """
+        Debug endpoint to diagnose ride matching issues.
+        Shows all rides, pending requests, and tests the matching algorithm.
+        """
+        try:
+            logger.info(f"DEBUG MATCHING: Debug endpoint called by {request.user.username}")
+            
+            # Get all rides and pending requests
+            all_rides = Ride.objects.all().order_by('-created_at')[:20]  # Limit to most recent 20
+            all_pending_requests = PendingRideRequest.objects.filter(status='PENDING')
+            
+            # Collect data about each ride
+            rides_data = []
+            for ride in all_rides:
+                ride_data = {
+                    'id': ride.id,
+                    'driver': f"{ride.driver.username} (ID: {ride.driver.id})",
+                    'start': f"{ride.start_location} ({ride.start_latitude}, {ride.start_longitude})",
+                    'end': f"{ride.end_location} ({ride.end_latitude}, {ride.end_longitude})",
+                    'departure_time': ride.departure_time,
+                    'available_seats': ride.available_seats,
+                    'status': ride.status,
+                    'created_at': ride.created_at,
+                }
+                rides_data.append(ride_data)
+                
+            # Collect data about each pending request
+            pending_requests_data = []
+            for pr in all_pending_requests:
+                pr_data = {
+                    'id': pr.id,
+                    'rider': f"{pr.rider.username} (ID: {pr.rider.id})",
+                    'pickup': f"{pr.pickup_location} ({pr.pickup_latitude}, {pr.pickup_longitude})",
+                    'dropoff': f"{pr.dropoff_location} ({pr.dropoff_latitude}, {pr.dropoff_longitude})",
+                    'departure_time': pr.departure_time,
+                    'seats_needed': pr.seats_needed,
+                    'status': pr.status,
+                    'created_at': pr.created_at,
+                }
+                pending_requests_data.append(pr_data)
+                
+            # Test matching each request with each ride
+            match_results = []
+            
+            for pr in all_pending_requests:
+                for ride in all_rides.filter(status='SCHEDULED'):
+                    # Skip if ride doesn't have enough seats
+                    if ride.available_seats < pr.seats_needed:
+                        result = {
+                            'request_id': pr.id,
+                            'ride_id': ride.id,
+                            'match': False,
+                            'reason': f"Not enough seats: {ride.available_seats} < {pr.seats_needed}"
+                        }
+                        match_results.append(result)
+                        continue
+                        
+                    # Skip if departure times are too far apart
+                    time_diff = abs((ride.departure_time - pr.departure_time).total_seconds() / 60)
+                    if time_diff > 30:
+                        result = {
+                            'request_id': pr.id,
+                            'ride_id': ride.id,
+                            'match': False,
+                            'reason': f"Time difference too large: {time_diff:.1f} minutes"
+                        }
+                        match_results.append(result)
+                        continue
+                        
+                    # Skip if rider is the driver
+                    if pr.rider == ride.driver:
+                        result = {
+                            'request_id': pr.id,
+                            'ride_id': ride.id,
+                            'match': False,
+                            'reason': "Rider is the driver of this ride"
+                        }
+                        match_results.append(result)
+                        continue
+                    
+                    # Get coordinates in correct format
+                    driver_start = (ride.start_longitude, ride.start_latitude)
+                    driver_end = (ride.end_longitude, ride.end_latitude)
+                    rider_pickup = (pr.pickup_longitude, pr.pickup_latitude)
+                    rider_dropoff = (pr.dropoff_longitude, pr.dropoff_latitude)
+                    
+                    # Check for missing coordinates
+                    if (None in driver_start or None in driver_end or 
+                        None in rider_pickup or None in rider_dropoff):
+                        result = {
+                            'request_id': pr.id,
+                            'ride_id': ride.id,
+                            'match': False,
+                            'reason': "Missing coordinates"
+                        }
+                        match_results.append(result)
+                        continue
+                    
+                    # Calculate route overlap
+                    try:
+                        overlap_percentage, nearest_point = calculate_route_overlap(
+                            driver_start, driver_end, rider_pickup, rider_dropoff
+                        )
+                        
+                        # Calculate matching score
+                        matching_score = calculate_matching_score(
+                            overlap_percentage, 
+                            time_diff,
+                            ride.available_seats,
+                            pr.seats_needed
+                        )
+                        
+                        # Determine if this is a match
+                        MIN_OVERLAP_THRESHOLD = 35.0
+                        is_match = overlap_percentage >= MIN_OVERLAP_THRESHOLD
+                        
+                        result = {
+                            'request_id': pr.id,
+                            'ride_id': ride.id,
+                            'match': is_match,
+                            'reason': f"Overlap: {overlap_percentage:.2f}%, Score: {matching_score:.2f}" +
+                                     ('' if is_match else f" (below {MIN_OVERLAP_THRESHOLD}% threshold)"),
+                            'overlap': overlap_percentage,
+                            'score': matching_score,
+                            'time_diff': time_diff
+                        }
+                        match_results.append(result)
+                        
+                    except Exception as e:
+                        result = {
+                            'request_id': pr.id,
+                            'ride_id': ride.id,
+                            'match': False,
+                            'reason': f"Error calculating overlap: {str(e)}"
+                        }
+                        match_results.append(result)
+            
+            # Analyze database for existing matches
+            existing_matches = RideRequest.objects.all().order_by('-created_at')[:20]  # Limit to most recent 20
+            matches_data = []
+            
+            for match in existing_matches:
+                match_data = {
+                    'id': match.id,
+                    'rider': f"{match.rider.username} (ID: {match.rider.id})",
+                    'ride_id': match.ride.id if match.ride else None,
+                    'status': match.status,
+                    'created_at': match.created_at,
+                    'pickup': f"{match.pickup_location} ({match.pickup_latitude}, {match.pickup_longitude})",
+                    'dropoff': f"{match.dropoff_location} ({match.dropoff_latitude}, {match.dropoff_longitude})",
+                }
+                matches_data.append(match_data)
+                
+            # Check the check_pending_requests periodic task
+            cron_jobs = []
+            from django_crontab.models import CrontabJobLog
+            try:
+                # Check if django_crontab is installed and configured
+                recent_cron_runs = CrontabJobLog.objects.filter(
+                    command__contains="check_pending_requests"
+                ).order_by('-start_time')[:5]
+                
+                for run in recent_cron_runs:
+                    cron_jobs.append({
+                        'start_time': run.start_time,
+                        'end_time': run.end_time,
+                        'success': run.success,
+                        'message': run.message,
+                    })
+            except:
+                cron_jobs.append({'status': 'Django-crontab not installed or no logs available'})
+            
+            # Summarize matches
+            possible_matches = [r for r in match_results if r['match']]
+            
+            return Response({
+                'debug_summary': {
+                    'rides_count': all_rides.count(),
+                    'pending_requests_count': all_pending_requests.count(),
+                    'existing_matches_count': existing_matches.count(),
+                    'possible_matches_found': len(possible_matches),
+                    'timestamp': timezone.now(),
+                    'called_by': request.user.username
+                },
+                'rides': rides_data,
+                'pending_requests': pending_requests_data,
+                'match_tests': match_results,
+                'existing_matches': matches_data,
+                'cron_job_status': cron_jobs
+            })
+        except Exception as e:
+            logger.error(f"DEBUG MATCHING ERROR: {str(e)}")
+            logger.exception("Full exception details:")
+            return Response({
+                'error': str(e),
+                'timestamp': timezone.now()
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def get_serializer_class(self):
         if self.action == 'retrieve':
@@ -1476,7 +1682,7 @@ class RideRequestViewSet(viewsets.ModelViewSet):
                         })
                         continue
                     
-                    # Skip if time difference is too large (30 minutes)
+                    # Skip if departure times are too far apart
                     time_diff = abs((ride.departure_time - pending_request.departure_time).total_seconds() / 60)
                     if time_diff > 30:
                         logger.info(f"Time difference too large: {time_diff:.1f} minutes")
