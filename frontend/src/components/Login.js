@@ -71,6 +71,29 @@ function Login() {
         console.log('Verification - Stored token exists:', !!storedToken);
         console.log('Verification - Stored user type:', storedUserType);
 
+        // Test the token with a simple API call
+        try {
+          const testResponse = await fetch(`${API_BASE_URL}/api/health/`, {
+            headers: {
+              'Authorization': `Bearer ${storedToken}`,
+              'Accept': 'application/json'
+            },
+            credentials: 'include'
+          });
+          
+          if (!testResponse.ok) {
+            throw new Error('Token verification failed');
+          }
+          
+          console.log('Token verification successful');
+        } catch (error) {
+          console.error('Token verification failed:', error);
+          localStorage.removeItem('token');
+          localStorage.removeItem('userType');
+          setError('Failed to verify authentication. Please try again.');
+          return;
+        }
+
         // Redirect based on user type
         if (data.user_type === 'driver') {
           navigate('/driver-dashboard');

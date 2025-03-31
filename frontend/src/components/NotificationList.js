@@ -62,6 +62,7 @@ function NotificationList() {
           'Content-Type': 'application/json',
           'Accept': 'application/json'
         },
+        credentials: 'include'
       });
 
       console.log('Response status:', response.status);
