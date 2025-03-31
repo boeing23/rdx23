@@ -1427,22 +1427,11 @@ class RideRequestViewSet(viewsets.ModelViewSet):
         ride.available_seats -= ride_request.seats_needed
         ride.save()
 
-        # Create detailed notification for the rider
+        # Create notification for the rider
         Notification.objects.create(
             recipient=ride_request.rider,
-            sender=ride_request.ride.driver,
-            message=f"Your ride request has been accepted by {ride_request.ride.driver.first_name} {ride_request.ride.driver.last_name}",
+            message=f"Your ride request for {ride_request.ride.start_location} to {ride_request.ride.end_location} has been accepted",
             notification_type="REQUEST_ACCEPTED",
-            ride=ride_request.ride,
-            ride_request=ride_request
-        )
-        
-        # Create detailed notification for the driver
-        Notification.objects.create(
-            recipient=ride_request.ride.driver,
-            sender=ride_request.rider,
-            message=f"You accepted a ride request from {ride_request.rider.first_name} {ride_request.rider.last_name}",
-            notification_type="RIDE_ACCEPTED_BY_DRIVER",
             ride=ride_request.ride,
             ride_request=ride_request
         )
@@ -1567,42 +1556,85 @@ class RideRequestViewSet(viewsets.ModelViewSet):
             
             # Create notifications
             Notification.objects.create(
-                recipient=matched_ride.driver,
-                sender=ride_request.rider,
-                message=f"{ride_request.rider.first_name} {ride_request.rider.last_name} has rejected your ride offer",
+                recipient=ride_request.rider,
+                sender=matched_ride.driver if matched_ride else None,
+                message=f"You have rejected the ride match.",
                 ride=matched_ride,
                 ride_request=ride_request,
-                notification_type='RIDE_REJECTED'
+                notification_type='REQUEST_REJECTED'
             )
             
-            return Response({'status': 'rejected'})
+            if matched_ride:
+                Notification.objects.create(
+                    recipient=matched_ride.driver,
+                    sender=ride_request.rider,
+                    message=f"{ride_request.rider.first_name} {ride_request.rider.last_name} has rejected the ride match.",
+                    ride=matched_ride,
+                    ride_request=ride_request,
+                    notification_type='REQUEST_REJECTED'
+                )
+            
+            return Response({'status': 'success', 'message': 'Ride match rejected'})
             
         except Exception as e:
             logger.error(f"Error rejecting match: {str(e)}")
-            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
-
+            logger.exception("Exception details:")
+            return Response({
+                'status': 'error',
+                'message': str(e)
+            }, status=status.HTTP_400_BAD_REQUEST)
+            
     @action(detail=False, methods=['get'])
     def accepted(self, request):
-        """Get all accepted ride requests for a user (both as rider and driver)"""
-        user = request.user
+        """
+        Returns all accepted ride requests for the current user (either as rider or driver).
+        Includes detailed rider and driver information for the frontend.
+        """
+        logger.info(f"Fetching accepted rides for user: {request.user.username}")
         
-        # Get rides where user is the rider
-        rider_requests = RideRequest.objects.filter(
-            rider=user,
-            status='ACCEPTED'
-        ).select_related('ride', 'ride__driver')
-        
-        # Get rides where user is the driver
-        driver_requests = RideRequest.objects.filter(
-            ride__driver=user,
-            status='ACCEPTED'
-        ).select_related('ride', 'rider')
-        
-        # Combine the results
-        all_requests = list(rider_requests) + list(driver_requests)
-        
-        serializer = RideRequestSerializer(all_requests, many=True, context={'request': request})
-        return Response(serializer.data)
+        try:
+            user = request.user
+            user_type = getattr(user, 'user_type', None)
+            logger.info(f"User type: {user_type}")
+            
+            if user_type == 'DRIVER':
+                # For drivers, get rides where they are the driver
+                logger.info("Fetching rides where user is the driver")
+                ride_ids = Ride.objects.filter(driver=user).values_list('id', flat=True)
+                ride_requests = RideRequest.objects.filter(
+                    ride_id__in=ride_ids
+                ).exclude(status='REJECTED')
+            else:
+                # For riders, get their ride requests
+                logger.info("Fetching ride requests where user is the rider")
+                ride_requests = RideRequest.objects.filter(
+                    rider=user
+                ).exclude(status='REJECTED')
+            
+            logger.info(f"Found {ride_requests.count()} ride requests for user {user.username}")
+            
+            # Serialize with more detailed information
+            serializer = RideRequestSerializer(ride_requests, many=True, context={'request': request})
+            
+            # Log a summary of what's being returned
+            for req in ride_requests:
+                logger.info(f"Ride request {req.id}: status={req.status}, pickup={req.pickup_location}, dropoff={req.dropoff_location}")
+                try:
+                    if req.ride and req.ride.driver:
+                        logger.info(f"  Driver: {req.ride.driver.first_name} {req.ride.driver.last_name}, phone: {getattr(req.ride.driver, 'phone_number', 'N/A')}")
+                    logger.info(f"  Rider: {req.rider.first_name} {req.rider.last_name}, phone: {getattr(req.rider, 'phone_number', 'N/A')}")
+                except Exception as e:
+                    logger.error(f"Error logging ride details: {str(e)}")
+            
+            return Response(serializer.data)
+            
+        except Exception as e:
+            logger.error(f"Error in accepted rides: {str(e)}")
+            logger.exception("Full exception details:")
+            return Response({
+                'status': 'error',
+                'message': 'Failed to retrieve accepted rides'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         
     @action(detail=True, methods=['post'])
     def cancel(self, request, pk=None):
