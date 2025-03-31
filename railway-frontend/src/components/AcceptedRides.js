@@ -87,8 +87,11 @@ const AcceptedRides = () => {
         });
       });
       
+      // Filter out cancelled rides
+      const filteredRides = data.filter(ride => ride.status !== 'CANCELLED');
+      
       // Sort rides by departure time (most recent first)
-      const sortedRides = data.sort((a, b) => 
+      const sortedRides = filteredRides.sort((a, b) => 
         new Date(b.departure_time) - new Date(a.departure_time)
       );
       
@@ -247,7 +250,7 @@ const AcceptedRides = () => {
     );
   }
 
-  return (
+    return (
     <Container maxWidth="lg" sx={{ px: 4, py: 3 }}>
       <Typography variant="h4" className="page-title" gutterBottom>
         My Trips
@@ -314,8 +317,8 @@ const AcceptedRides = () => {
                           <Typography variant="subtitle1" component="span" fontWeight="bold">
                             Trip #{ride.id}
                           </Typography>
-                          {getStatusChip(ride.status)}
-                        </Box>
+              {getStatusChip(ride.status)}
+            </Box>
                       </React.Fragment>
                     }
                     secondary={
@@ -384,41 +387,41 @@ const AcceptedRides = () => {
                         </Typography>
                         <Typography variant="body1" fontWeight={500}>
                           {selectedRide.dropoff_location}
-                        </Typography>
-                      </Box>
+              </Typography>
+            </Box>
                     </Box>
                   </Grid>
-
+            
                   <Grid item xs={12} sm={6}>
                     <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 2 }}>
                       <AccessTime sx={{ mr: 2, color: '#800000' }} />
-                      <Box>
+              <Box>
                         <Typography variant="body2" color="textSecondary">
                           Departure Time
                         </Typography>
                         <Typography variant="body1" fontWeight={500}>
                           {formatDate(selectedRide.departure_time)}
                         </Typography>
-                      </Box>
-                    </Box>
+              </Box>
+            </Box>
                   </Grid>
-
+            
                   <Grid item xs={12} sm={6}>
-                    <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 2 }}>
+            <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 2 }}>
                       <Event sx={{ mr: 2, color: '#800000' }} />
-                      <Box>
+              <Box>
                         <Typography variant="body2" color="textSecondary">
                           Seats Needed
                         </Typography>
                         <Typography variant="body1" fontWeight={500}>
                           {selectedRide.seats_needed}
                         </Typography>
-                      </Box>
-                    </Box>
+              </Box>
+            </Box>
                   </Grid>
-
+            
                   <Grid item xs={12}>
-                    <Divider sx={{ my: 2 }} />
+            <Divider sx={{ my: 2 }} />
                     <Typography variant="h6" gutterBottom>
                       {userType === 'DRIVER' ? 'Rider Information' : 'Driver Information'}
                     </Typography>
@@ -438,7 +441,7 @@ const AcceptedRides = () => {
                               {getFullName(selectedRide.rider)}
                             </Typography>
                           </Box>
-                        </Box>
+                </Box>
                       </Grid>
                       <Grid item xs={12} sm={6}>
                         <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 2 }}>
@@ -450,8 +453,8 @@ const AcceptedRides = () => {
                             <Typography variant="body1" fontWeight={500}>
                               {getEmail(selectedRide.rider)}
                             </Typography>
-                          </Box>
-                        </Box>
+                </Box>
+                </Box>
                       </Grid>
                       <Grid item xs={12} sm={6}>
                         <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 2 }}>
@@ -462,12 +465,12 @@ const AcceptedRides = () => {
                             </Typography>
                             <Typography variant="body1" fontWeight={500}>
                               {getPhoneNumber(selectedRide.rider)}
-                            </Typography>
-                          </Box>
+                  </Typography>
+                </Box>
                         </Box>
                       </Grid>
-                    </>
-                  ) : (
+              </>
+            ) : (
                     // Display driver information
                     <>
                       <Grid item xs={12} sm={6}>
@@ -519,8 +522,8 @@ const AcceptedRides = () => {
                             <Typography variant="body1" fontWeight={500}>
                               {selectedRide.ride_details?.driver?.vehicle_make} {selectedRide.ride_details?.driver?.vehicle_model} ({selectedRide.ride_details?.driver?.vehicle_color})
                             </Typography>
-                          </Box>
-                        </Box>
+                </Box>
+                </Box>
                       </Grid>
                       <Grid item xs={12} sm={6}>
                         <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 2 }}>
@@ -532,46 +535,46 @@ const AcceptedRides = () => {
                             <Typography variant="body1" fontWeight={500}>
                               {selectedRide.ride_details?.driver?.license_plate || 'Not provided'}
                             </Typography>
-                          </Box>
-                        </Box>
+                </Box>
+                </Box>
                       </Grid>
-                    </>
-                  )}
-
+              </>
+            )}
+            
                   {selectedRide.status === 'ACCEPTED' && (
                     <Grid item xs={12}>
                       <Divider sx={{ my: 2 }} />
                       <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2, mt: 2 }}>
-                        <Button
+                <Button 
                           variant="outlined"
-                          color="error"
+                  color="error" 
                           startIcon={<Cancel />}
                           onClick={() => handleOpenCancelDialog(selectedRide)}
-                        >
-                          Cancel Ride
-                        </Button>
+                >
+                  Cancel Ride
+                </Button>
                         {userType === 'DRIVER' && (
-                          <Button
-                            variant="contained"
-                            color="success"
+                  <Button 
+                    variant="contained" 
+                    color="success" 
                             startIcon={<CheckCircle />}
                             onClick={() => handleCompleteRide(selectedRide.id)}
-                          >
-                            Complete Ride
-                          </Button>
-                        )}
-                      </Box>
+                  >
+                    Complete Ride
+                  </Button>
+                )}
+              </Box>
                     </Grid>
-                  )}
-                </Grid>
+            )}
+      </Grid>
 
                 <Divider sx={{ my: 3 }} />
 
                 {/* Contact Information Section */}
                 <Typography variant="h6" gutterBottom>
                   Contact Information
-                </Typography>
-                
+      </Typography>
+      
                 <Grid container spacing={3} sx={{ mb: 3 }}>
                   {selectedRide.user_type === 'RIDER' && selectedRide.driver && (
                     <Grid item xs={12} sm={6}>
@@ -636,7 +639,7 @@ const AcceptedRides = () => {
                       </Paper>
                     </Grid>
                   )}
-                </Grid>
+        </Grid>
 
                 <Divider sx={{ my: 3 }} />
 

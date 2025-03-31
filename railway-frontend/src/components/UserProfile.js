@@ -47,7 +47,7 @@ const UserProfile = () => {
       }
 
       console.log('Fetching user data...');
-      const response = await fetch(`${API_BASE_URL}/api/users/profile/`, {
+      const response = await fetch(`${API_BASE_URL}/api/users/me/`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -108,8 +108,8 @@ const UserProfile = () => {
       }
 
       console.log('Updating user profile with data:', formData);
-      const response = await fetch(`${API_BASE_URL}/api/users/profile/update/`, {
-        method: 'PATCH',
+      const response = await fetch(`${API_BASE_URL}/api/users/update_profile/`, {
+        method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
