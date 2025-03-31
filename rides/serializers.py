@@ -3,6 +3,7 @@ from .models import Ride, RideRequest, Notification
 from django.contrib.auth import get_user_model
 import logging
 from django.utils import timezone
+import json
 
 User = get_user_model()
 logger = logging.getLogger(__name__)
@@ -175,21 +176,51 @@ class RideRequestSerializer(serializers.ModelSerializer):
         try:
             dropoff_point = obj.nearest_dropoff_point
             
-            # Extract coordinates
+            # Handle case where dropoff_point is already a JSON-parsed dict
+            if isinstance(dropoff_point, dict):
+                pass  # Already in the right format
+            # Handle case where dropoff_point is a string (JSON or otherwise)
+            elif isinstance(dropoff_point, str):
+                try:
+                    dropoff_point = json.loads(dropoff_point)
+                except json.JSONDecodeError:
+                    logger.error(f"Could not parse nearest_dropoff_point as JSON: {dropoff_point}")
+                    return {
+                        'coordinates': {'latitude': 0, 'longitude': 0},
+                        'distance_to_destination': "Unknown",
+                        'address': "Unknown location",
+                        'message': "Dropoff information is not available."
+                    }
+            else:
+                logger.error(f"Unexpected nearest_dropoff_point type: {type(dropoff_point)}")
+                return None
+            
+            # Extract coordinates with fallbacks
             coordinates = dropoff_point.get('coordinates', [0, 0])
-            latitude = coordinates[1] if len(coordinates) > 1 else 0
-            longitude = coordinates[0] if len(coordinates) > 0 else 0
+            
+            # Handle both array and dict formats
+            if isinstance(coordinates, list):
+                longitude = coordinates[0] if len(coordinates) > 0 else 0
+                latitude = coordinates[1] if len(coordinates) > 1 else 0
+            elif isinstance(coordinates, dict):
+                longitude = coordinates.get('longitude', 0)
+                latitude = coordinates.get('latitude', 0)
+            else:
+                longitude, latitude = 0, 0
+                logger.error(f"Unexpected coordinates format: {coordinates}")
             
             # Get distance
             distance = dropoff_point.get('distance_to_destination', 0)
             unit = dropoff_point.get('unit', 'kilometers')
             
-            # Get address
+            # Get address with fallback
             address = dropoff_point.get('address', 'Unknown location')
+            if not address or address == 'None':
+                address = 'Location near your destination'
             
             # Format distance for display
-            formatted_distance = f"{distance:.2f} {unit}"
-            if distance < 1:
+            formatted_distance = f"{distance:.2f} {unit}" if isinstance(distance, (int, float)) else "Unknown distance"
+            if isinstance(distance, (int, float)) and distance < 1:
                 formatted_distance = f"{distance * 1000:.0f} meters"
             
             return {
@@ -203,7 +234,14 @@ class RideRequestSerializer(serializers.ModelSerializer):
             }
         except Exception as e:
             logger.error(f"Error formatting nearest_dropoff_info: {str(e)}")
-            return None
+            logger.exception("Exception details:")
+            # Return minimal valid data rather than None
+            return {
+                'coordinates': {'latitude': 0, 'longitude': 0},
+                'distance_to_destination': "Unknown",
+                'address': "Near destination",
+                'message': "The driver can drop you off near your destination."
+            }
 
     def validate(self, data):
         logger.info(f"Validating ride request data: {data}")
