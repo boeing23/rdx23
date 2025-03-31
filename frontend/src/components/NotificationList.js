@@ -332,7 +332,8 @@ function NotificationList() {
           </>
         );
         
-      case 'RIDE_ACCEPTED':
+      case 'REQUEST_ACCEPTED':
+      case 'RIDE_ACCEPTED_BY_DRIVER':
         return (
           <>
             <Typography variant="body1" component="div" fontWeight="bold" color="success.main">
@@ -341,6 +342,52 @@ function NotificationList() {
             <Typography variant="body2" component="div">
               {notification.message}
             </Typography>
+            {notification.ride_details && (
+              <Box sx={{ mt: 1, p: 1, bgcolor: 'rgba(0, 200, 0, 0.04)', borderRadius: 1 }}>
+                <Typography variant="body2">
+                  <strong>Pickup:</strong> {notification.ride_details.start_location}
+                </Typography>
+                <Typography variant="body2">
+                  <strong>Dropoff:</strong> {notification.ride_details.end_location}
+                </Typography>
+                <Typography variant="body2">
+                  <strong>Departure:</strong> {formatDate(notification.ride_details.departure_time)}
+                </Typography>
+              </Box>
+            )}
+            {notification.sender && (
+              <Box sx={{ mt: 1, p: 1, bgcolor: 'rgba(0, 0, 0, 0.04)', borderRadius: 1 }}>
+                <Typography variant="body2" fontWeight="bold">
+                  Contact Information
+                </Typography>
+                <Typography variant="body2">
+                  <strong>Name:</strong> {notification.sender.name}
+                </Typography>
+                {notification.sender_email && (
+                  <Typography variant="body2">
+                    <strong>Email:</strong> {notification.sender_email}
+                  </Typography>
+                )}
+                {notification.sender_phone && (
+                  <Typography variant="body2">
+                    <strong>Phone:</strong> {notification.sender_phone}
+                  </Typography>
+                )}
+                {notification.sender_vehicle && (
+                  <>
+                    <Typography variant="body2" fontWeight="bold" sx={{ mt: 1 }}>
+                      Vehicle Details
+                    </Typography>
+                    <Typography variant="body2">
+                      <strong>Vehicle:</strong> {notification.sender_vehicle.make} {notification.sender_vehicle.model} ({notification.sender_vehicle.color})
+                    </Typography>
+                    <Typography variant="body2">
+                      <strong>License Plate:</strong> {notification.sender_vehicle.plate}
+                    </Typography>
+                  </>
+                )}
+              </Box>
+            )}
           </>
         );
         

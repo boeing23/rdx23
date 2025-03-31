@@ -1427,11 +1427,22 @@ class RideRequestViewSet(viewsets.ModelViewSet):
         ride.available_seats -= ride_request.seats_needed
         ride.save()
 
-        # Create notification for the rider
+        # Create detailed notification for the rider
         Notification.objects.create(
             recipient=ride_request.rider,
-            message=f"Your ride request for {ride_request.ride.start_location} to {ride_request.ride.end_location} has been accepted",
+            sender=ride_request.ride.driver,
+            message=f"Your ride request has been accepted by {ride_request.ride.driver.first_name} {ride_request.ride.driver.last_name}",
             notification_type="REQUEST_ACCEPTED",
+            ride=ride_request.ride,
+            ride_request=ride_request
+        )
+        
+        # Create detailed notification for the driver
+        Notification.objects.create(
+            recipient=ride_request.ride.driver,
+            sender=ride_request.rider,
+            message=f"You accepted a ride request from {ride_request.rider.first_name} {ride_request.rider.last_name}",
+            notification_type="RIDE_ACCEPTED_BY_DRIVER",
             ride=ride_request.ride,
             ride_request=ride_request
         )
