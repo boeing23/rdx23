@@ -55,19 +55,25 @@ function NotificationList() {
         return;
       }
 
+      // Make sure token is properly formatted (no extra quotes or spaces)
+      const cleanToken = token.trim().replace(/^["'](.*)["']$/, '$1');
+      console.log('Using cleaned token:', cleanToken.substring(0, 10) + '...');
+
       console.log('Fetching notifications with token...');
       const headers = {
-        'Authorization': `Bearer ${token}`,
+        'Authorization': `Bearer ${cleanToken}`,
         'Content-Type': 'application/json',
         'Accept': 'application/json'
       };
       console.log('Request headers:', headers);
-      console.log('Authorization header exact value:', `Bearer ${token}`);
+      console.log('Authorization header exact value:', `Bearer ${cleanToken}`);
 
+      // Try without credentials first
       const response = await fetch(`${API_BASE_URL}/api/rides/notifications/`, {
         method: 'GET',
         headers: headers,
-        credentials: 'include'
+        // Removing credentials to test if that's causing issues
+        // credentials: 'include'
       });
 
       console.log('Response status:', response.status);
@@ -105,6 +111,48 @@ function NotificationList() {
   };
 
   useEffect(() => {
+    // Perform a single test fetch first to diagnose issues
+    const testFetch = async () => {
+      try {
+        // First try the health endpoint without auth
+        console.log('Testing API health endpoint without auth...');
+        const healthResponse = await fetch(`${API_BASE_URL}/api/health/`);
+        console.log('Health endpoint response:', healthResponse.status);
+        
+        // Test notifications endpoint without auth to see what error we get
+        console.log('Testing notifications endpoint without auth (should fail)...');
+        const noAuthResponse = await fetch(`${API_BASE_URL}/api/rides/notifications/`);
+        console.log('No auth response status:', noAuthResponse.status);
+        
+        // Now test with auth
+        const token = localStorage.getItem('token');
+        if (token) {
+          console.log('Testing with auth token...');
+          // Try various Authorization header formats
+          const authResponse = await fetch(`${API_BASE_URL}/api/rides/notifications/`, {
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
+          });
+          console.log('Auth response status:', authResponse.status);
+          
+          if (authResponse.status === 401) {
+            // Try with a different format
+            console.log('Trying token without Bearer prefix...');
+            const authResponse2 = await fetch(`${API_BASE_URL}/api/rides/notifications/`, {
+              headers: {
+                'Authorization': token
+              }
+            });
+            console.log('Auth response (no Bearer) status:', authResponse2.status);
+          }
+        }
+      } catch (error) {
+        console.error('Test fetch error:', error);
+      }
+    };
+    
+    testFetch();
     fetchNotifications();
     // Poll for new notifications every 30 seconds
     const interval = setInterval(fetchNotifications, 30000);

@@ -57,13 +57,17 @@ function Login() {
 
       if (response.ok) {
         console.log('Login successful, storing token and user data');
+        // Make sure token doesn't have any quotes or extra whitespace
+        const cleanToken = data.token.trim().replace(/^["'](.*)["']$/, '$1');
+        console.log('Cleaned token:', cleanToken.substring(0, 10) + '...');
+        
         // Store the token and user data
-        localStorage.setItem('token', data.token);
+        localStorage.setItem('token', cleanToken);
         // Store userType as a string, not JSON
-        localStorage.setItem('userType', data.user_type);
+        localStorage.setItem('userType', typeof data.user_type === 'string' ? data.user_type : String(data.user_type));
         console.log('Token and user data stored successfully');
-        console.log('Token length:', data.token ? data.token.length : 0);
-        console.log('Token format check:', data.token.startsWith('ey') ? 'Valid JWT format' : 'Invalid JWT format');
+        console.log('Token length:', cleanToken.length);
+        console.log('Token format check:', cleanToken.startsWith('ey') ? 'Valid JWT format' : 'Invalid JWT format');
         console.log('User type:', data.user_type);
 
         // Verify storage
@@ -74,9 +78,19 @@ function Login() {
         console.log('Verification - Stored token format check:', storedToken ? (storedToken.startsWith('ey') ? 'Valid JWT format' : 'Invalid JWT format') : 'No token');
         console.log('Verification - Stored user type:', storedUserType);
 
+        // Try basic fetch without token to test CORS
+        try {
+          console.log('Testing basic fetch...');
+          const basicResponse = await fetch(`${API_BASE_URL}/api/health/`);
+          console.log('Basic fetch response status:', basicResponse.status);
+        } catch (error) {
+          console.error('Basic fetch error:', error);
+        }
+
         // Test the token with a simple API call
         try {
           console.log('Testing token with health check...');
+          // Don't use 'credentials: include' for the test
           console.log('Request headers:', {
             'Authorization': `Bearer ${storedToken}`,
             'Accept': 'application/json'
@@ -86,8 +100,9 @@ function Login() {
             headers: {
               'Authorization': `Bearer ${storedToken}`,
               'Accept': 'application/json'
-            },
-            credentials: 'include'
+            }
+            // Removing credentials to test
+            // credentials: 'include'
           });
           
           console.log('Health check response status:', testResponse.status);
@@ -100,10 +115,7 @@ function Login() {
           console.log('Token verification successful');
         } catch (error) {
           console.error('Token verification failed:', error);
-          localStorage.removeItem('token');
-          localStorage.removeItem('userType');
-          setError('Failed to verify authentication. Please try again.');
-          return;
+          console.error('Will continue anyway to test if token works for other endpoints');
         }
 
         // Redirect based on user type
