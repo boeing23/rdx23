@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { Box, Card, CardContent, Typography, Button, Grid, Alert, Chip } from '@mui/material';
-import { LocationOn, AccessTime, People, DirectionsCar, Person, Email, Phone, Place } from '@mui/icons-material';
+import { Box, Typography, Button, Grid, Alert, Chip, Divider } from '@mui/material';
+import { LocationOn, AccessTime, People, DirectionsCar, Person, Email, Phone, Place, EventSeat } from '@mui/icons-material';
 import { API_BASE_URL } from '../config';
 import './RideTablet.css';
 
@@ -146,9 +146,16 @@ const RideList = () => {
       </Box>
       <Grid container spacing={3}>
         {rides.map((ride) => (
-          <Grid item xs={12} md={6} key={ride.id}>
+          <Grid item xs={12} sm={6} md={4} lg={3} key={ride.id}>
             <div className="ride-tablet">
               <div className="ride-tablet-content">
+                <Box>
+                  <Typography variant="h6" align="center" gutterBottom>
+                    Ride #{ride.id}
+                  </Typography>
+                  <Divider sx={{ mb: 2 }} />
+                </Box>
+                
                 <div className="ride-details">
                   <div className="location-text">
                     <LocationOn className="location-icon" />
@@ -162,26 +169,33 @@ const RideList = () => {
                       To: {ride.end_location}
                     </Typography>
                   </div>
-                  <div className="time-details">
-                    <AccessTime className="time-icon" />
-                    <Typography variant="body2">
-                      {new Date(ride.departure_time).toLocaleDateString()} at {new Date(ride.departure_time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                    </Typography>
+                  
+                  <div className="ride-meta">
+                    <div className="time-details">
+                      <AccessTime className="time-icon" />
+                      <Typography variant="body2">
+                        {new Date(ride.departure_time).toLocaleDateString()} 
+                        <br />
+                        {new Date(ride.departure_time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                      </Typography>
+                    </div>
+                    
+                    <Box display="flex" alignItems="center">
+                      <EventSeat color="primary" sx={{ mr: 1 }} />
+                      <Chip 
+                        label={`${ride.available_seats} seat${ride.available_seats !== 1 ? 's' : ''}`}
+                        color={ride.available_seats > 0 ? "success" : "error"}
+                        size="small"
+                        variant="outlined"
+                      />
+                    </Box>
+                    
+                    {ride.price_per_seat > 0 && (
+                      <Typography variant="body2">
+                        Price: ${ride.price_per_seat.toFixed(2)} per seat
+                      </Typography>
+                    )}
                   </div>
-                  <Box display="flex" alignItems="center">
-                    <People color="primary" sx={{ mr: 1 }} />
-                    <Chip 
-                      label={`${ride.available_seats} seat${ride.available_seats !== 1 ? 's' : ''} available`}
-                      color={ride.available_seats > 0 ? "success" : "error"}
-                      size="small"
-                      variant="outlined"
-                    />
-                  </Box>
-                  {ride.price_per_seat > 0 && (
-                    <Typography variant="body2" sx={{ mt: 1 }}>
-                      Price per seat: ${ride.price_per_seat.toFixed(2)}
-                    </Typography>
-                  )}
                   
                   {userType === 'RIDER' && (
                     <Button
@@ -213,7 +227,7 @@ const RideList = () => {
                           </Box>
                           <Box display="flex" alignItems="center" mb={0.5}>
                             <Email sx={{ mr: 1, fontSize: "0.9rem", color: "#555" }} />
-                            <Typography variant="body2">
+                            <Typography variant="body2" noWrap>
                               {request.rider_details.email}
                             </Typography>
                           </Box>
@@ -224,21 +238,9 @@ const RideList = () => {
                             </Typography>
                           </Box>
                           <Box display="flex" alignItems="center" mb={0.5}>
-                            <Place sx={{ mr: 1, fontSize: "0.9rem", color: "#555" }} />
-                            <Typography variant="body2">
-                              Pickup: {request.pickup_location}
-                            </Typography>
-                          </Box>
-                          <Box display="flex" alignItems="center" mb={0.5}>
-                            <Place sx={{ mr: 1, fontSize: "0.9rem", color: "#555" }} />
-                            <Typography variant="body2">
-                              Dropoff: {request.dropoff_location}
-                            </Typography>
-                          </Box>
-                          <Box display="flex" alignItems="center" mb={0.5}>
                             <People sx={{ mr: 1, fontSize: "0.9rem", color: "#555" }} />
                             <Typography variant="body2">
-                              Seats Needed: {request.seats_needed}
+                              Seats: {request.seats_needed}
                             </Typography>
                           </Box>
                           

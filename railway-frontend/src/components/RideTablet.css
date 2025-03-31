@@ -8,6 +8,9 @@
   cursor: pointer;
   border: 1px solid rgba(0, 0, 0, 0.08);
   transform-origin: center;
+  display: flex;
+  flex-direction: column;
+  min-height: 380px;
 }
 
 .ride-tablet:hover {
@@ -18,18 +21,18 @@
 .ride-tablet::before {
   content: '';
   position: absolute;
-  top: 0;
   left: 0;
-  width: 100%;
-  height: 5px;
-  background: linear-gradient(90deg, #800000, #ff9999);
-  transform: scaleX(0);
-  transform-origin: left;
+  top: 0;
+  height: 100%;
+  width: 5px;
+  background: linear-gradient(180deg, #800000, #ff9999);
+  transform: scaleY(0);
+  transform-origin: top;
   transition: transform 0.4s ease;
 }
 
 .ride-tablet:hover::before {
-  transform: scaleX(1);
+  transform: scaleY(1);
 }
 
 .ride-tablet-content {
@@ -37,15 +40,18 @@
   height: 100%;
   display: flex;
   flex-direction: column;
+  justify-content: space-between;
 }
 
 .ride-details {
   flex-grow: 1;
+  display: flex;
+  flex-direction: column;
 }
 
 .location-text {
   font-weight: 600;
-  margin-bottom: 8px;
+  margin-bottom: 16px;
   display: flex;
   align-items: flex-start;
 }
@@ -79,8 +85,16 @@
   border: 1px solid #eee;
 }
 
+.ride-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: auto;
+  margin-bottom: 16px;
+}
+
 .action-button {
-  margin-top: 16px;
+  margin-top: auto;
   transition: all 0.2s ease !important;
 }
 
