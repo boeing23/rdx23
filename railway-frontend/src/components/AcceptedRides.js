@@ -186,7 +186,15 @@ const AcceptedRides = () => {
   const renderRideCard = (ride) => {
     const isDriver = userType === 'DRIVER';
     const riderInfo = ride.rider || {};
-    const driverInfo = ride.ride?.driver || {};
+    const driverInfo = ride.ride_details?.driver || {};
+
+    console.log('Rendering ride card with data:', {
+      isDriver,
+      rideId: ride.id,
+      riderInfo,
+      driverInfo,
+      rideDetails: ride.ride_details
+    });
 
     // Helper function to get full name
     const getFullName = (user) => {
@@ -240,18 +248,19 @@ const AcceptedRides = () => {
                 
                 <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
                   <Email sx={{ mr: 1 }} />
-                  <Typography>{driverInfo.email || 'N/A'}</Typography>
+                  <Typography>{driverInfo.email || 'No email provided'}</Typography>
                 </Box>
                 
                 <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
                   <Phone sx={{ mr: 1 }} />
-                  <Typography>{driverInfo.phone_number || 'N/A'}</Typography>
+                  <Typography>{driverInfo.phone_number || 'No phone provided'}</Typography>
                 </Box>
                 
                 <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
                   <DirectionsCar sx={{ mr: 1 }} />
                   <Typography>
-                    {driverInfo.vehicle_year} {driverInfo.vehicle_make} {driverInfo.vehicle_model} 
+                    {driverInfo.vehicle_make ? `${driverInfo.vehicle_year || ''} ${driverInfo.vehicle_make || ''} ${driverInfo.vehicle_model || ''}` 
+                    : 'Vehicle details not provided'}
                     {driverInfo.vehicle_color ? ` (${driverInfo.vehicle_color})` : ''}
                   </Typography>
                 </Box>
@@ -266,12 +275,12 @@ const AcceptedRides = () => {
                 
                 <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
                   <Email sx={{ mr: 1 }} />
-                  <Typography>{riderInfo.email || 'N/A'}</Typography>
+                  <Typography>{riderInfo.email || 'No email provided'}</Typography>
                 </Box>
                 
                 <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
                   <Phone sx={{ mr: 1 }} />
-                  <Typography>{riderInfo.phone_number || 'N/A'}</Typography>
+                  <Typography>{riderInfo.phone_number || 'No phone provided'}</Typography>
                 </Box>
 
                 <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
