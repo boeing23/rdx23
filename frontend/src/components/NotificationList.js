@@ -27,6 +27,7 @@ function NotificationList() {
   const getToken = () => {
     try {
       const token = localStorage.getItem('token');
+      console.log('Getting token from localStorage:', token ? 'Token exists' : 'No token found');
       return token;
     } catch (error) {
       console.error('Error getting token from localStorage:', error);
@@ -38,15 +39,21 @@ function NotificationList() {
     try {
       const token = getToken();
       if (!token) {
-        setError('No authentication token found');
+        console.log('No authentication token found, redirecting to login');
+        setError('Please log in to view notifications');
         return;
       }
 
+      console.log('Fetching notifications with token');
       const response = await fetch(`${API_BASE_URL}/api/rides/notifications/`, {
         headers: {
-          'Authorization': `Bearer ${token}`
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json'
         }
       });
+
+      console.log('Notifications response status:', response.status);
+      console.log('Response headers:', Object.fromEntries(response.headers.entries()));
 
       if (response.ok) {
         const data = await response.json();
@@ -61,7 +68,16 @@ function NotificationList() {
         }
       } else {
         const errorData = await response.json().catch(() => ({}));
+        console.error('Error response:', errorData);
         setError(errorData.message || 'Failed to fetch notifications');
+        
+        // If unauthorized, redirect to login
+        if (response.status === 401) {
+          console.log('Unauthorized, clearing token and redirecting to login');
+          localStorage.removeItem('token');
+          localStorage.removeItem('userType');
+          window.location.href = '/login';
+        }
       }
     } catch (err) {
       console.error('Error fetching notifications:', err);
@@ -74,7 +90,7 @@ function NotificationList() {
     // Poll for new notifications every 30 seconds
     const interval = setInterval(fetchNotifications, 30000);
     return () => clearInterval(interval);
-  }, []);  // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleMarkAsRead = async (notificationId) => {
     try {
@@ -87,7 +103,8 @@ function NotificationList() {
       const response = await fetch(`${API_BASE_URL}/api/rides/notifications/${notificationId}/mark_as_read/`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${token}`
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json'
         }
       });
 
@@ -127,6 +144,7 @@ function NotificationList() {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
+          'Accept': 'application/json'
         },
       });
 

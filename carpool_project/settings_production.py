@@ -66,8 +66,24 @@ EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
 DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
 SERVER_EMAIL = EMAIL_HOST_USER
 
-# CORS settings - more permissive for deployment troubleshooting
+# CORS settings - very permissive for troubleshooting
 CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOW_CREDENTIALS = True
+
+# Add our custom middleware to the beginning of the middleware list
+MIDDLEWARE.insert(0, 'carpool_project.cors_middleware.CorsMiddleware')
+
+# Make sure corsheaders middleware is near the beginning of the middleware list
+if 'corsheaders.middleware.CorsMiddleware' in MIDDLEWARE:
+    MIDDLEWARE.remove('corsheaders.middleware.CorsMiddleware')
+MIDDLEWARE.insert(1, 'corsheaders.middleware.CorsMiddleware')
+
+# Print middleware order for debugging
+print("Middleware order:", file=sys.stderr)
+for i, middleware in enumerate(MIDDLEWARE):
+    print(f"{i}: {middleware}", file=sys.stderr)
+
+# Explicit CORS allowed origins
 CORS_ALLOWED_ORIGINS = [
     "https://ridex-frontend.up.railway.app",
     "https://rdx23-production-frontend.up.railway.app",
@@ -76,16 +92,16 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:3006"
 ]
 
-# Make sure these are also set
-CORS_ALLOW_CREDENTIALS = True
+# Very permissive CORS settings for debugging
 CORS_ALLOW_METHODS = [
     "DELETE",
-    "GET", 
+    "GET",
     "OPTIONS",
     "PATCH",
-    "POST", 
+    "POST",
     "PUT",
 ]
+
 CORS_ALLOW_HEADERS = [
     "accept",
     "accept-encoding",
@@ -96,6 +112,7 @@ CORS_ALLOW_HEADERS = [
     "user-agent",
     "x-csrftoken",
     "x-requested-with",
+    "*",
 ]
 
 # Very verbose logging for debugging
@@ -133,6 +150,10 @@ LOGGING = {
         'gunicorn': {
             'handlers': ['console'],
             'level': 'INFO',
+        },
+        'corsheaders': {
+            'handlers': ['console'],
+            'level': 'DEBUG',
         },
     },
     'root': {

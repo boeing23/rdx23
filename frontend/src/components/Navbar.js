@@ -11,10 +11,31 @@ function Navbar() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    const type = localStorage.getItem('userType');
-    setIsAuthenticated(!!token);
-    setUserType(type);
+    const initializeAuth = () => {
+      const token = localStorage.getItem('token');
+      const type = localStorage.getItem('userType');
+      
+      console.log('Navbar initialization:', {
+        hasToken: !!token,
+        rawUserType: type,
+        isAuthenticated: !!token
+      });
+      
+      setIsAuthenticated(!!token);
+      if (type) {
+        try {
+          const parsedType = JSON.parse(type);
+          console.log('Parsed user type:', parsedType);
+          setUserType(parsedType);
+        } catch (e) {
+          console.error('Error parsing user type:', e);
+          console.log('Using raw user type:', type);
+          setUserType(type);
+        }
+      }
+    };
+
+    initializeAuth();
   }, []);
 
   const handleMenu = (event) => {
