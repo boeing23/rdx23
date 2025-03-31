@@ -30,7 +30,7 @@ function Home() {
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
-        background: 'linear-gradient(135deg, #800000 0%, #4a0000 100%)',
+        background: 'linear-gradient(135deg, #861F41 0%, #5e0d29 100%)',
         color: 'white',
         p: { xs: 2, sm: 4 }
       }}
@@ -83,7 +83,7 @@ function Home() {
           to="/login"
           sx={{ 
             bgcolor: 'white',
-            color: '#800000',
+            color: '#861F41',
             '&:hover': {
               bgcolor: 'rgba(255, 255, 255, 0.9)'
             }

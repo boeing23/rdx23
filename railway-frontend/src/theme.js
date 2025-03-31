@@ -3,7 +3,9 @@ import { createTheme } from '@mui/material/styles';
 const theme = createTheme({
   palette: {
     primary: {
-      main: '#800000', // Maroon color
+      main: '#861F41', // Virginia Tech Maroon
+      light: '#a04e6b',
+      dark: '#5e0d29',
     },
     secondary: {
       main: '#f50057',

@@ -170,7 +170,7 @@ const UserProfile = () => {
               sx={{ 
                 width: 80, 
                 height: 80, 
-                bgcolor: '#800000', 
+                bgcolor: '#861F41', 
                 fontSize: '2rem',
                 mr: 2
               }}
@@ -397,7 +397,7 @@ const UserProfile = () => {
           <Grid container spacing={3}>
             <Grid item xs={12} sm={6}>
               <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 3 }}>
-                <Person sx={{ mr: 2, color: '#800000' }} />
+                <Person sx={{ mr: 2, color: '#861F41' }} />
                 <Box>
                   <Typography variant="body2" color="textSecondary">
                     Name
@@ -412,7 +412,7 @@ const UserProfile = () => {
             </Grid>
             <Grid item xs={12} sm={6}>
               <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 3 }}>
-                <Email sx={{ mr: 2, color: '#800000' }} />
+                <Email sx={{ mr: 2, color: '#861F41' }} />
                 <Box>
                   <Typography variant="body2" color="textSecondary">
                     Email
@@ -425,7 +425,7 @@ const UserProfile = () => {
             </Grid>
             <Grid item xs={12} sm={6}>
               <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 3 }}>
-                <Phone sx={{ mr: 2, color: '#800000' }} />
+                <Phone sx={{ mr: 2, color: '#861F41' }} />
                 <Box>
                   <Typography variant="body2" color="textSecondary">
                     Phone
@@ -438,7 +438,7 @@ const UserProfile = () => {
             </Grid>
             <Grid item xs={12} sm={6}>
               <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 3 }}>
-                <LocationOn sx={{ mr: 2, color: '#800000' }} />
+                <LocationOn sx={{ mr: 2, color: '#861F41' }} />
                 <Box>
                   <Typography variant="body2" color="textSecondary">
                     Address
@@ -460,7 +460,7 @@ const UserProfile = () => {
                 </Grid>
                 <Grid item xs={12} sm={6}>
                   <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 3 }}>
-                    <DirectionsCar sx={{ mr: 2, color: '#800000' }} />
+                    <DirectionsCar sx={{ mr: 2, color: '#861F41' }} />
                     <Box>
                       <Typography variant="body2" color="textSecondary">
                         Vehicle
@@ -476,7 +476,7 @@ const UserProfile = () => {
                 </Grid>
                 <Grid item xs={12} sm={6}>
                   <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 3 }}>
-                    <DirectionsCar sx={{ mr: 2, color: '#800000' }} />
+                    <DirectionsCar sx={{ mr: 2, color: '#861F41' }} />
                     <Box>
                       <Typography variant="body2" color="textSecondary">
                         License Plate
@@ -489,7 +489,7 @@ const UserProfile = () => {
                 </Grid>
                 <Grid item xs={12} sm={6}>
                   <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 3 }}>
-                    <DirectionsCar sx={{ mr: 2, color: '#800000' }} />
+                    <DirectionsCar sx={{ mr: 2, color: '#861F41' }} />
                     <Box>
                       <Typography variant="body2" color="textSecondary">
                         Max Passengers

@@ -308,7 +308,7 @@ const AcceptedRides = () => {
                   }}
                 >
                   <ListItemIcon sx={{ minWidth: 40 }}>
-                    <DirectionsCar sx={{ color: '#800000' }} />
+                    <DirectionsCar sx={{ color: '#861F41' }} />
                   </ListItemIcon>
                   <ListItemText
                     primary={
@@ -325,13 +325,13 @@ const AcceptedRides = () => {
                       <React.Fragment>
                         <Box sx={{ mt: 1 }}>
                           <Box sx={{ display: 'flex', alignItems: 'center', mb: 0.5 }}>
-                            <LocationOn sx={{ fontSize: 16, mr: 0.5, color: '#800000' }} />
+                            <LocationOn sx={{ fontSize: 16, mr: 0.5, color: '#861F41' }} />
                             <Typography variant="body2" component="span" color="text.secondary" noWrap>
                               {ride.pickup_location}
                             </Typography>
                           </Box>
                           <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                            <AccessTime sx={{ fontSize: 16, mr: 0.5, color: '#800000' }} />
+                            <AccessTime sx={{ fontSize: 16, mr: 0.5, color: '#861F41' }} />
                             <Typography variant="body2" component="span" color="text.secondary">
                               {formatDate(ride.departure_time)}
                             </Typography>
@@ -366,7 +366,7 @@ const AcceptedRides = () => {
                 <Grid container spacing={3}>
                   <Grid item xs={12} sm={6}>
                     <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 2 }}>
-                      <LocationOn sx={{ mr: 2, color: '#800000' }} />
+                      <LocationOn sx={{ mr: 2, color: '#861F41' }} />
                       <Box>
                         <Typography variant="body2" color="textSecondary">
                           Pickup Location
@@ -380,7 +380,7 @@ const AcceptedRides = () => {
 
                   <Grid item xs={12} sm={6}>
                     <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 2 }}>
-                      <LocationOn sx={{ mr: 2, color: '#800000' }} />
+                      <LocationOn sx={{ mr: 2, color: '#861F41' }} />
                       <Box>
                         <Typography variant="body2" color="textSecondary">
                           Dropoff Location
@@ -394,7 +394,7 @@ const AcceptedRides = () => {
             
                   <Grid item xs={12} sm={6}>
                     <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 2 }}>
-                      <AccessTime sx={{ mr: 2, color: '#800000' }} />
+                      <AccessTime sx={{ mr: 2, color: '#861F41' }} />
               <Box>
                         <Typography variant="body2" color="textSecondary">
                           Departure Time
@@ -408,7 +408,7 @@ const AcceptedRides = () => {
             
                   <Grid item xs={12} sm={6}>
             <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 2 }}>
-                      <Event sx={{ mr: 2, color: '#800000' }} />
+                      <Event sx={{ mr: 2, color: '#861F41' }} />
               <Box>
                         <Typography variant="body2" color="textSecondary">
                           Seats Needed
@@ -432,7 +432,7 @@ const AcceptedRides = () => {
                     <>
                       <Grid item xs={12} sm={6}>
                         <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 2 }}>
-                          <Person sx={{ mr: 2, color: '#800000' }} />
+                          <Person sx={{ mr: 2, color: '#861F41' }} />
                           <Box>
                             <Typography variant="body2" color="textSecondary">
                               Rider Name
@@ -445,7 +445,7 @@ const AcceptedRides = () => {
                       </Grid>
                       <Grid item xs={12} sm={6}>
                         <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 2 }}>
-                          <Email sx={{ mr: 2, color: '#800000' }} />
+                          <Email sx={{ mr: 2, color: '#861F41' }} />
                           <Box>
                             <Typography variant="body2" color="textSecondary">
                               Email
@@ -458,7 +458,7 @@ const AcceptedRides = () => {
                       </Grid>
                       <Grid item xs={12} sm={6}>
                         <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 2 }}>
-                          <Phone sx={{ mr: 2, color: '#800000' }} />
+                          <Phone sx={{ mr: 2, color: '#861F41' }} />
                           <Box>
                             <Typography variant="body2" color="textSecondary">
                               Phone
@@ -475,7 +475,7 @@ const AcceptedRides = () => {
                     <>
                       <Grid item xs={12} sm={6}>
                         <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 2 }}>
-                          <Person sx={{ mr: 2, color: '#800000' }} />
+                          <Person sx={{ mr: 2, color: '#861F41' }} />
                           <Box>
                             <Typography variant="body2" color="textSecondary">
                               Driver Name
@@ -488,7 +488,7 @@ const AcceptedRides = () => {
                       </Grid>
                       <Grid item xs={12} sm={6}>
                         <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 2 }}>
-                          <Email sx={{ mr: 2, color: '#800000' }} />
+                          <Email sx={{ mr: 2, color: '#861F41' }} />
                           <Box>
                             <Typography variant="body2" color="textSecondary">
                               Email
@@ -501,7 +501,7 @@ const AcceptedRides = () => {
                       </Grid>
                       <Grid item xs={12} sm={6}>
                         <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 2 }}>
-                          <Phone sx={{ mr: 2, color: '#800000' }} />
+                          <Phone sx={{ mr: 2, color: '#861F41' }} />
                           <Box>
                             <Typography variant="body2" color="textSecondary">
                               Phone
@@ -514,7 +514,7 @@ const AcceptedRides = () => {
                       </Grid>
                       <Grid item xs={12} sm={6}>
                         <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 2 }}>
-                          <DirectionsCar sx={{ mr: 2, color: '#800000' }} />
+                          <DirectionsCar sx={{ mr: 2, color: '#861F41' }} />
                           <Box>
                             <Typography variant="body2" color="textSecondary">
                               Vehicle
@@ -527,7 +527,7 @@ const AcceptedRides = () => {
                       </Grid>
                       <Grid item xs={12} sm={6}>
                         <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 2 }}>
-                          <DirectionsCar sx={{ mr: 2, color: '#800000' }} />
+                          <DirectionsCar sx={{ mr: 2, color: '#861F41' }} />
                           <Box>
                             <Typography variant="body2" color="textSecondary">
                               License Plate
@@ -588,7 +588,7 @@ const AcceptedRides = () => {
                         }}
                       >
                         <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                          <Avatar sx={{ bgcolor: '#800000', mr: 2 }}>
+                          <Avatar sx={{ bgcolor: '#861F41', mr: 2 }}>
                             <Person />
                           </Avatar>
                           <Typography variant="subtitle1" fontWeight="bold">
@@ -620,7 +620,7 @@ const AcceptedRides = () => {
                         }}
                       >
                         <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                          <Avatar sx={{ bgcolor: '#800000', mr: 2 }}>
+                          <Avatar sx={{ bgcolor: '#861F41', mr: 2 }}>
                             <Person />
                           </Avatar>
                           <Typography variant="subtitle1" fontWeight="bold">
@@ -661,8 +661,8 @@ const AcceptedRides = () => {
                     <Button
                       variant="contained"
                       sx={{ 
-                        bgcolor: '#800000', 
-                        '&:hover': { bgcolor: '#600000' },
+                        bgcolor: '#861F41', 
+                        '&:hover': { bgcolor: '#5e0d29' },
                         borderRadius: '8px'
                       }}
                       onClick={() => handleCompleteRide(selectedRide.id)}
@@ -735,8 +735,8 @@ const AcceptedRides = () => {
           <Button 
             variant="contained" 
             sx={{ 
-              bgcolor: '#800000', 
-              '&:hover': { bgcolor: '#600000' },
+              bgcolor: '#861F41', 
+              '&:hover': { bgcolor: '#5e0d29' },
               borderRadius: '8px'
             }}
             onClick={() => {

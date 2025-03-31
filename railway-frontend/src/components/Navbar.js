@@ -150,7 +150,7 @@ function Navbar() {
   );
 
   return (
-    <AppBar position="static" sx={{ bgcolor: '#800000' }}>
+    <AppBar position="static" sx={{ bgcolor: '#861F41' }}>
       <Toolbar>
         <Box sx={{ display: 'flex', alignItems: 'center', flexGrow: 1 }}>
           <FontAwesomeIcon 

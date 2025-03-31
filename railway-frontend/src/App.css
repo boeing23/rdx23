@@ -1,3 +1,10 @@
+:root {
+  --primary-color: #861F41;
+  --primary-light: #a04e6b;
+  --primary-dark: #5e0d29;
+  --text-on-primary: #ffffff;
+}
+
 .App {
   text-align: center;
   min-height: 100vh;
@@ -18,7 +25,7 @@ body {
 
 a {
   text-decoration: none;
-  color: #800000; /* Maroon color for links */
+  color: #861F41; /* Virginia Tech Maroon for links */
 }
 
 .container {
@@ -46,23 +53,23 @@ a {
 
 /* Custom styles for ChalBe */
 .maroon-text {
-  color: #800000;
+  color: #861F41;
 }
 
 .maroon-background {
-  background-color: #800000;
+  background-color: #861F41;
   color: white;
 }
 
 .accent-background {
-  background-color: #f8f1f1; /* Light maroon for accent backgrounds */
+  background-color: #f8f1f4; /* Light maroon for accent backgrounds */
 }
 
 /* Page title styling */
 .page-title {
   text-align: center;
   margin: 1rem auto 2.5rem;
-  color: #800000;
+  color: #861F41;
   font-weight: 600;
   position: relative;
   width: 100%;
@@ -78,7 +85,7 @@ a {
   transform: translateX(-50%);
   width: 60px;
   height: 3px;
-  background-color: #800000;
+  background-color: #861F41;
   border-radius: 2px;
 }
 
@@ -125,10 +132,10 @@ a {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #800000;
+  background: #861F41;
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #4a0000;
+  background: #5e0d29;
 }
