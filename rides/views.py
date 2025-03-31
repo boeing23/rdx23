@@ -1377,8 +1377,7 @@ class RideRequestViewSet(viewsets.ModelViewSet):
                         'start_location': matched_ride.start_location,
                         'end_location': matched_ride.end_location,
                         'departure_time': matched_ride.departure_time,
-                        'available_seats': matched_ride.available_seats,
-                        'price_per_seat': matched_ride.price_per_seat
+                        'available_seats': matched_ride.available_seats
                     }
                 }
             }

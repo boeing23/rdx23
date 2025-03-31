@@ -26,7 +26,6 @@ const OfferRide = () => {
     end_location: '',
     departure_time: null,
     available_seats: 1,
-    price_per_seat: 0,
     start_latitude: 0,
     start_longitude: 0,
     end_latitude: 0,
@@ -124,10 +123,6 @@ const OfferRide = () => {
         throw new Error('Available seats must be at least 1.');
       }
 
-      if (parseFloat(formData.price_per_seat) < 0) {
-        throw new Error('Price per seat cannot be negative.');
-      }
-
       // Validate departure time is in the future
       const departureTime = new Date(formData.departure_time);
       const now = new Date();
@@ -144,8 +139,7 @@ const OfferRide = () => {
         end_latitude: parseFloat(formData.end_latitude),
         end_longitude: parseFloat(formData.end_longitude),
         departure_time: departureTime.toISOString(),
-        available_seats: parseInt(formData.available_seats),
-        price_per_seat: parseFloat(formData.price_per_seat)
+        available_seats: parseInt(formData.available_seats)
       };
 
       console.log('Submitting ride data:', JSON.stringify(submitData, null, 2));
@@ -309,19 +303,6 @@ const OfferRide = () => {
                 value={formData.available_seats}
                 onChange={handleChange}
                 inputProps={{ min: 1 }}
-              />
-            </Grid>
-
-            <Grid item xs={12} sm={6}>
-              <TextField
-                required
-                fullWidth
-                type="number"
-                label="Price per Seat ($)"
-                name="price_per_seat"
-                value={formData.price_per_seat}
-                onChange={handleChange}
-                inputProps={{ min: 0, step: 0.01 }}
               />
             </Grid>
 

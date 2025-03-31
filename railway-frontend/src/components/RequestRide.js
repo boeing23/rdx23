@@ -516,7 +516,6 @@ const RequestRide = () => {
                 Departure: {new Date(matchDetails.ride_details.departure_time).toLocaleString()}
               </Typography>
               <Typography>Available Seats: {matchDetails.ride_details.available_seats}</Typography>
-              <Typography>Price per Seat: ${matchDetails.ride_details.price_per_seat}</Typography>
             </>
           ) : (
             <Typography>Loading match details...</Typography>
