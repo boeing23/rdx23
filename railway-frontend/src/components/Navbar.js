@@ -164,11 +164,17 @@ function Navbar() {
           <Typography 
             variant="h6" 
             component={Link} 
-            to="/" 
+            to={isAuthenticated ? (userType === 'DRIVER' ? '/offer' : '/rides') : '/'}
             sx={{ 
               textDecoration: 'none', 
               color: 'white',
               fontWeight: 'bold'
+            }}
+            onClick={(e) => {
+              if (!isAuthenticated) {
+                e.preventDefault();
+                navigate('/');
+              }
             }}
           >
             ChalBe
