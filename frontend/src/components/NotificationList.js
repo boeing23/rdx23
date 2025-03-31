@@ -284,6 +284,86 @@ function NotificationList() {
     }
     return null;
   };
+  
+  // Function to render notification content based on type
+  const renderNotificationContent = (notification) => {
+    console.log('Rendering notification content for type:', notification.notification_type);
+    
+    switch(notification.notification_type) {
+      case 'RIDE_MATCH':
+        return (
+          <>
+            <Typography variant="body1" component="div" fontWeight="bold">
+              Ride Match Found!
+            </Typography>
+            <Typography variant="body2" component="div">
+              {notification.message}
+            </Typography>
+            {notification.ride_details && (
+              <Box sx={{ mt: 1, p: 1, bgcolor: 'rgba(0, 0, 0, 0.04)', borderRadius: 1 }}>
+                <Typography variant="body2">
+                  From: {notification.ride_details.start_location}
+                </Typography>
+                <Typography variant="body2">
+                  To: {notification.ride_details.end_location}
+                </Typography>
+                <Typography variant="body2">
+                  Departure: {formatDate(notification.ride_details.departure_time)}
+                </Typography>
+              </Box>
+            )}
+          </>
+        );
+        
+      case 'RIDE_PENDING':
+        return (
+          <>
+            <Typography variant="body1" component="div" fontWeight="bold" color="info.main">
+              Ride Request Saved
+            </Typography>
+            <Typography variant="body2" component="div">
+              {notification.message}
+            </Typography>
+            <Box sx={{ mt: 1, p: 1, bgcolor: 'rgba(0, 100, 255, 0.04)', borderRadius: 1 }}>
+              <Typography variant="body2" color="info.main">
+                We'll notify you when a matching ride is found!
+              </Typography>
+            </Box>
+          </>
+        );
+        
+      case 'RIDE_ACCEPTED':
+        return (
+          <>
+            <Typography variant="body1" component="div" fontWeight="bold" color="success.main">
+              Ride Accepted
+            </Typography>
+            <Typography variant="body2" component="div">
+              {notification.message}
+            </Typography>
+          </>
+        );
+        
+      case 'RIDE_COMPLETED':
+        return (
+          <>
+            <Typography variant="body1" component="div" fontWeight="bold" color="success.main">
+              Ride Completed
+            </Typography>
+            <Typography variant="body2" component="div">
+              {notification.message}
+            </Typography>
+          </>
+        );
+        
+      default:
+        return (
+          <Typography variant="body1" component="div">
+            {notification.message}
+          </Typography>
+        );
+    }
+  };
 
   return (
     <div style={{ display: 'inline-block', marginLeft: '10px' }}>
@@ -361,50 +441,59 @@ function NotificationList() {
               />
             </ListItem>
           ) : (
-            notifications.map((notification) => (
-              <ListItem
-                key={notification.id}
-                sx={{
-                  bgcolor: notification.is_read ? 'inherit' : 'action.hover',
-                  '&:hover': { bgcolor: 'action.selected' },
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'flex-start',
-                  py: 2
-                }}
-              >
-                <Box sx={{ display: 'flex', width: '100%' }}>
-                  <ListItemText
-                    primary={
-                      <Typography variant="body1" component="div">
-                        {notification.message}
-                      </Typography>
-                    }
-                    secondary={
-                      <Typography variant="caption" color="text.secondary">
-                        {formatDate(notification.created_at)}
-                      </Typography>
-                    }
-                    sx={{ 
-                      flex: 1,
-                      '& .MuiListItemText-primary': {
-                        mb: 0.5
+            notifications.map((notification) => {
+              // Determine background color based on notification type
+              let bgColor = notification.is_read ? 'inherit' : 'action.hover';
+              if (notification.notification_type === 'RIDE_PENDING') {
+                bgColor = notification.is_read ? 'rgba(0, 100, 255, 0.05)' : 'rgba(0, 100, 255, 0.1)';
+              } else if (notification.notification_type === 'RIDE_MATCH') {
+                bgColor = notification.is_read ? 'rgba(0, 200, 0, 0.05)' : 'rgba(0, 200, 0, 0.1)';
+              }
+              
+              return (
+                <ListItem
+                  key={notification.id}
+                  sx={{
+                    bgcolor: bgColor,
+                    '&:hover': { bgcolor: 'action.selected' },
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'flex-start',
+                    py: 2,
+                    borderBottom: '1px solid rgba(0, 0, 0, 0.1)'
+                  }}
+                >
+                  <Box sx={{ display: 'flex', width: '100%' }}>
+                    <ListItemText
+                      primary={
+                        renderNotificationContent(notification)
                       }
-                    }}
-                  />
-                  {!notification.is_read && (
-                    <IconButton
-                      size="small"
-                      onClick={() => handleMarkAsRead(notification.id)}
-                      sx={{ ml: 1 }}
-                    >
-                      <CheckCircleIcon color="primary" />
-                    </IconButton>
-                  )}
-                </Box>
-                {renderAcceptButton(notification)}
-              </ListItem>
-            ))
+                      secondary={
+                        <Typography variant="caption" color="text.secondary">
+                          {formatDate(notification.created_at)}
+                        </Typography>
+                      }
+                      sx={{ 
+                        flex: 1,
+                        '& .MuiListItemText-primary': {
+                          mb: 0.5
+                        }
+                      }}
+                    />
+                    {!notification.is_read && (
+                      <IconButton
+                        size="small"
+                        onClick={() => handleMarkAsRead(notification.id)}
+                        sx={{ ml: 1 }}
+                      >
+                        <CheckCircleIcon color="primary" />
+                      </IconButton>
+                    )}
+                  </Box>
+                  {renderAcceptButton(notification)}
+                </ListItem>
+              );
+            })
           )}
         </List>
       </Popover>
