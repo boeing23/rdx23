@@ -116,11 +116,19 @@ function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [userType, setUserType] = useState(null);
   const [isInitialized, setIsInitialized] = useState(false);
+  const [isFirstTimeUser, setIsFirstTimeUser] = useState(false);
 
   useEffect(() => {
     const initializeAuth = () => {
       const token = localStorage.getItem('token');
       const storedUserType = localStorage.getItem('userType');
+      const hasVisitedBefore = localStorage.getItem('hasVisitedBefore');
+      
+      // Check if this is the first time the user is visiting the site
+      if (!hasVisitedBefore) {
+        localStorage.setItem('hasVisitedBefore', 'true');
+        setIsFirstTimeUser(true);
+      }
       
       if (token) {
         setIsAuthenticated(true);
@@ -160,7 +168,7 @@ function App() {
             isAuthenticated ? (
               <Navigate to={userType === 'DRIVER' ? '/offer' : '/rides'} replace />
             ) : (
-              <Home />
+              isFirstTimeUser ? <Navigate to="/register" replace /> : <Home />
             )
           } 
         />
