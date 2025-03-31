@@ -26,8 +26,9 @@ logger = logging.getLogger(__name__)
 # Initialize geolocator
 geolocator = Nominatim(user_agent="carpool_app")
 
-# OpenRouteService API Key
+# OpenRouteService API constants
 ORS_API_KEY = "5b3ce3597851110001cf62482c1ae097a0b848ef81a1e5085aa27c1f"
+OPENROUTE_BASE_URL = "https://api.openrouteservice.org/v2"
 
 def get_coordinates(address):
     location = geolocator.geocode(address)
@@ -129,7 +130,6 @@ def find_optimal_dropoff(driver_route, rider_pickup, rider_dropoff):
 def calculate_route_overlap(driver_start, driver_end, rider_pickup, rider_dropoff):
     """
     Calculate the overlap between driver's route and rider's route using improved algorithm.
-    Returns tuple of (overlap_percentage, nearest_dropoff_point)
     
     Parameters:
     driver_start: (lng, lat) tuple for driver's starting point
@@ -146,14 +146,19 @@ def calculate_route_overlap(driver_start, driver_end, rider_pickup, rider_dropof
         logger.info(f"Driver: {driver_start} -> {driver_end}")
         logger.info(f"Rider: {rider_pickup} -> {rider_dropoff}")
         
+        # Verify coordinate format - all should be (lng, lat)
+        for coords in [driver_start, driver_end, rider_pickup, rider_dropoff]:
+            if coords[0] > 90 or coords[0] < -90 or coords[1] > 180 or coords[1] < -180:
+                logger.warning(f"Coordinates appear to be in (lat, lng) format instead of (lng, lat): {coords}")
+        
         # Generate routes
         driver_route = generate_route(driver_start, driver_end, num_points=20)
         rider_route = generate_route(rider_pickup, rider_dropoff, num_points=20)
         
         # Coordinate system consistency: everything in lat, lng for calculations
-        # Convert (lng, lat) to (lat, lng) for calculations
-        driver_route_lat_lng = [(lat, lng) for lng, lat in driver_route]
-        rider_route_lat_lng = [(lat, lng) for lng, lat in rider_route]
+        # Convert (lng, lat) to (lat, lng) for great_circle calculations
+        driver_route_lat_lng = [(coord[1], coord[0]) for coord in driver_route]
+        rider_route_lat_lng = [(coord[1], coord[0]) for coord in rider_route]
         rider_pickup_lat_lng = (rider_pickup[1], rider_pickup[0])  # Convert from (lng, lat) to (lat, lng)
         rider_dropoff_lat_lng = (rider_dropoff[1], rider_dropoff[0])  # Convert from (lng, lat) to (lat, lng)
         
@@ -196,6 +201,7 @@ def calculate_route_overlap(driver_start, driver_end, rider_pickup, rider_dropof
         dropoff_score = max(0, 100 - (dropoff_distance * 100 / MAX_DROPOFF_DIST))
         
         # Direction alignment - calculate dot product of route vectors
+        # Ensure we use (lng, lat) format consistently for the vector calculations
         driver_vector = (driver_end[0] - driver_start[0], driver_end[1] - driver_start[1])
         rider_vector = (rider_dropoff[0] - rider_pickup[0], rider_dropoff[1] - rider_pickup[1])
         
@@ -237,7 +243,8 @@ def calculate_route_overlap(driver_start, driver_end, rider_pickup, rider_dropof
         
         # Convert optimal_dropoff back to (lng, lat) format for storage
         if optimal_dropoff:
-            optimal_dropoff_lng_lat = (optimal_dropoff[1], optimal_dropoff[0])  # Convert back to (lng, lat)
+            # Convert from (lat, lng) back to (lng, lat) format
+            optimal_dropoff_lng_lat = (optimal_dropoff[1], optimal_dropoff[0])
             nearest_dropoff_point = {
                 'coordinates': optimal_dropoff_lng_lat,
                 'distance_to_destination': distance_to_dest,
@@ -256,9 +263,8 @@ def calculate_route_overlap(driver_start, driver_end, rider_pickup, rider_dropof
 
 def generate_route(start, end, num_points=20):
     """
-    Generate a route between start and end points with num_points.
-    For accurate routes, this would use a routing API like OpenRouteService.
-    This version uses a more realistic approach with slight randomization to simulate road networks.
+    Generate a route between start and end points using the OpenRouteService API.
+    Falls back to an enhanced interpolation method if the API call fails.
     
     Parameters:
     start: (lng, lat) tuple
@@ -269,44 +275,114 @@ def generate_route(start, end, num_points=20):
     route: List of (lng, lat) coordinates
     """
     try:
-        # Try using OpenRouteService API first
-        url = f"{OPENROUTE_BASE_URL}/directions/driving-car"
-        headers = {
-            'Accept': 'application/json, application/geo+json, application/gpx+xml',
-            'Authorization': ORS_API_KEY,
-            'Content-Type': 'application/json; charset=utf-8'
-        }
-        body = {
-            "coordinates": [[start[0], start[1]], [end[0], end[1]]],
-            "format": "geojson"
-        }
-        
-        logger.info(f"Calling OpenRouteService API for route from {start} to {end}")
-        response = requests.post(url, json=body, headers=headers)
-        
-        if response.status_code == 200:
-            data = response.json()
-            # Extract coordinates from the route
-            if 'features' in data and len(data['features']) > 0:
-                coordinates = data['features'][0]['geometry']['coordinates']
+        # Validate coordinates
+        if start[0] is None or start[1] is None or end[0] is None or end[1] is None:
+            logger.error(f"Invalid coordinates: start={start}, end={end}")
+            raise ValueError("Invalid coordinates")
+            
+        # Validate coordinate format (lng should be -180 to 180, lat should be -90 to 90)
+        for coords in [start, end]:
+            lng, lat = coords
+            if lat > 90 or lat < -90:
+                logger.warning(f"Latitude value out of range: {lat}")
+            if lng > 180 or lng < -180:
+                logger.warning(f"Longitude value out of range: {lng}")
                 
-                # If too many points, sample them down to num_points
-                if len(coordinates) > num_points:
-                    step = len(coordinates) // num_points
-                    sampled_coordinates = [coordinates[i] for i in range(0, len(coordinates), step)]
-                    # Always include the last point
-                    if coordinates[-1] not in sampled_coordinates:
-                        sampled_coordinates.append(coordinates[-1])
-                    return sampled_coordinates
-                else:
-                    return coordinates
+        # Try using OpenRouteService API first - first try directions API
+        try:
+            logger.info(f"Calling OpenRouteService directions API for route from {start} to {end}")
+            
+            # Use the directions API first (more accurate for driving routes)
+            directions_url = f"{OPENROUTE_BASE_URL}/directions/driving-car"
+            headers = {
+                'Accept': 'application/json, application/geo+json',
+                'Authorization': ORS_API_KEY,
+                'Content-Type': 'application/json; charset=utf-8'
+            }
+            
+            body = {
+                "coordinates": [[start[0], start[1]], [end[0], end[1]]],
+                "format": "geojson"
+            }
+            
+            response = requests.post(directions_url, json=body, headers=headers)
+            
+            if response.status_code == 200:
+                data = response.json()
+                # Extract coordinates from the route
+                if 'features' in data and len(data['features']) > 0:
+                    coordinates = data['features'][0]['geometry']['coordinates']
+                    
+                    # If too many points, sample them down to num_points
+                    if len(coordinates) > num_points:
+                        step = len(coordinates) // num_points
+                        sampled_coordinates = [coordinates[i] for i in range(0, len(coordinates), step)]
+                        # Always include the last point
+                        if coordinates[-1] not in sampled_coordinates:
+                            sampled_coordinates.append(coordinates[-1])
+                        
+                        logger.info(f"Successfully retrieved route from API with {len(sampled_coordinates)} points")
+                        return sampled_coordinates
+                    else:
+                        logger.info(f"Successfully retrieved route from API with {len(coordinates)} points")
+                        return coordinates
+            else:
+                logger.warning(f"OpenRouteService directions API failed with status {response.status_code}")
+                logger.warning(f"API response: {response.text[:200]}...")
         
-        logger.warning(f"OpenRouteService API failed with status {response.status_code}, using fallback method")
+        except Exception as e:
+            logger.error(f"Error using OpenRouteService directions API: {str(e)}")
+        
+        # If directions API fails, try the matrix API as fallback (less accurate but more reliable)
+        try:
+            logger.info(f"Calling OpenRouteService matrix API as fallback")
+            
+            matrix_url = f"{OPENROUTE_BASE_URL}/matrix/driving-car"
+            headers = {
+                'Accept': 'application/json',
+                'Authorization': ORS_API_KEY,
+                'Content-Type': 'application/json; charset=utf-8'
+            }
+            
+            # Create intermediate points along a straight line to get a better route approximation
+            intermediate_points = []
+            for i in range(1, 4):  # Create 3 intermediate points
+                fraction = i / 4
+                lng = start[0] + fraction * (end[0] - start[0])
+                lat = start[1] + fraction * (end[1] - start[1])
+                intermediate_points.append([lng, lat])
+            
+            # Combine all points into a single list
+            all_points = [list(start)] + intermediate_points + [list(end)]
+            
+            body = {
+                "locations": all_points,
+                "metrics": ["distance", "duration"],
+                "units": "km"
+            }
+            
+            response = requests.post(matrix_url, json=body, headers=headers)
+            
+            if response.status_code == 200:
+                data = response.json()
+                # Just use the points we sent since we can't get the actual route
+                logger.info(f"Successfully retrieved matrix data from API, using {len(all_points)} points")
+                return all_points
+            else:
+                logger.warning(f"OpenRouteService matrix API also failed with status {response.status_code}")
+                logger.warning(f"API response: {response.text[:200]}...")
+        
+        except Exception as e:
+            logger.error(f"Error using OpenRouteService matrix API: {str(e)}")
+        
+        # If both API approaches fail, fall back to the heuristic method
+        logger.warning("Both OpenRouteService APIs failed, using fallback method")
+        
     except Exception as e:
-        logger.error(f"Error using OpenRouteService API: {str(e)}, using fallback method")
+        logger.error(f"Error in route generation: {str(e)}")
     
     # Fallback to enhanced interpolation method with slight randomization
-    # to simulate real-world roads rather than straight lines
+    logger.info("Using fallback route generation method")
     
     # Base route is a straight line
     route = []
@@ -331,6 +407,7 @@ def generate_route(start, end, num_points=20):
         
         route.append((lng, lat))
     
+    logger.info(f"Generated fallback route with {len(route)} points")
     return route
 
 def get_address_from_coordinates(longitude, latitude):

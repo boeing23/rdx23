@@ -172,17 +172,21 @@ class RideRequestSerializer(serializers.ModelSerializer):
         """Format the nearest_dropoff_point data in a user-friendly way"""
         if not obj.nearest_dropoff_point:
             return None
-            
+        
         try:
             dropoff_point = obj.nearest_dropoff_point
             
+            # Log the original data for debugging
+            logger.info(f"Processing nearest_dropoff_point for ride request {obj.id}: {repr(dropoff_point)}")
+            
             # Handle case where dropoff_point is already a JSON-parsed dict
             if isinstance(dropoff_point, dict):
-                pass  # Already in the right format
+                logger.info(f"nearest_dropoff_point is a dict: {dropoff_point}")
             # Handle case where dropoff_point is a string (JSON or otherwise)
             elif isinstance(dropoff_point, str):
                 try:
                     dropoff_point = json.loads(dropoff_point)
+                    logger.info(f"Parsed nearest_dropoff_point from JSON string: {dropoff_point}")
                 except json.JSONDecodeError:
                     logger.error(f"Could not parse nearest_dropoff_point as JSON: {dropoff_point}")
                     return {
@@ -198,18 +202,52 @@ class RideRequestSerializer(serializers.ModelSerializer):
             # Extract coordinates with fallbacks
             coordinates = dropoff_point.get('coordinates', [0, 0])
             
-            # Handle both array and dict formats
-            if isinstance(coordinates, list):
-                longitude = coordinates[0] if len(coordinates) > 0 else 0
-                latitude = coordinates[1] if len(coordinates) > 1 else 0
+            # Handle different coordinate formats consistently
+            if isinstance(coordinates, list) or isinstance(coordinates, tuple):
+                # For list/tuple format, assume (lng, lat) format
+                if len(coordinates) >= 2:
+                    longitude, latitude = coordinates[0], coordinates[1]
+                    logger.info(f"Extracted coordinates from list/tuple: lng={longitude}, lat={latitude}")
+                else:
+                    longitude, latitude = 0, 0
+                    logger.warning(f"Incomplete coordinates list/tuple: {coordinates}")
             elif isinstance(coordinates, dict):
-                longitude = coordinates.get('longitude', 0)
-                latitude = coordinates.get('latitude', 0)
+                # For dict format, check for various key combinations
+                if 'longitude' in coordinates and 'latitude' in coordinates:
+                    longitude = coordinates.get('longitude', 0)
+                    latitude = coordinates.get('latitude', 0)
+                    logger.info(f"Extracted coordinates from dict with lng/lat keys: lng={longitude}, lat={latitude}")
+                elif 'lng' in coordinates and 'lat' in coordinates:
+                    longitude = coordinates.get('lng', 0)
+                    latitude = coordinates.get('lat', 0)
+                    logger.info(f"Extracted coordinates from dict with lng/lat keys: lng={longitude}, lat={latitude}")
+                elif 'lon' in coordinates and 'lat' in coordinates:
+                    longitude = coordinates.get('lon', 0)
+                    latitude = coordinates.get('lat', 0)
+                    logger.info(f"Extracted coordinates from dict with lon/lat keys: lng={longitude}, lat={latitude}")
+                elif 0 in coordinates and 1 in coordinates:
+                    # Indexed dict like {0: lng, 1: lat}
+                    longitude, latitude = coordinates[0], coordinates[1]
+                    logger.info(f"Extracted coordinates from indexed dict: lng={longitude}, lat={latitude}")
+                else:
+                    longitude, latitude = 0, 0
+                    logger.warning(f"Could not extract coordinates from dict: {coordinates}")
             else:
                 longitude, latitude = 0, 0
                 logger.error(f"Unexpected coordinates format: {coordinates}")
             
-            # Get distance
+            # Validate coordinates
+            if not (-180 <= longitude <= 180 and -90 <= latitude <= 90):
+                # Try swapping if they appear to be reversed
+                if (-90 <= longitude <= 90 and -180 <= latitude <= 180):
+                    logger.warning(f"Coordinates appear to be reversed. Swapping lat/lng values.")
+                    longitude, latitude = latitude, longitude
+                else:
+                    logger.error(f"Invalid coordinate values outside normal ranges: lng={longitude}, lat={latitude}")
+                    # Use fallback values
+                    longitude, latitude = 0, 0
+            
+            # Get distance with fallbacks
             distance = dropoff_point.get('distance_to_destination', 0)
             unit = dropoff_point.get('unit', 'kilometers')
             
@@ -223,7 +261,7 @@ class RideRequestSerializer(serializers.ModelSerializer):
             if isinstance(distance, (int, float)) and distance < 1:
                 formatted_distance = f"{distance * 1000:.0f} meters"
             
-            return {
+            result = {
                 'coordinates': {
                     'latitude': latitude,
                     'longitude': longitude
@@ -232,6 +270,9 @@ class RideRequestSerializer(serializers.ModelSerializer):
                 'address': address,
                 'message': f"The driver can drop you off at {address}, which is {formatted_distance} from your destination."
             }
+            
+            logger.info(f"Formatted nearest_dropoff_info: {result}")
+            return result
         except Exception as e:
             logger.error(f"Error formatting nearest_dropoff_info: {str(e)}")
             logger.exception("Exception details:")
