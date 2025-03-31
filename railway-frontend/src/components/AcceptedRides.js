@@ -13,11 +13,18 @@ import {
   Button,
   Paper,
   Tab,
-  Tabs
+  Tabs,
+  List,
+  ListItem,
+  ListItemIcon,
+  ListItemText,
+  ListItemSecondaryAction,
+  IconButton
 } from '@mui/material';
-import { Schedule, DirectionsCar, LocationOn, Person, Phone, Email, Event } from '@mui/icons-material';
+import { Schedule, DirectionsCar, LocationOn, Person, Phone, Email, Event, AccessTime, ArrowForward, Cancel, CheckCircle } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { API_BASE_URL } from '../config';
+import { format } from 'date-fns';
 
 const AcceptedRides = () => {
   const [acceptedRides, setAcceptedRides] = useState([]);
@@ -25,6 +32,7 @@ const AcceptedRides = () => {
   const [error, setError] = useState('');
   const [tabValue, setTabValue] = useState(0);
   const [userType, setUserType] = useState('');
+  const [selectedRide, setSelectedRide] = useState(null);
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -78,6 +86,9 @@ const AcceptedRides = () => {
       );
       
       setAcceptedRides(sortedRides);
+      if (sortedRides.length > 0) {
+        setSelectedRide(sortedRides[0]);
+      }
       setLoading(false);
     } catch (err) {
       console.error('Error fetching accepted rides:', err);
@@ -94,6 +105,10 @@ const AcceptedRides = () => {
 
   const handleChangeTab = (event, newValue) => {
     setTabValue(newValue);
+  };
+
+  const handleRideClick = (ride) => {
+    setSelectedRide(ride);
   };
 
   const getStatusChip = (status) => {
@@ -167,6 +182,29 @@ const AcceptedRides = () => {
     }
   };
 
+  // Helper function to get full name
+  const getFullName = (user) => {
+    if (!user) return 'Unknown User';
+    return `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.email || 'Unknown User';
+  };
+
+  const getPhoneNumber = (user) => {
+    return user && user.phone_number ? user.phone_number : 'No phone number provided';
+  };
+
+  const getEmail = (user) => {
+    return user && user.email ? user.email : 'No email provided';
+  };
+
+  const formatDate = (dateString) => {
+    try {
+      const date = new Date(dateString);
+      return format(date, 'MMM dd, yyyy h:mm a');
+    } catch (e) {
+      return dateString || 'Unknown date';
+    }
+  };
+
   if (loading) {
     return (
       <Container>
@@ -183,172 +221,308 @@ const AcceptedRides = () => {
     );
   }
 
-  const renderRideCard = (ride) => {
-    const isDriver = userType === 'DRIVER';
-    const riderInfo = ride.rider || {};
-    const driverInfo = ride.ride_details?.driver || {};
-
-    console.log('Rendering ride card with data:', {
-      isDriver,
-      rideId: ride.id,
-      riderInfo,
-      driverInfo,
-      rideDetails: ride.ride_details
-    });
-
-    // Helper function to get full name
-    const getFullName = (user) => {
-      if (!user) return 'Unknown User';
-      return `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.email || 'Unknown User';
-    };
-
-    const getPhoneNumber = (user) => {
-      return user && user.phone_number ? user.phone_number : 'No phone number provided';
-    };
-
-    const getEmail = (user) => {
-      return user && user.email ? user.email : 'No email provided';
-    };
-
-    return (
-      <Grid item xs={12} md={6} key={ride.id}>
-        <Card 
-          sx={{ 
-            mb: 3, 
-            overflow: 'visible',
-            boxShadow: '0 4px 8px rgba(0,0,0,0.1)',
-            transition: 'transform 0.3s ease',
-            '&:hover': {
-              transform: 'translateY(-5px)',
-              boxShadow: '0 8px 16px rgba(0,0,0,0.1)'
-            }
-          }}
-        >
-          <CardContent>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-              <Typography variant="h6">Trip Details</Typography>
-              {getStatusChip(ride.status)}
-            </Box>
-            
-            <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-              <Event sx={{ mr: 1 }} />
-              <Typography>
-                {new Date(ride.departure_time).toLocaleDateString()} at {new Date(ride.departure_time).toLocaleTimeString()}
-              </Typography>
-            </Box>
-            
-            <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 1 }}>
-              <LocationOn sx={{ mr: 1, mt: 0.5 }} />
-              <Box>
-                <Typography variant="body2" color="textSecondary">From</Typography>
-                <Typography>{ride.pickup_location}</Typography>
-              </Box>
-            </Box>
-            
-            <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 2 }}>
-              <LocationOn sx={{ mr: 1, mt: 0.5 }} />
-              <Box>
-                <Typography variant="body2" color="textSecondary">To</Typography>
-                <Typography>{ride.dropoff_location}</Typography>
-              </Box>
-            </Box>
-            
-            <Divider sx={{ my: 2 }} />
-            
-            {!isDriver ? (
-              <>
-                <Typography variant="subtitle1" gutterBottom>Driver Details</Typography>
-                <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                  <Person sx={{ mr: 1 }} />
-                  <Typography>{getFullName(driverInfo)}</Typography>
-                </Box>
-                
-                <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                  <Email sx={{ mr: 1 }} />
-                  <Typography>{getEmail(driverInfo)}</Typography>
-                </Box>
-                
-                <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                  <Phone sx={{ mr: 1 }} />
-                  <Typography>{getPhoneNumber(driverInfo)}</Typography>
-                </Box>
-                
-                <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                  <DirectionsCar sx={{ mr: 1 }} />
-                  <Typography>
-                    {driverInfo.vehicle_make ? `${driverInfo.vehicle_year || ''} ${driverInfo.vehicle_make || ''} ${driverInfo.vehicle_model || ''}` 
-                    : 'Vehicle details not provided'}
-                    {driverInfo.vehicle_color ? ` (${driverInfo.vehicle_color})` : ''}
-                  </Typography>
-                </Box>
-              </>
-            ) : (
-              <>
-                <Typography variant="subtitle1" gutterBottom>Rider Details</Typography>
-                <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                  <Person sx={{ mr: 1 }} />
-                  <Typography>{getFullName(riderInfo)}</Typography>
-                </Box>
-                
-                <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                  <Email sx={{ mr: 1 }} />
-                  <Typography>{getEmail(riderInfo)}</Typography>
-                </Box>
-                
-                <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                  <Phone sx={{ mr: 1 }} />
-                  <Typography>{getPhoneNumber(riderInfo)}</Typography>
-                </Box>
-
-                <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                  <Schedule sx={{ mr: 1 }} />
-                  <Typography>Seats needed: {ride.seats_needed || 1}</Typography>
-                </Box>
-              </>
-            )}
-            
-            {ride.status === 'ACCEPTED' && (
-              <Box sx={{ mt: 2, display: 'flex', justifyContent: 'space-between' }}>
-                <Button 
-                  variant="contained" 
-                  color="error" 
-                  onClick={() => handleCancelRide(ride.id)}
-                >
-                  Cancel Ride
-                </Button>
-                
-                {isDriver && (
-                  <Button 
-                    variant="contained" 
-                    color="success" 
-                    onClick={() => handleCompleteRide(ride.id)}
-                  >
-                    Complete Ride
-                  </Button>
-                )}
-              </Box>
-            )}
-          </CardContent>
-        </Card>
-      </Grid>
-    );
-  };
-
   return (
     <Container maxWidth="lg" sx={{ mt: 4, mb: 8 }}>
       <Typography variant="h4" className="page-title" gutterBottom>
         My Trips
       </Typography>
-      
+
       {acceptedRides.length === 0 ? (
-        <Alert severity="info" sx={{ mt: 2 }}>
-          You don't have any booked trips yet.
-          {userType === 'RIDER' ? " Try requesting a ride!" : " Wait for ride requests from riders."}
-        </Alert>
+        <Alert severity="info">You don't have any trips yet.</Alert>
       ) : (
-        <Grid container spacing={3} sx={{ mt: 1 }}>
-          {acceptedRides.map(ride => renderRideCard(ride))}
-        </Grid>
+        <Box sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' }, gap: 3 }}>
+          {/* Left Side - Vertical List of Trips */}
+          <Box 
+            sx={{ 
+              width: { xs: '100%', md: '30%' }, 
+              borderRight: { md: '1px solid #eee' },
+              pr: { md: 2 }
+            }}
+          >
+            <Typography variant="h6" gutterBottom>
+              Your Rides
+            </Typography>
+            <List sx={{ width: '100%', bgcolor: 'background.paper' }}>
+              {acceptedRides.map((ride) => (
+                <ListItem 
+                  key={ride.id}
+                  alignItems="flex-start"
+                  button
+                  onClick={() => handleRideClick(ride)}
+                  sx={{ 
+                    mb: 1, 
+                    borderRadius: 1,
+                    bgcolor: selectedRide?.id === ride.id ? 'rgba(128, 0, 0, 0.08)' : 'white',
+                    border: '1px solid #eee',
+                    '&:hover': {
+                      bgcolor: 'rgba(128, 0, 0, 0.05)',
+                    }
+                  }}
+                >
+                  <ListItemIcon sx={{ minWidth: 40 }}>
+                    <DirectionsCar sx={{ color: '#800000' }} />
+                  </ListItemIcon>
+                  <ListItemText
+                    primary={
+                      <React.Fragment>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <Typography variant="subtitle1" component="span" fontWeight="bold">
+                            Trip #{ride.id}
+                          </Typography>
+                          {getStatusChip(ride.status)}
+                        </Box>
+                      </React.Fragment>
+                    }
+                    secondary={
+                      <React.Fragment>
+                        <Box sx={{ mt: 1 }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', mb: 0.5 }}>
+                            <LocationOn sx={{ fontSize: 16, mr: 0.5, color: '#800000' }} />
+                            <Typography variant="body2" component="span" color="text.secondary" noWrap>
+                              {ride.pickup_location}
+                            </Typography>
+                          </Box>
+                          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                            <AccessTime sx={{ fontSize: 16, mr: 0.5, color: '#800000' }} />
+                            <Typography variant="body2" component="span" color="text.secondary">
+                              {formatDate(ride.departure_time)}
+                            </Typography>
+                          </Box>
+                        </Box>
+                      </React.Fragment>
+                    }
+                  />
+                  <ListItemSecondaryAction>
+                    <IconButton edge="end" size="small" onClick={() => handleRideClick(ride)}>
+                      <ArrowForward fontSize="small" />
+                    </IconButton>
+                  </ListItemSecondaryAction>
+                </ListItem>
+              ))}
+            </List>
+          </Box>
+
+          {/* Right Side - Selected Ride Details */}
+          {selectedRide && (
+            <Box sx={{ width: { xs: '100%', md: '70%' } }}>
+              <Paper elevation={2} sx={{ p: 3, borderRadius: 2 }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+                  <Typography variant="h5" component="h2">
+                    Trip Details
+                  </Typography>
+                  {getStatusChip(selectedRide.status)}
+                </Box>
+
+                <Divider sx={{ mb: 3 }} />
+
+                <Grid container spacing={3}>
+                  <Grid item xs={12} sm={6}>
+                    <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 2 }}>
+                      <LocationOn sx={{ mr: 2, color: '#800000' }} />
+                      <Box>
+                        <Typography variant="body2" color="textSecondary">
+                          Pickup Location
+                        </Typography>
+                        <Typography variant="body1" fontWeight={500}>
+                          {selectedRide.pickup_location}
+                        </Typography>
+                      </Box>
+                    </Box>
+                  </Grid>
+
+                  <Grid item xs={12} sm={6}>
+                    <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 2 }}>
+                      <LocationOn sx={{ mr: 2, color: '#800000' }} />
+                      <Box>
+                        <Typography variant="body2" color="textSecondary">
+                          Dropoff Location
+                        </Typography>
+                        <Typography variant="body1" fontWeight={500}>
+                          {selectedRide.dropoff_location}
+                        </Typography>
+                      </Box>
+                    </Box>
+                  </Grid>
+
+                  <Grid item xs={12} sm={6}>
+                    <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 2 }}>
+                      <AccessTime sx={{ mr: 2, color: '#800000' }} />
+                      <Box>
+                        <Typography variant="body2" color="textSecondary">
+                          Departure Time
+                        </Typography>
+                        <Typography variant="body1" fontWeight={500}>
+                          {formatDate(selectedRide.departure_time)}
+                        </Typography>
+                      </Box>
+                    </Box>
+                  </Grid>
+
+                  <Grid item xs={12} sm={6}>
+                    <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 2 }}>
+                      <Event sx={{ mr: 2, color: '#800000' }} />
+                      <Box>
+                        <Typography variant="body2" color="textSecondary">
+                          Seats Needed
+                        </Typography>
+                        <Typography variant="body1" fontWeight={500}>
+                          {selectedRide.seats_needed}
+                        </Typography>
+                      </Box>
+                    </Box>
+                  </Grid>
+
+                  <Grid item xs={12}>
+                    <Divider sx={{ my: 2 }} />
+                    <Typography variant="h6" gutterBottom>
+                      {userType === 'DRIVER' ? 'Rider Information' : 'Driver Information'}
+                    </Typography>
+                  </Grid>
+
+                  {userType === 'DRIVER' ? (
+                    // Display rider information
+                    <>
+                      <Grid item xs={12} sm={6}>
+                        <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 2 }}>
+                          <Person sx={{ mr: 2, color: '#800000' }} />
+                          <Box>
+                            <Typography variant="body2" color="textSecondary">
+                              Rider Name
+                            </Typography>
+                            <Typography variant="body1" fontWeight={500}>
+                              {getFullName(selectedRide.rider)}
+                            </Typography>
+                          </Box>
+                        </Box>
+                      </Grid>
+                      <Grid item xs={12} sm={6}>
+                        <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 2 }}>
+                          <Email sx={{ mr: 2, color: '#800000' }} />
+                          <Box>
+                            <Typography variant="body2" color="textSecondary">
+                              Email
+                            </Typography>
+                            <Typography variant="body1" fontWeight={500}>
+                              {getEmail(selectedRide.rider)}
+                            </Typography>
+                          </Box>
+                        </Box>
+                      </Grid>
+                      <Grid item xs={12} sm={6}>
+                        <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 2 }}>
+                          <Phone sx={{ mr: 2, color: '#800000' }} />
+                          <Box>
+                            <Typography variant="body2" color="textSecondary">
+                              Phone
+                            </Typography>
+                            <Typography variant="body1" fontWeight={500}>
+                              {getPhoneNumber(selectedRide.rider)}
+                            </Typography>
+                          </Box>
+                        </Box>
+                      </Grid>
+                    </>
+                  ) : (
+                    // Display driver information
+                    <>
+                      <Grid item xs={12} sm={6}>
+                        <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 2 }}>
+                          <Person sx={{ mr: 2, color: '#800000' }} />
+                          <Box>
+                            <Typography variant="body2" color="textSecondary">
+                              Driver Name
+                            </Typography>
+                            <Typography variant="body1" fontWeight={500}>
+                              {getFullName(selectedRide.ride_details?.driver)}
+                            </Typography>
+                          </Box>
+                        </Box>
+                      </Grid>
+                      <Grid item xs={12} sm={6}>
+                        <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 2 }}>
+                          <Email sx={{ mr: 2, color: '#800000' }} />
+                          <Box>
+                            <Typography variant="body2" color="textSecondary">
+                              Email
+                            </Typography>
+                            <Typography variant="body1" fontWeight={500}>
+                              {getEmail(selectedRide.ride_details?.driver)}
+                            </Typography>
+                          </Box>
+                        </Box>
+                      </Grid>
+                      <Grid item xs={12} sm={6}>
+                        <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 2 }}>
+                          <Phone sx={{ mr: 2, color: '#800000' }} />
+                          <Box>
+                            <Typography variant="body2" color="textSecondary">
+                              Phone
+                            </Typography>
+                            <Typography variant="body1" fontWeight={500}>
+                              {getPhoneNumber(selectedRide.ride_details?.driver)}
+                            </Typography>
+                          </Box>
+                        </Box>
+                      </Grid>
+                      <Grid item xs={12} sm={6}>
+                        <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 2 }}>
+                          <DirectionsCar sx={{ mr: 2, color: '#800000' }} />
+                          <Box>
+                            <Typography variant="body2" color="textSecondary">
+                              Vehicle
+                            </Typography>
+                            <Typography variant="body1" fontWeight={500}>
+                              {selectedRide.ride_details?.driver?.vehicle_make} {selectedRide.ride_details?.driver?.vehicle_model} ({selectedRide.ride_details?.driver?.vehicle_color})
+                            </Typography>
+                          </Box>
+                        </Box>
+                      </Grid>
+                      <Grid item xs={12} sm={6}>
+                        <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 2 }}>
+                          <DirectionsCar sx={{ mr: 2, color: '#800000' }} />
+                          <Box>
+                            <Typography variant="body2" color="textSecondary">
+                              License Plate
+                            </Typography>
+                            <Typography variant="body1" fontWeight={500}>
+                              {selectedRide.ride_details?.driver?.license_plate || 'Not provided'}
+                            </Typography>
+                          </Box>
+                        </Box>
+                      </Grid>
+                    </>
+                  )}
+
+                  {selectedRide.status === 'ACCEPTED' && (
+                    <Grid item xs={12}>
+                      <Divider sx={{ my: 2 }} />
+                      <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2, mt: 2 }}>
+                        <Button
+                          variant="outlined"
+                          color="error"
+                          startIcon={<Cancel />}
+                          onClick={() => handleCancelRide(selectedRide.id)}
+                        >
+                          Cancel Ride
+                        </Button>
+                        {userType === 'DRIVER' && (
+                          <Button
+                            variant="contained"
+                            color="success"
+                            startIcon={<CheckCircle />}
+                            onClick={() => handleCompleteRide(selectedRide.id)}
+                          >
+                            Complete Ride
+                          </Button>
+                        )}
+                      </Box>
+                    </Grid>
+                  )}
+                </Grid>
+              </Paper>
+            </Box>
+          )}
+        </Box>
       )}
     </Container>
   );

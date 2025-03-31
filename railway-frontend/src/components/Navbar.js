@@ -1,15 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { AppBar, Toolbar, Button, Typography, Box, IconButton, Menu, MenuItem, useTheme, useMediaQuery } from '@mui/material';
+import { AppBar, Toolbar, Button, Typography, Box, IconButton, Menu, MenuItem, useTheme, useMediaQuery, Avatar } from '@mui/material';
 import { Link, useNavigate } from 'react-router-dom';
 import MenuIcon from '@mui/icons-material/Menu';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faCar } from '@fortawesome/free-solid-svg-icons';
 import NotificationList from './NotificationList';
+import SettingsIcon from '@mui/icons-material/Settings';
+import AccountCircleIcon from '@mui/icons-material/AccountCircle';
+import ExitToAppIcon from '@mui/icons-material/ExitToApp';
 
 function Navbar() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [userType, setUserType] = useState(null);
-  const [anchorEl, setAnchorEl] = useState(null);
+  const [mobileMenuAnchorEl, setMobileMenuAnchorEl] = useState(null);
+  const [settingsAnchorEl, setSettingsAnchorEl] = useState(null);
   const navigate = useNavigate();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
@@ -42,12 +46,20 @@ function Navbar() {
     initializeAuth();
   }, []);
 
-  const handleMenu = (event) => {
-    setAnchorEl(event.currentTarget);
+  const handleMobileMenuOpen = (event) => {
+    setMobileMenuAnchorEl(event.currentTarget);
   };
 
-  const handleClose = () => {
-    setAnchorEl(null);
+  const handleMobileMenuClose = () => {
+    setMobileMenuAnchorEl(null);
+  };
+
+  const handleSettingsMenuOpen = (event) => {
+    setSettingsAnchorEl(event.currentTarget);
+  };
+
+  const handleSettingsMenuClose = () => {
+    setSettingsAnchorEl(null);
   };
 
   const handleLogout = () => {
@@ -55,14 +67,16 @@ function Navbar() {
     localStorage.removeItem('userType');
     setIsAuthenticated(false);
     setUserType(null);
+    handleSettingsMenuClose();
+    handleMobileMenuClose();
     navigate('/login');
   };
 
   const renderMobileMenu = () => (
     <Menu
-      anchorEl={anchorEl}
-      open={Boolean(anchorEl)}
-      onClose={handleClose}
+      anchorEl={mobileMenuAnchorEl}
+      open={Boolean(mobileMenuAnchorEl)}
+      onClose={handleMobileMenuClose}
       PaperProps={{
         sx: {
           mt: 1.5,
@@ -73,40 +87,65 @@ function Navbar() {
       {isAuthenticated ? (
         <>
           {userType === 'DRIVER' ? (
-            <MenuItem component={Link} to="/offer" onClick={handleClose}>
+            <MenuItem component={Link} to="/offer" onClick={handleMobileMenuClose}>
               Offer Ride
             </MenuItem>
           ) : userType === 'RIDER' ? (
-            <MenuItem component={Link} to="/request-ride" onClick={handleClose}>
+            <MenuItem component={Link} to="/request-ride" onClick={handleMobileMenuClose}>
               Find Rides
             </MenuItem>
           ) : null}
-          <MenuItem component={Link} to="/rides" onClick={handleClose}>
+          <MenuItem component={Link} to="/rides" onClick={handleMobileMenuClose}>
             Rides
           </MenuItem>
-          <MenuItem component={Link} to="/accepted-rides" onClick={handleClose}>
+          <MenuItem component={Link} to="/accepted-rides" onClick={handleMobileMenuClose}>
             My Trips
           </MenuItem>
-          <MenuItem component={Link} to="/profile" onClick={handleClose}>
-            Profile
-          </MenuItem>
-          <MenuItem component={Link} to="/notifications" onClick={handleClose}>
+          <MenuItem component={Link} to="/notifications" onClick={handleMobileMenuClose}>
             Notifications
           </MenuItem>
-          <MenuItem onClick={() => { handleLogout(); handleClose(); }}>
+          <MenuItem component={Link} to="/profile" onClick={handleMobileMenuClose}>
+            <AccountCircleIcon sx={{ mr: 1, fontSize: 20 }} />
+            Profile
+          </MenuItem>
+          <MenuItem onClick={handleLogout}>
+            <ExitToAppIcon sx={{ mr: 1, fontSize: 20 }} />
             Logout
           </MenuItem>
         </>
       ) : (
         <>
-          <MenuItem component={Link} to="/login" onClick={handleClose}>
+          <MenuItem component={Link} to="/login" onClick={handleMobileMenuClose}>
             Login
           </MenuItem>
-          <MenuItem component={Link} to="/register" onClick={handleClose}>
+          <MenuItem component={Link} to="/register" onClick={handleMobileMenuClose}>
             Register
           </MenuItem>
         </>
       )}
+    </Menu>
+  );
+
+  const renderSettingsMenu = () => (
+    <Menu
+      anchorEl={settingsAnchorEl}
+      open={Boolean(settingsAnchorEl)}
+      onClose={handleSettingsMenuClose}
+      PaperProps={{
+        sx: {
+          mt: 1.5,
+          minWidth: 150,
+        },
+      }}
+    >
+      <MenuItem component={Link} to="/profile" onClick={handleSettingsMenuClose}>
+        <AccountCircleIcon sx={{ mr: 1, fontSize: 20 }} />
+        Profile
+      </MenuItem>
+      <MenuItem onClick={handleLogout}>
+        <ExitToAppIcon sx={{ mr: 1, fontSize: 20 }} />
+        Logout
+      </MenuItem>
     </Menu>
   );
 
@@ -165,18 +204,15 @@ function Navbar() {
               >
                 My Trips
               </Button>
-              <Button
-                color="inherit"
-                component={Link}
-                to="/profile"
-                sx={{ mr: 2 }}
-              >
-                Profile
-              </Button>
               <NotificationList />
-              <Button color="inherit" onClick={handleLogout}>
-                Logout
-              </Button>
+              <IconButton 
+                color="inherit" 
+                onClick={handleSettingsMenuOpen}
+                sx={{ ml: 2 }}
+              >
+                <SettingsIcon />
+              </IconButton>
+              {renderSettingsMenu()}
             </>
           ) : (
             <>
@@ -195,7 +231,7 @@ function Navbar() {
           edge="end"
           color="inherit"
           aria-label="menu"
-          onClick={handleMenu}
+          onClick={handleMobileMenuOpen}
           sx={{ display: { sm: 'none' } }}
         >
           <MenuIcon />
