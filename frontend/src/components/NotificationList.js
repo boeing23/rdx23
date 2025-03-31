@@ -30,6 +30,7 @@ function NotificationList() {
       console.log('Token from localStorage:', token ? 'Present' : 'Missing');
       if (token) {
         console.log('Token length:', token.length);
+        console.log('Token format check:', token.startsWith('ey') ? 'Valid JWT format' : 'Invalid JWT format');
         // Log first few characters of token (for debugging)
         console.log('Token preview:', token.substring(0, 10) + '...');
         return token;
@@ -55,18 +56,22 @@ function NotificationList() {
       }
 
       console.log('Fetching notifications with token...');
+      const headers = {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      };
+      console.log('Request headers:', headers);
+
       const response = await fetch(`${API_BASE_URL}/api/rides/notifications/`, {
         method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        },
+        headers: headers,
         credentials: 'include'
       });
 
       console.log('Response status:', response.status);
       console.log('Response headers:', Object.fromEntries(response.headers.entries()));
+      console.log('Response URL:', response.url);
 
       if (response.ok) {
         const data = await response.json();

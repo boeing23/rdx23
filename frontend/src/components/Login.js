@@ -63,16 +63,25 @@ function Login() {
         localStorage.setItem('userType', data.user_type);
         console.log('Token and user data stored successfully');
         console.log('Token length:', data.token ? data.token.length : 0);
+        console.log('Token format check:', data.token.startsWith('ey') ? 'Valid JWT format' : 'Invalid JWT format');
         console.log('User type:', data.user_type);
 
         // Verify storage
         const storedToken = localStorage.getItem('token');
         const storedUserType = localStorage.getItem('userType');
         console.log('Verification - Stored token exists:', !!storedToken);
+        console.log('Verification - Stored token length:', storedToken ? storedToken.length : 0);
+        console.log('Verification - Stored token format check:', storedToken ? (storedToken.startsWith('ey') ? 'Valid JWT format' : 'Invalid JWT format') : 'No token');
         console.log('Verification - Stored user type:', storedUserType);
 
         // Test the token with a simple API call
         try {
+          console.log('Testing token with health check...');
+          console.log('Request headers:', {
+            'Authorization': `Bearer ${storedToken}`,
+            'Accept': 'application/json'
+          });
+          
           const testResponse = await fetch(`${API_BASE_URL}/api/health/`, {
             headers: {
               'Authorization': `Bearer ${storedToken}`,
@@ -81,8 +90,11 @@ function Login() {
             credentials: 'include'
           });
           
+          console.log('Health check response status:', testResponse.status);
+          console.log('Health check response headers:', Object.fromEntries(testResponse.headers.entries()));
+          
           if (!testResponse.ok) {
-            throw new Error('Token verification failed');
+            throw new Error(`Token verification failed with status ${testResponse.status}`);
           }
           
           console.log('Token verification successful');
