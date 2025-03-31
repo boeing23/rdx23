@@ -11,6 +11,7 @@
   display: flex;
   flex-direction: column;
   min-height: 380px;
+  font-family: "Montserrat", sans-serif;
 }
 
 .ride-tablet:hover {
@@ -49,11 +50,23 @@
   flex-direction: column;
 }
 
+.ride-tablet h6 {
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  font-size: 1rem;
+}
+
 .location-text {
   font-weight: 600;
   margin-bottom: 16px;
   display: flex;
   align-items: flex-start;
+}
+
+.location-text .MuiTypography-subtitle1 {
+  font-weight: 600;
+  font-family: "Montserrat", sans-serif;
 }
 
 .location-icon {
@@ -67,6 +80,11 @@
   margin-top: 12px;
   margin-bottom: 16px;
   color: #555;
+}
+
+.time-details .MuiTypography-body2 {
+  font-family: "Montserrat", sans-serif;
+  font-weight: 500;
 }
 
 .time-icon {
@@ -83,6 +101,12 @@
   margin-top: 8px;
   font-size: 0.9rem;
   border: 1px solid #eee;
+  font-family: "Montserrat", sans-serif;
+}
+
+.MuiChip-label {
+  font-family: "Montserrat", sans-serif;
+  font-weight: 600;
 }
 
 .ride-meta {
@@ -96,6 +120,10 @@
 .action-button {
   margin-top: auto;
   transition: all 0.2s ease !important;
+  font-family: "Montserrat", sans-serif !important;
+  font-weight: 600 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 1px !important;
 }
 
 .action-button:hover {
@@ -106,6 +134,12 @@
   margin-top: 20px;
   border-top: 1px solid #eee;
   padding-top: 16px;
+}
+
+.ride-requests-section h6 {
+  font-family: "Montserrat", sans-serif;
+  font-weight: 700;
+  letter-spacing: 0.5px;
 }
 
 .request-item {
@@ -120,9 +154,26 @@
   background-color: #f0f0f0;
 }
 
+.request-item .MuiTypography-subtitle2 {
+  font-family: "Montserrat", sans-serif;
+  font-weight: 600;
+}
+
+.request-item .MuiTypography-body2 {
+  font-family: "Montserrat", sans-serif;
+  font-weight: 500;
+}
+
 .request-actions {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
   margin-top: 8px;
+}
+
+.request-actions button {
+  font-family: "Montserrat", sans-serif !important;
+  font-weight: 600 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 1px !important;
 } 
