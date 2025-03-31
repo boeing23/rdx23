@@ -13,6 +13,7 @@ import NotificationList from './components/NotificationList';
 import UpdateDriverProfile from './components/UpdateDriverProfile';
 import Navbar from './components/Navbar';
 import AcceptedRides from './components/AcceptedRides';
+import UserProfile from './components/UserProfile';
 import './App.css';
 
 function Home() {
@@ -189,6 +190,16 @@ function App() {
         <Route path="/request-ride" element={<RequestRide />} />
         <Route path="/accepted-rides" element={<AcceptedRides />} />
         <Route path="/notifications" element={<NotificationList />} />
+        <Route 
+          path="/profile" 
+          element={
+            isAuthenticated ? (
+              <UserProfile />
+            ) : (
+              <Navigate to="/login" replace />
+            )
+          } 
+        />
       </Routes>
     </Router>
   );

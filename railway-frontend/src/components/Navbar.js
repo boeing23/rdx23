@@ -87,6 +87,9 @@ function Navbar() {
           <MenuItem component={Link} to="/accepted-rides" onClick={handleClose}>
             My Trips
           </MenuItem>
+          <MenuItem component={Link} to="/profile" onClick={handleClose}>
+            Profile
+          </MenuItem>
           <MenuItem component={Link} to="/notifications" onClick={handleClose}>
             Notifications
           </MenuItem>
@@ -161,6 +164,14 @@ function Navbar() {
                 sx={{ mr: 2 }}
               >
                 My Trips
+              </Button>
+              <Button
+                color="inherit"
+                component={Link}
+                to="/profile"
+                sx={{ mr: 2 }}
+              >
+                Profile
               </Button>
               <NotificationList />
               <Button color="inherit" onClick={handleLogout}>
