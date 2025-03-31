@@ -13,6 +13,10 @@ env | grep -v -E 'SECRET|PASSWORD|KEY' | sort
 echo "=== DJANGO CHECK ==="
 python manage.py check || echo "Django check failed"
 
+# Apply database migrations
+echo "=== APPLYING MIGRATIONS ==="
+python manage.py migrate || echo "Migrations failed"
+
 # Try to get Django version
 python -c "import django; print(f'Django version: {django.__version__}')" || echo "Failed to get Django version"
 
