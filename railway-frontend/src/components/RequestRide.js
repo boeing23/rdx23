@@ -342,8 +342,15 @@ const RequestRide = () => {
 
   return (
     <Container sx={{ px: 4, py: 3 }}>
-      <Box sx={{ textAlign: 'center', mb: 4 }}>
-        <Typography variant="h4" className="page-title" gutterBottom>
+      <Box sx={{ 
+        textAlign: 'center', 
+        mb: 4, 
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        width: '100%'
+      }}>
+        <Typography variant="h4" className="page-title" gutterBottom align="center">
           Request a Ride
         </Typography>
         <Typography variant="subtitle1" color="textSecondary" gutterBottom sx={{ textAlign: 'center' }}>
