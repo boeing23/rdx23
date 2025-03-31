@@ -1412,11 +1412,19 @@ class RideRequestViewSet(viewsets.ModelViewSet):
         if request.user != ride_request.ride.driver:
             raise PermissionDenied("Only the driver can accept ride requests")
 
+        # Verify enough seats are available
+        ride = ride_request.ride
+        if ride.available_seats < ride_request.seats_needed:
+            logger.warning(f"Cannot accept request: not enough seats ({ride.available_seats} < {ride_request.seats_needed})")
+            return Response({
+                'status': 'error',
+                'error': f'Not enough seats available. You have {ride.available_seats} seats but this request needs {ride_request.seats_needed}.'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
         ride_request.status = 'ACCEPTED'
         ride_request.save()
 
         # Update available seats
-        ride = ride_request.ride
         ride.available_seats -= ride_request.seats_needed
         ride.save()
 
@@ -1475,11 +1483,25 @@ class RideRequestViewSet(viewsets.ModelViewSet):
             logger.warning(f"Invalid status: Ride request {pk} is {ride_request.status}, not PENDING")
             return Response({'status': 'error', 'message': 'This ride request is not in pending status'}, 
                           status=status.HTTP_400_BAD_REQUEST)
+
+        # Verify the ride still has enough available seats
+        ride = ride_request.ride
+        if ride.available_seats < ride_request.seats_needed:
+            logger.warning(f"Cannot accept match: not enough seats ({ride.available_seats} < {ride_request.seats_needed})")
+            return Response({
+                'status': 'error',
+                'message': f'This ride no longer has enough available seats. Required: {ride_request.seats_needed}, Available: {ride.available_seats}'
+            }, status=status.HTTP_400_BAD_REQUEST)
         
         # Update the status to ACCEPTED
         logger.info(f"Updating ride request {pk} status to ACCEPTED")
         ride_request.status = 'ACCEPTED'
         ride_request.save()
+        
+        # Update available seats in the ride
+        logger.info(f"Updating available seats for ride {ride.id} from {ride.available_seats} to {ride.available_seats - ride_request.seats_needed}")
+        ride.available_seats -= ride_request.seats_needed
+        ride.save()
         
         # Create notifications for both rider and driver
         logger.info(f"Creating notifications for ride request {pk}")
