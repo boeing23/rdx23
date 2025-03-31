@@ -125,9 +125,12 @@ function App() {
       const hasVisitedBefore = localStorage.getItem('hasVisitedBefore');
       
       // Check if this is the first time the user is visiting the site
-      if (!hasVisitedBefore) {
+      // Only set first-time user flag if this is the initial page load with no specific route
+      if (!hasVisitedBefore && window.location.pathname === '/') {
         localStorage.setItem('hasVisitedBefore', 'true');
         setIsFirstTimeUser(true);
+      } else {
+        setIsFirstTimeUser(false);
       }
       
       if (token) {
