@@ -89,6 +89,9 @@ class RideSerializer(serializers.ModelSerializer):
         read_only_fields = ('start_latitude', 'start_longitude',
                            'end_latitude', 'end_longitude', 'created_at',
                            'updated_at')
+        extra_kwargs = {
+            'price_per_seat': {'required': False, 'default': 0}
+        }
 
     def get_distance(self, obj):
         return obj.get_route_distance()
@@ -100,7 +103,8 @@ class RideSerializer(serializers.ModelSerializer):
             logger.warning("Invalid available seats: %s", data['available_seats'])
             raise serializers.ValidationError("Available seats must be at least 1")
             
-        if data['price_per_seat'] < 0:
+        # If price_per_seat is provided, validate it's not negative
+        if 'price_per_seat' in data and data['price_per_seat'] < 0:
             logger.warning("Invalid price per seat: %s", data['price_per_seat'])
             raise serializers.ValidationError("Price per seat cannot be negative")
         
