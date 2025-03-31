@@ -453,7 +453,7 @@ class RideViewSet(viewsets.ModelViewSet):
                 pickup_longitude=pending_request.pickup_longitude,
                 dropoff_latitude=pending_request.dropoff_latitude,
                 dropoff_longitude=pending_request.dropoff_longitude,
-                departure_time=pending_request.departure_time,
+                departure_time=ride.departure_time,
                 seats_needed=pending_request.seats_needed,
                 status='PENDING',
                 nearest_dropoff_point=nearest_point
