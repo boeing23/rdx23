@@ -61,14 +61,17 @@ function Login() {
         const cleanToken = data.token.trim().replace(/^["'](.*)["']$/, '$1');
         console.log('Cleaned token:', cleanToken.substring(0, 10) + '...');
         
-        // Store the token and user data
+        // Always store strings, never objects
         localStorage.setItem('token', cleanToken);
-        // Store userType as a string, not JSON
-        localStorage.setItem('userType', typeof data.user_type === 'string' ? data.user_type : String(data.user_type));
+        
+        // IMPORTANT: Always store simple strings, never objects or JSON strings
+        const userTypeString = data.user_type ? String(data.user_type) : 'rider';
+        localStorage.setItem('userType', userTypeString);
+        
         console.log('Token and user data stored successfully');
         console.log('Token length:', cleanToken.length);
         console.log('Token format check:', cleanToken.startsWith('ey') ? 'Valid JWT format' : 'Invalid JWT format');
-        console.log('User type:', data.user_type);
+        console.log('User type (stored as plain string):', userTypeString);
 
         // Verify storage
         const storedToken = localStorage.getItem('token');

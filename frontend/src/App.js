@@ -46,13 +46,8 @@ function App() {
       
       if (token) {
         setIsAuthenticated(true);
-        try {
-          const parsedUserType = JSON.parse(storedUserType);
-          setUserType(parsedUserType);
-        } catch (e) {
-          console.error('Error parsing user type:', e);
-          setUserType(storedUserType);
-        }
+        console.log('App - Using user type as plain string:', storedUserType);
+        setUserType(storedUserType);
       }
       setIsInitialized(true);
     };

@@ -23,22 +23,9 @@ function Navbar() {
       
       setIsAuthenticated(!!token);
       if (type) {
-        try {
-          // Only parse if it looks like JSON (starts with quote or curly brace)
-          if (type.startsWith('"') || type.startsWith('{')) {
-            const parsedType = JSON.parse(type);
-            console.log('Parsed user type:', parsedType);
-            setUserType(parsedType);
-          } else {
-            // Otherwise, use as is
-            console.log('Using raw user type (no parsing needed):', type);
-            setUserType(type);
-          }
-        } catch (e) {
-          console.error('Error parsing user type:', e);
-          console.log('Using raw user type after parse error:', type);
-          setUserType(type);
-        }
+        // NEVER parse as JSON - always treat as a plain string
+        console.log('Using user type as plain string:', type);
+        setUserType(type);
       }
     };
 
