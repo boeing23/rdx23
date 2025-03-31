@@ -147,8 +147,26 @@ const RequestRide = () => {
       });
 
       console.log('Response status:', response.status);
-      const data = await response.json();
-      console.log('Response data:', data);
+      console.log('Response URL:', response.url);
+      console.log('Response headers:', Object.fromEntries(response.headers.entries()));
+      
+      // Debug the raw response text before parsing
+      const responseText = await response.text();
+      console.log('Raw response text:', responseText);
+      
+      // Try to parse the JSON response
+      let data;
+      try {
+        data = JSON.parse(responseText);
+        console.log('Parsed response data:', data);
+      } catch (parseError) {
+        console.error('Error parsing response JSON:', parseError);
+        console.log('Unable to parse response text as JSON, using text response instead');
+        setError('Server returned invalid JSON response. Please try again.');
+        setLoading(false);
+        isSubmitting.current = false;
+        return;
+      }
 
       // If request was successful
       if (response.ok) {
