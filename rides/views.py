@@ -1597,6 +1597,10 @@ class RideRequestViewSet(viewsets.ModelViewSet):
             user_type = getattr(user, 'user_type', None)
             logger.info(f"User type: {user_type}")
             
+            # Debug user details
+            logger.info(f"Current user details - ID: {user.id}, email: {user.email}, phone: {getattr(user, 'phone_number', 'Not found')}")
+            logger.info(f"User has phone_number attribute: {hasattr(user, 'phone_number')}")
+            
             if user_type == 'DRIVER':
                 # For drivers, get rides where they are the driver
                 logger.info("Fetching rides where user is the driver")
@@ -1613,18 +1617,49 @@ class RideRequestViewSet(viewsets.ModelViewSet):
             
             logger.info(f"Found {ride_requests.count()} ride requests for user {user.username}")
             
+            # Debug each ride request's details
+            for req in ride_requests:
+                try:
+                    # Debug rider details
+                    if req.rider:
+                        rider = req.rider
+                        logger.info(f"Rider details for request {req.id}:")
+                        logger.info(f"  ID: {rider.id}, username: {rider.username}")
+                        logger.info(f"  Name: {rider.first_name} {rider.last_name}")
+                        logger.info(f"  Email: {rider.email}")
+                        logger.info(f"  Has phone_number: {hasattr(rider, 'phone_number')}")
+                        logger.info(f"  Phone: {getattr(rider, 'phone_number', 'Missing')}")
+                        
+                    # Debug driver details
+                    if req.ride and req.ride.driver:
+                        driver = req.ride.driver
+                        logger.info(f"Driver details for request {req.id}:")
+                        logger.info(f"  ID: {driver.id}, username: {driver.username}")
+                        logger.info(f"  Name: {driver.first_name} {driver.last_name}")
+                        logger.info(f"  Email: {driver.email}")
+                        logger.info(f"  Has phone_number: {hasattr(driver, 'phone_number')}")
+                        logger.info(f"  Phone: {getattr(driver, 'phone_number', 'Missing')}")
+                except Exception as e:
+                    logger.error(f"Error logging request {req.id} details: {str(e)}")
+            
             # Serialize with more detailed information
             serializer = RideRequestSerializer(ride_requests, many=True, context={'request': request})
             
-            # Log a summary of what's being returned
-            for req in ride_requests:
-                logger.info(f"Ride request {req.id}: status={req.status}, pickup={req.pickup_location}, dropoff={req.dropoff_location}")
-                try:
-                    if req.ride and req.ride.driver:
-                        logger.info(f"  Driver: {req.ride.driver.first_name} {req.ride.driver.last_name}, phone: {getattr(req.ride.driver, 'phone_number', 'N/A')}")
-                    logger.info(f"  Rider: {req.rider.first_name} {req.rider.last_name}, phone: {getattr(req.rider, 'phone_number', 'N/A')}")
-                except Exception as e:
-                    logger.error(f"Error logging ride details: {str(e)}")
+            # Debug serialized data
+            for idx, data in enumerate(serializer.data):
+                logger.info(f"Serialized ride {idx+1}:")
+                
+                # Log rider info
+                if 'rider' in data:
+                    rider_data = data['rider']
+                    logger.info(f"  Serialized rider: {rider_data.get('first_name', '')} {rider_data.get('last_name', '')}")
+                    logger.info(f"  Rider phone: {rider_data.get('phone_number', 'N/A')}")
+                
+                # Log driver info via ride_details
+                if 'ride_details' in data and 'driver' in data['ride_details']:
+                    driver_data = data['ride_details']['driver']
+                    logger.info(f"  Serialized driver: {driver_data.get('first_name', '')} {driver_data.get('last_name', '')}")
+                    logger.info(f"  Driver phone: {driver_data.get('phone_number', 'N/A')}")
             
             return Response(serializer.data)
             

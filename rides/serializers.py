@@ -150,29 +150,66 @@ class RideRequestSerializer(serializers.ModelSerializer):
         }
 
     def get_rider(self, obj):
+        """
+        Get rider details including contact information
+        """
+        if not obj.rider:
+            return None
+            
+        # Log for debugging
+        logger.info(f"Serializing rider {obj.rider.username} for ride request {obj.id}")
+        logger.info(f"Rider has phone_number attribute: {hasattr(obj.rider, 'phone_number')}")
+        phone = getattr(obj.rider, 'phone_number', None)
+        logger.info(f"Rider phone_number value: {phone}")
+        
         return {
             'id': obj.rider.id,
             'username': obj.rider.username,
             'first_name': obj.rider.first_name,
             'last_name': obj.rider.last_name,
             'email': obj.rider.email,
-            'phone_number': getattr(obj.rider, 'phone_number', None)
+            'phone_number': phone
         }
     
     def get_ride_details(self, obj):
+        """
+        Get ride details including driver information
+        """
+        if not obj.ride:
+            return None
+            
+        # Initialize driver information
+        driver_info = None
+        
+        # Get driver details if available
+        if obj.ride.driver:
+            driver = obj.ride.driver
+            logger.info(f"Serializing driver {driver.username} for ride request {obj.id}")
+            logger.info(f"Driver has phone_number attribute: {hasattr(driver, 'phone_number')}")
+            phone = getattr(driver, 'phone_number', None)
+            logger.info(f"Driver phone_number value: {phone}")
+            
+            driver_info = {
+                'id': driver.id,
+                'username': driver.username,
+                'first_name': driver.first_name,
+                'last_name': driver.last_name,
+                'email': driver.email,
+                'phone_number': phone,
+                # Include vehicle information
+                'vehicle_make': getattr(driver, 'vehicle_make', ''),
+                'vehicle_model': getattr(driver, 'vehicle_model', ''),
+                'vehicle_year': getattr(driver, 'vehicle_year', ''),
+                'vehicle_color': getattr(driver, 'vehicle_color', ''),
+                'license_plate': getattr(driver, 'license_plate', '')
+            }
+        
         return {
             'id': obj.ride.id,
             'start_location': obj.ride.start_location,
             'end_location': obj.ride.end_location,
             'departure_time': obj.ride.departure_time,
-            'driver': {
-                'id': obj.ride.driver.id,
-                'username': obj.ride.driver.username,
-                'first_name': obj.ride.driver.first_name,
-                'last_name': obj.ride.driver.last_name,
-                'email': obj.ride.driver.email,
-                'phone_number': getattr(obj.ride.driver, 'phone_number', None)
-            }
+            'driver': driver_info
         }
     
     def get_nearest_dropoff_info(self, obj):
