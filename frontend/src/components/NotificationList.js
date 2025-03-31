@@ -62,6 +62,7 @@ function NotificationList() {
         'Accept': 'application/json'
       };
       console.log('Request headers:', headers);
+      console.log('Authorization header exact value:', `Bearer ${token}`);
 
       const response = await fetch(`${API_BASE_URL}/api/rides/notifications/`, {
         method: 'GET',
