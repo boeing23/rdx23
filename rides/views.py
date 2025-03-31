@@ -1118,7 +1118,7 @@ class RideRequestViewSet(viewsets.ModelViewSet):
         available_rides = Ride.objects.filter(
             departure_time__gte=timezone.now(),
             available_seats__gte=ride_request_data['seats_needed']
-        ).exclude(driver=ride_request_data['rider'])
+        ).exclude(driver=self.request.user)  # Use request.user instead of ride_request_data['rider']
         
         logger.info(f"Initial available rides count: {available_rides.count()}")
         
