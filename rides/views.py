@@ -997,10 +997,23 @@ class RideRequestViewSet(viewsets.ModelViewSet):
         try:
             logger.info("Starting ride request creation")
             logger.info(f"Request data: {request.data}")
+            logger.info(f"User: {request.user.username}, ID: {request.user.id}, Type: {request.user.user_type}")
+            
+            # Extra detailed debugging for Railway
+            logger.info(f"DATABASE DEBUG - Server timezone: {timezone.get_current_timezone_name()}")
+            logger.info(f"DATABASE DEBUG - Current time: {timezone.now()}")
             
             # Validate the serializer
             serializer = self.get_serializer(data=request.data)
-            serializer.is_valid(raise_exception=True)
+            if not serializer.is_valid():
+                logger.error(f"Serializer validation failed: {serializer.errors}")
+                return Response({
+                    'status': 'error',
+                    'has_match': False,
+                    'errors': serializer.errors
+                }, status=status.HTTP_400_BAD_REQUEST)
+                
+            logger.info(f"Serializer validated successfully: {serializer.validated_data}")
             
             # Find potential rides first
             potential_rides = self.find_suitable_rides(serializer.validated_data)
@@ -1019,34 +1032,51 @@ class RideRequestViewSet(viewsets.ModelViewSet):
                 time_window = timezone.now() + timezone.timedelta(minutes=30)
                 
                 if departure_time > time_window:
-                    # Create a pending request for future matching
-                    pending_request = PendingRideRequest.objects.create(
-                        rider=request.user,
-                        pickup_location=serializer.validated_data['pickup_location'],
-                        dropoff_location=serializer.validated_data['dropoff_location'],
-                        pickup_latitude=serializer.validated_data['pickup_latitude'],
-                        pickup_longitude=serializer.validated_data['pickup_longitude'],
-                        dropoff_latitude=serializer.validated_data['dropoff_latitude'],
-                        dropoff_longitude=serializer.validated_data['dropoff_longitude'],
-                        departure_time=departure_time,
-                        seats_needed=serializer.validated_data['seats_needed'],
-                        status='PENDING'
-                    )
-                    
-                    logger.info(f"Created pending ride request: {pending_request.id}")
-                    
-                    # Create a notification for the rider
-                    Notification.objects.create(
-                        recipient=request.user,
-                        message=f"No rides found matching your criteria. Your request has been saved and we'll notify you if a match is found before your departure time.",
-                        notification_type="RIDE_PENDING"
-                    )
-                    
-                    return Response({
-                        'status': 'pending',
-                        'has_match': False,
-                        'message': 'No suitable rides found at the moment. Your request has been saved and we will notify you if a match is found later.'
-                    }, status=status.HTTP_202_ACCEPTED)
+                    try:
+                        # Create a pending request for future matching
+                        pending_request = PendingRideRequest.objects.create(
+                            rider=request.user,
+                            pickup_location=serializer.validated_data['pickup_location'],
+                            dropoff_location=serializer.validated_data['dropoff_location'],
+                            pickup_latitude=serializer.validated_data['pickup_latitude'],
+                            pickup_longitude=serializer.validated_data['pickup_longitude'],
+                            dropoff_latitude=serializer.validated_data['dropoff_latitude'],
+                            dropoff_longitude=serializer.validated_data['dropoff_longitude'],
+                            departure_time=departure_time,
+                            seats_needed=serializer.validated_data['seats_needed'],
+                            status='PENDING'
+                        )
+                        
+                        logger.info(f"DATABASE DEBUG - Created pending ride request: {pending_request.id}")
+                        logger.info(f"DATABASE DEBUG - Object in DB: {PendingRideRequest.objects.filter(id=pending_request.id).exists()}")
+                        
+                        # Verify the data is saved correctly
+                        saved_request = PendingRideRequest.objects.get(id=pending_request.id)
+                        logger.info(f"DATABASE DEBUG - Saved object fields: pickup_lat={saved_request.pickup_latitude}, pickup_lng={saved_request.pickup_longitude}")
+                        
+                        # Create a notification for the rider
+                        notification = Notification.objects.create(
+                            recipient=request.user,
+                            message=f"No rides found matching your criteria. Your request has been saved and we'll notify you if a match is found before your departure time.",
+                            notification_type="RIDE_PENDING"
+                        )
+                        
+                        logger.info(f"DATABASE DEBUG - Created notification: {notification.id}")
+                        
+                        return Response({
+                            'status': 'pending',
+                            'has_match': False,
+                            'pending_request_id': pending_request.id,
+                            'message': 'No suitable rides found at the moment. Your request has been saved and we will notify you if a match is found later.'
+                        }, status=status.HTTP_202_ACCEPTED)
+                    except Exception as db_error:
+                        logger.error(f"DATABASE ERROR creating pending request: {str(db_error)}")
+                        logger.exception("Database error details:")
+                        return Response({
+                            'status': 'error',
+                            'has_match': False,
+                            'error': f'Database error: {str(db_error)}'
+                        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
                 else:
                     # If the request is for immediate travel (within 30 minutes), just return no matches
                     return Response({
@@ -1063,37 +1093,54 @@ class RideRequestViewSet(viewsets.ModelViewSet):
             logger.info(f"Driver: {matched_ride.driver.username}")
             logger.info(f"Vehicle details: {matched_ride.driver.vehicle_make} {matched_ride.driver.vehicle_model}")
             
-            # Create the ride request with the matched ride
-            ride_request = serializer.save(
-                rider=request.user,
-                ride=matched_ride,
-                status='PENDING',
-                nearest_dropoff_point=best_match['nearest_dropoff_point']
-            )
-            
-            logger.info(f"Created ride request: {ride_request.id}")
-            
-            # Check if notifications already exist to prevent duplicates
-            existing_notifications = Notification.objects.filter(
-                Q(recipient=ride_request.rider, ride_request=ride_request, notification_type='RIDE_MATCH')
-            )
-            
-            if not existing_notifications.exists():
-                # Create a notification for the rider with match details
-                Notification.objects.create(
-                    recipient=ride_request.rider,
-                    sender=matched_ride.driver,
-                    message=f"Found a matching ride! Driver: {matched_ride.driver.first_name} {matched_ride.driver.last_name}",
+            try:
+                # Create the ride request with the matched ride
+                ride_request = serializer.save(
+                    rider=request.user,
                     ride=matched_ride,
-                    ride_request=ride_request,
-                    notification_type='RIDE_MATCH'
+                    status='PENDING',
+                    nearest_dropoff_point=best_match['nearest_dropoff_point']
                 )
+                
+                logger.info(f"DATABASE DEBUG - Created ride request: {ride_request.id}")
+                logger.info(f"DATABASE DEBUG - Object in DB: {RideRequest.objects.filter(id=ride_request.id).exists()}")
+                
+                # Verify the data is saved correctly
+                saved_request = RideRequest.objects.get(id=ride_request.id)
+                logger.info(f"DATABASE DEBUG - Saved object fields: pickup_lat={saved_request.pickup_latitude}, ride_id={saved_request.ride_id}")
+                
+                # Check if notifications already exist to prevent duplicates
+                existing_notifications = Notification.objects.filter(
+                    Q(recipient=ride_request.rider, ride_request=ride_request, notification_type='RIDE_MATCH')
+                )
+                
+                if not existing_notifications.exists():
+                    # Create a notification for the rider with match details
+                    notification = Notification.objects.create(
+                        recipient=ride_request.rider,
+                        sender=matched_ride.driver,
+                        message=f"Found a matching ride! Driver: {matched_ride.driver.first_name} {matched_ride.driver.last_name}",
+                        ride=matched_ride,
+                        ride_request=ride_request,
+                        notification_type='RIDE_MATCH'
+                    )
+                    
+                    logger.info(f"DATABASE DEBUG - Created match notification: {notification.id}")
+            except Exception as db_error:
+                logger.error(f"DATABASE ERROR creating ride request: {str(db_error)}")
+                logger.exception("Database error details:")
+                return Response({
+                    'status': 'error',
+                    'has_match': False,
+                    'error': f'Database error: {str(db_error)}'
+                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
             
             # Send email notification only to the rider
             try:
                 send_ride_match_notification(ride_request, notify_driver=False)
             except Exception as e:
                 logger.error(f"Failed to send email notification for ride match: {str(e)}")
+                # Continue processing even if email fails
             
             # Prepare the response data with a clear match status
             response_data = {
@@ -1131,7 +1178,7 @@ class RideRequestViewSet(viewsets.ModelViewSet):
             }
             
             logger.info("Response data prepared:")
-            logger.info(f"Response data: {response_data}")
+            logger.info(f"Response data summary: Ride request ID {ride_request.id} matched with ride ID {matched_ride.id}")
             
             return Response(response_data, status=status.HTTP_201_CREATED)
             
@@ -1146,6 +1193,7 @@ class RideRequestViewSet(viewsets.ModelViewSet):
             logger.error(f"Error in create: {str(e)}")
             logger.error(f"Error type: {type(e)}")
             logger.error(f"Error args: {e.args}")
+            logger.exception("Full exception details:")
             return Response({
                 'status': 'error',
                 'has_match': False,
@@ -1366,32 +1414,204 @@ class RideRequestViewSet(viewsets.ModelViewSet):
         
     @action(detail=True, methods=['post'])
     def complete(self, request, pk=None):
-        """Mark a ride as completed (driver only)"""
         ride_request = self.get_object()
-        
-        # Only the driver can complete a ride
         if request.user != ride_request.ride.driver:
             raise PermissionDenied("Only the driver can mark a ride as completed")
-        
-        # Only complete if it's in ACCEPTED status
-        if ride_request.status != 'ACCEPTED':
-            raise ValidationError("Only accepted rides can be marked as completed")
-        
-        # Update status to COMPLETED
+
         ride_request.status = 'COMPLETED'
         ride_request.save()
-        
+
         # Create notification for the rider
         Notification.objects.create(
             recipient=ride_request.rider,
-            sender=ride_request.ride.driver,
-            message=f"Your ride with {ride_request.ride.driver.first_name} {ride_request.ride.driver.last_name} has been marked as completed",
+            message=f"Your ride to {ride_request.ride.end_location} has been completed",
             ride=ride_request.ride,
             ride_request=ride_request,
             notification_type='RIDE_COMPLETED'
         )
         
         return Response({'status': 'ride completed'})
+        
+    @action(detail=False, methods=['post'])
+    def force_match_check(self, request):
+        """
+        Debug endpoint to force the ride matching process for all rides and pending requests.
+        This can help diagnose why ride matches aren't being created.
+        """
+        if not request.user.is_authenticated:
+            return Response({"error": "Authentication required"}, status=status.HTTP_401_UNAUTHORIZED)
+            
+        try:
+            logger.info(f"Force match check initiated by {request.user.username}")
+            
+            # Get all scheduled rides
+            rides = Ride.objects.filter(status='SCHEDULED')
+            logger.info(f"Found {rides.count()} scheduled rides")
+            
+            # Get all pending ride requests
+            pending_requests = PendingRideRequest.objects.filter(status='PENDING')
+            logger.info(f"Found {pending_requests.count()} pending ride requests")
+            
+            match_results = []
+            
+            # For each ride, check all pending requests
+            for ride in rides:
+                logger.info(f"Checking ride {ride.id} from {ride.start_location} to {ride.end_location}")
+                
+                # Get ride details
+                driver_start = (ride.start_longitude, ride.start_latitude)
+                driver_end = (ride.end_longitude, ride.end_latitude)
+                
+                for pending_request in pending_requests:
+                    logger.info(f"Testing against pending request {pending_request.id}")
+                    
+                    # Skip if ride doesn't have enough seats
+                    if ride.available_seats < pending_request.seats_needed:
+                        logger.info(f"Not enough seats: {ride.available_seats} < {pending_request.seats_needed}")
+                        match_results.append({
+                            'ride_id': ride.id,
+                            'request_id': pending_request.id,
+                            'result': 'Insufficient seats',
+                            'matched': False
+                        })
+                        continue
+                    
+                    # Skip if time difference is too large (30 minutes)
+                    time_diff = abs((ride.departure_time - pending_request.departure_time).total_seconds() / 60)
+                    if time_diff > 30:
+                        logger.info(f"Time difference too large: {time_diff:.1f} minutes")
+                        match_results.append({
+                            'ride_id': ride.id,
+                            'request_id': pending_request.id,
+                            'result': f'Time difference too large: {time_diff:.1f} min',
+                            'matched': False
+                        })
+                        continue
+                    
+                    # Get rider pickup and dropoff coordinates
+                    rider_pickup = (pending_request.pickup_longitude, pending_request.pickup_latitude)
+                    rider_dropoff = (pending_request.dropoff_longitude, pending_request.dropoff_latitude)
+                    
+                    # Validate coordinates
+                    if (None in driver_start or None in driver_end or 
+                        None in rider_pickup or None in rider_dropoff):
+                        logger.error(f"Invalid coordinates")
+                        match_results.append({
+                            'ride_id': ride.id,
+                            'request_id': pending_request.id,
+                            'result': 'Invalid coordinates',
+                            'matched': False
+                        })
+                        continue
+                    
+                    # Calculate route overlap
+                    try:
+                        overlap_percentage, nearest_point = calculate_route_overlap(
+                            driver_start, driver_end, rider_pickup, rider_dropoff
+                        )
+                        
+                        logger.info(f"Route overlap: {overlap_percentage:.2f}%")
+                        
+                        # Calculate matching score
+                        matching_score = calculate_matching_score(
+                            overlap_percentage,
+                            time_diff,
+                            ride.available_seats,
+                            pending_request.seats_needed
+                        )
+                        logger.info(f"Matching score: {matching_score:.2f}")
+                        
+                        # Use consistent threshold with find_suitable_rides (35%)
+                        MIN_OVERLAP_THRESHOLD = 35.0
+                        
+                        # If there's a good match, add to matching riders
+                        if overlap_percentage >= MIN_OVERLAP_THRESHOLD:
+                            logger.info(f"Found a match!")
+                            
+                            match_results.append({
+                                'ride_id': ride.id,
+                                'request_id': pending_request.id,
+                                'result': f'Match found! Overlap: {overlap_percentage:.2f}%, Score: {matching_score:.2f}',
+                                'matched': True,
+                                'overlap': overlap_percentage,
+                                'score': matching_score
+                            })
+                            
+                            # Actually create a match if requested
+                            if request.data.get('create_matches', False):
+                                try:
+                                    # Create a ride request
+                                    ride_request = RideRequest.objects.create(
+                                        rider=pending_request.rider,
+                                        ride=ride,
+                                        pickup_location=pending_request.pickup_location,
+                                        dropoff_location=pending_request.dropoff_location,
+                                        pickup_latitude=pending_request.pickup_latitude,
+                                        pickup_longitude=pending_request.pickup_longitude,
+                                        dropoff_latitude=pending_request.dropoff_latitude,
+                                        dropoff_longitude=pending_request.dropoff_longitude,
+                                        departure_time=ride.departure_time,
+                                        seats_needed=pending_request.seats_needed,
+                                        status='PENDING',
+                                        nearest_dropoff_point=nearest_point
+                                    )
+                                    
+                                    logger.info(f"Created ride request {ride_request.id}")
+                                    
+                                    # Create notification for the rider
+                                    Notification.objects.create(
+                                        recipient=pending_request.rider,
+                                        sender=ride.driver,
+                                        message=f"Found a matching ride for your pending request! Driver: {ride.driver.first_name} {ride.driver.last_name}",
+                                        ride=ride,
+                                        ride_request=ride_request,
+                                        notification_type='RIDE_MATCH'
+                                    )
+                                    
+                                    # Update pending request status
+                                    pending_request.status = 'MATCHED'
+                                    pending_request.save()
+                                    
+                                    logger.info(f"Updated pending request {pending_request.id} status to MATCHED")
+                                except Exception as e:
+                                    logger.error(f"Error creating match: {str(e)}")
+                        else:
+                            match_results.append({
+                                'ride_id': ride.id,
+                                'request_id': pending_request.id,
+                                'result': f'Overlap too low: {overlap_percentage:.2f}% < {MIN_OVERLAP_THRESHOLD}%',
+                                'matched': False,
+                                'overlap': overlap_percentage,
+                                'score': matching_score
+                            })
+                    except Exception as e:
+                        logger.error(f"Error calculating overlap: {str(e)}")
+                        match_results.append({
+                            'ride_id': ride.id,
+                            'request_id': pending_request.id,
+                            'result': f'Error: {str(e)}',
+                            'matched': False
+                        })
+            
+            # Summarize results
+            matches_found = sum(1 for r in match_results if r['matched'])
+            logger.info(f"Matching process complete. Found {matches_found} potential matches out of {len(match_results)} combinations tested.")
+            
+            return Response({
+                'status': 'success', 
+                'rides_checked': rides.count(),
+                'requests_checked': pending_requests.count(),
+                'potential_matches': matches_found,
+                'results': match_results
+            })
+            
+        except Exception as e:
+            logger.error(f"Error in force_match_check: {str(e)}")
+            logger.exception("Exception details:")
+            return Response({
+                'status': 'error',
+                'error': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class NotificationViewSet(viewsets.ModelViewSet):
     serializer_class = NotificationSerializer
