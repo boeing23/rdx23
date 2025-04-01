@@ -313,12 +313,23 @@ const AcceptedRides = () => {
                   <ListItemText
                     primary={
                       <React.Fragment>
-                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <Typography variant="subtitle1" component="span" fontWeight="bold">
+                        <Box sx={{ 
+                          display: 'flex', 
+                          justifyContent: 'space-between', 
+                          alignItems: 'center',
+                          width: '100%',
+                          gap: 2
+                        }}>
+                          <Typography 
+                            variant="subtitle1" 
+                            component="span" 
+                            fontWeight="bold"
+                            sx={{ flex: 1 }}
+                          >
                             Trip #{ride.id}
                           </Typography>
-              {getStatusChip(ride.status)}
-            </Box>
+                          {getStatusChip(ride.status)}
+                        </Box>
                       </React.Fragment>
                     }
                     secondary={
