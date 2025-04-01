@@ -69,10 +69,10 @@ function Home() {
           mt: 4,
           display: 'flex',
           flexDirection: { xs: 'column', sm: 'row' },
-          gap: { xs: 2, sm: 0 },
+          gap: { xs: 2, sm: 2 },
           '& > *': {
             minWidth: { xs: '100%', sm: 'auto' },
-            mx: { xs: 0, sm: 1 }
+            mx: { xs: 0, sm: 1.5 }
           }
         }}
       >
