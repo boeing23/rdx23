@@ -171,8 +171,10 @@ function App() {
         <Route path="/offer" element={<OfferRide />} />
         <Route path="/request-ride" element={<RequestRide />} />
         <Route path="/rides" element={<RideList />} />
-        <Route path="/accepted-rides" element={<AcceptedRides />} />
-        <Route path="/profile" element={<Profile />} />
+        <Route path="/accepted-rides" element={
+          userType === 'DRIVER' ? <DriverAcceptedRides /> : <RiderAcceptedRides />
+        } />
+        <Route path="/profile" element={<UserProfile />} />
       </Routes>
     </Router>
   );
