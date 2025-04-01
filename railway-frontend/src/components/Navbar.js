@@ -182,7 +182,7 @@ function Navbar() {
         </Box>
 
         {/* Desktop Menu */}
-        <Box sx={{ display: { xs: 'none', sm: 'flex' }, alignItems: 'center' }}>
+        <Box sx={{ display: { xs: 'none', sm: 'flex' }, alignItems: 'center', gap: 2 }}>
           {isAuthenticated ? (
             <>
               {userType === 'DRIVER' ? (
@@ -202,13 +202,10 @@ function Navbar() {
               <Button color="inherit" component={Link} to="/accepted-rides">
                 My Trips
               </Button>
-              <Box sx={{ ml: 1 }}>
-                <NotificationList />
-              </Box>
+              <NotificationList />
               <IconButton
                 color="inherit"
                 onClick={handleSettingsMenuOpen}
-                sx={{ ml: 1 }}
               >
                 <SettingsIcon />
               </IconButton>
