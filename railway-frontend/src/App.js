@@ -15,6 +15,7 @@ import Navbar from './components/Navbar';
 import DriverAcceptedRides from './components/DriverAcceptedRides';
 import RiderAcceptedRides from './components/RiderAcceptedRides';
 import UserProfile from './components/UserProfile';
+import AuthPage from './components/AuthPage';
 import './App.css';
 
 function Home() {
@@ -164,61 +165,14 @@ function App() {
     <Router>
       <Navbar />
       <Routes>
-        <Route 
-          path="/" 
-          element={
-            isAuthenticated ? (
-              <Navigate to={userType === 'DRIVER' ? '/offer' : '/rides'} replace />
-            ) : (
-              isFirstTimeUser ? <Navigate to="/register" replace /> : <Home />
-            )
-          } 
-        />
-        <Route 
-          path="/rides" 
-          element={
-            isAuthenticated ? (
-              userType === 'RIDER' ? <RideList /> : <Navigate to="/offer" replace />
-            ) : (
-              <Navigate to="/login" replace />
-            )
-          } 
-        />
-        <Route 
-          path="/offer" 
-          element={
-            isAuthenticated ? (
-              userType === 'DRIVER' ? <OfferRide /> : <Navigate to="/rides" replace />
-            ) : (
-              <Navigate to="/login" replace />
-            )
-          } 
-        />
-        <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<Register />} />
-        <Route path="/update-driver-profile" element={<UpdateDriverProfile />} />
+        <Route path="/" element={<Home />} />
+        <Route path="/login" element={<AuthPage />} />
+        <Route path="/register" element={<AuthPage />} />
+        <Route path="/offer" element={<OfferRide />} />
         <Route path="/request-ride" element={<RequestRide />} />
-        <Route 
-          path="/accepted-rides" 
-          element={
-            isAuthenticated ? (
-              userType === 'DRIVER' ? <DriverAcceptedRides /> : <RiderAcceptedRides />
-            ) : (
-              <Navigate to="/login" replace />
-            )
-          } 
-        />
-        <Route path="/notifications" element={<NotificationList />} />
-        <Route 
-          path="/profile" 
-          element={
-            isAuthenticated ? (
-              <UserProfile />
-            ) : (
-              <Navigate to="/login" replace />
-            )
-          } 
-        />
+        <Route path="/rides" element={<RideList />} />
+        <Route path="/accepted-rides" element={<AcceptedRides />} />
+        <Route path="/profile" element={<Profile />} />
       </Routes>
     </Router>
   );
