@@ -1593,6 +1593,9 @@ class RideRequestViewSet(viewsets.ModelViewSet):
         logger.info(f"Fetching accepted rides for user: {request.user.username}")
         
         try:
+            # First, mark any past rides as complete
+            mark_past_rides_complete()
+            
             user = request.user
             user_type = getattr(user, 'user_type', None)
             logger.info(f"User type: {user_type}")
@@ -1954,3 +1957,26 @@ class NotificationViewSet(viewsets.ModelViewSet):
     def mark_all_as_read(self, request):
         self.get_queryset().update(is_read=True)
         return Response({'status': 'all notifications marked as read'})
+
+def mark_past_rides_complete():
+    """
+    Automatically mark rides as complete if their departure time has passed.
+    """
+    current_time = timezone.now()
+    past_rides = RideRequest.objects.filter(
+        status='ACCEPTED',
+        departure_time__lt=current_time
+    )
+    
+    for ride_request in past_rides:
+        ride_request.status = 'COMPLETED'
+        ride_request.save()
+        
+        # Create notification for the rider
+        Notification.objects.create(
+            recipient=ride_request.rider,
+            message=f"Your ride to {ride_request.ride.end_location} has been automatically marked as completed",
+            ride=ride_request.ride,
+            ride_request=ride_request,
+            notification_type='RIDE_COMPLETED'
+        )

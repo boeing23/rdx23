@@ -190,35 +190,28 @@ function Navbar() {
                   Offer Ride
                 </Button>
               ) : userType === 'RIDER' ? (
-                <Button color="inherit" component={Link} to="/request-ride">
-                  Find Rides
-                </Button>
+                <>
+                  <Button color="inherit" component={Link} to="/request-ride">
+                    Find Rides
+                  </Button>
+                  <Button color="inherit" component={Link} to="/rides">
+                    Rides
+                  </Button>
+                </>
               ) : null}
-              <Button
-                color="inherit"
-                component={Link}
-                to="/rides"
-                sx={{ mr: 2 }}
-              >
-                Rides
-              </Button>
-              <Button
-                color="inherit"
-                component={Link}
-                to="/accepted-rides"
-                sx={{ mr: 2 }}
-              >
+              <Button color="inherit" component={Link} to="/accepted-rides">
                 My Trips
               </Button>
-              <NotificationList />
-              <IconButton 
-                color="inherit" 
+              <Button color="inherit" component={Link} to="/notifications">
+                Notifications
+              </Button>
+              <IconButton
+                color="inherit"
                 onClick={handleSettingsMenuOpen}
-                sx={{ ml: 2 }}
+                sx={{ ml: 1 }}
               >
                 <SettingsIcon />
               </IconButton>
-              {renderSettingsMenu()}
             </>
           ) : (
             <>
