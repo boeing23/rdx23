@@ -1,4 +1,4 @@
-# ChalBe
+# ChalBeyy
 
 A carpooling application that helps users find and share rides easily.
 

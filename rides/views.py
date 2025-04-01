@@ -504,7 +504,7 @@ def get_address_from_coordinates(longitude, latitude):
                 'lat': latitude,
                 'lon': longitude
             },
-            headers={'User-Agent': 'ChalBe/1.0'}
+            headers={'User-Agent': 'ChalBeyy/1.0'}
         )
         if response.status_code == 200:
             data = response.json()

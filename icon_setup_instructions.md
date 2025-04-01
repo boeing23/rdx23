@@ -1,6 +1,6 @@
-# Setting up the Car Icon as ChalBe Favicon
+# Setting up the Car Icon as ChalBeyy Favicon
 
-Follow these steps to update the ChalBe favicon with the provided car icon:
+Follow these steps to update the ChalBeyy favicon with the provided car icon:
 
 ## Step 1: Save the Image
 

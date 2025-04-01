@@ -54,7 +54,7 @@ function Home() {
           mb: 2
         }}
       >
-        ChalBe
+        ChalBeyy
       </Typography>
       <Typography 
         variant={isMobile ? "h6" : "h5"} 

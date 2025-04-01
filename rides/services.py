@@ -63,7 +63,7 @@ def send_ride_match_notification(ride_request, notify_driver=True):
         vehicle_info = "Not provided"
     
     # Send notification to rider
-    rider_subject = "ChalBe: Your Ride Request Has Been Matched!"
+    rider_subject = "ChalBeyy: Your Ride Request Has Been Matched!"
     rider_message = f"""
     Hello {ride_request.rider.first_name},
 
@@ -78,10 +78,10 @@ def send_ride_match_notification(ride_request, notify_driver=True):
     - License Plate: {license_plate or "Not provided"}
     - Driver's Phone: {driver.phone_number if hasattr(driver, 'phone_number') else "Not provided"}
 
-    Please log in to your ChalBe account to accept the ride.
+    Please log in to your ChalBeyy account to accept the ride.
 
     Best regards,
-    The ChalBe Team
+    The ChalBeyy Team
     """
 
     # Create email template directory if it doesn't exist
@@ -107,7 +107,7 @@ def send_ride_match_notification(ride_request, notify_driver=True):
     # Only send notification to driver if requested
     if notify_driver:
         # Send notification to driver
-        driver_subject = "ChalBe: New Ride Match Available!"
+        driver_subject = "ChalBeyy: New Ride Match Available!"
         driver_message = f"""
         Hello {driver.first_name},
 
@@ -124,7 +124,7 @@ def send_ride_match_notification(ride_request, notify_driver=True):
         The rider will be notified and can accept the match.
 
         Best regards,
-        The ChalBe Team
+        The ChalBeyy Team
         """
 
         try:
@@ -182,7 +182,7 @@ def send_ride_accepted_notification(ride_request):
         vehicle_info = "Not provided"
     
     # Send notification to rider
-    rider_subject = "ChalBe: Your Ride Request Has Been Accepted!"
+    rider_subject = "ChalBeyy: Your Ride Request Has Been Accepted!"
     rider_message = f"""
     Hello {ride_request.rider.first_name},
 
@@ -200,11 +200,11 @@ def send_ride_accepted_notification(ride_request):
     Please arrive at the pickup location on time. If you need to contact your driver, you can use the phone number provided above.
 
     Best regards,
-    The ChalBe Team
+    The ChalBeyy Team
     """
 
     # Send notification to driver
-    driver_subject = "ChalBe: Ride Request Accepted!"
+    driver_subject = "ChalBeyy: Ride Request Accepted!"
     driver_message = f"""
     Hello {driver.first_name},
 
@@ -221,7 +221,7 @@ def send_ride_accepted_notification(ride_request):
     Please arrive at the pickup location on time. If you need to contact the rider, you can use the phone number provided above.
 
     Best regards,
-    The ChalBe Team
+    The ChalBeyy Team
     """
 
     rider_html = None

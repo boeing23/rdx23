@@ -177,7 +177,7 @@ function Navbar() {
               }
             }}
           >
-            ChalBe
+            ChalBeyy
           </Typography>
         </Box>
 
