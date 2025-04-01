@@ -101,9 +101,9 @@ function Navbar() {
           <MenuItem component={Link} to="/accepted-rides" onClick={handleMobileMenuClose}>
             My Trips
           </MenuItem>
-          <MenuItem component={Link} to="/notifications" onClick={handleMobileMenuClose}>
-            Notifications
-          </MenuItem>
+          <Box sx={{ px: 2, py: 1 }}>
+            <NotificationList />
+          </Box>
           <MenuItem component={Link} to="/profile" onClick={handleMobileMenuClose}>
             <AccountCircleIcon sx={{ mr: 1, fontSize: 20 }} />
             Profile
@@ -202,9 +202,9 @@ function Navbar() {
               <Button color="inherit" component={Link} to="/accepted-rides">
                 My Trips
               </Button>
-              <Button color="inherit" component={Link} to="/notifications">
-                Notifications
-              </Button>
+              <Box sx={{ ml: 1 }}>
+                <NotificationList />
+              </Box>
               <IconButton
                 color="inherit"
                 onClick={handleSettingsMenuOpen}
