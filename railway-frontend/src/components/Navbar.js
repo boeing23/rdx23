@@ -234,6 +234,7 @@ function Navbar() {
         </IconButton>
       </Toolbar>
       {renderMobileMenu()}
+      {renderSettingsMenu()}
     </AppBar>
   );
 }
