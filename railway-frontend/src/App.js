@@ -12,7 +12,8 @@ import RequestRide from './components/RequestRide';
 import NotificationList from './components/NotificationList';
 import UpdateDriverProfile from './components/UpdateDriverProfile';
 import Navbar from './components/Navbar';
-import AcceptedRides from './components/AcceptedRides';
+import DriverAcceptedRides from './components/DriverAcceptedRides';
+import RiderAcceptedRides from './components/RiderAcceptedRides';
 import UserProfile from './components/UserProfile';
 import './App.css';
 
@@ -124,8 +125,6 @@ function App() {
       const storedUserType = localStorage.getItem('userType');
       const hasVisitedBefore = localStorage.getItem('hasVisitedBefore');
       
-      // Check if this is the first time the user is visiting the site
-      // Only set first-time user flag if this is the initial page load with no specific route
       if (!hasVisitedBefore && window.location.pathname === '/') {
         localStorage.setItem('hasVisitedBefore', 'true');
         setIsFirstTimeUser(true);
@@ -199,7 +198,16 @@ function App() {
         <Route path="/register" element={<Register />} />
         <Route path="/update-driver-profile" element={<UpdateDriverProfile />} />
         <Route path="/request-ride" element={<RequestRide />} />
-        <Route path="/accepted-rides" element={<AcceptedRides />} />
+        <Route 
+          path="/accepted-rides" 
+          element={
+            isAuthenticated ? (
+              userType === 'DRIVER' ? <DriverAcceptedRides /> : <RiderAcceptedRides />
+            ) : (
+              <Navigate to="/login" replace />
+            )
+          } 
+        />
         <Route path="/notifications" element={<NotificationList />} />
         <Route 
           path="/profile" 
