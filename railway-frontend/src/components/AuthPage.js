@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
-import { Box, Container, Typography, TextField, Button, IconButton, Paper } from '@mui/material';
-import { Facebook, Google, LinkedIn } from '@mui/icons-material';
+import { Box, Container, Typography, TextField, Button, Paper } from '@mui/material';
 import { styled } from '@mui/material/styles';
 import { useNavigate } from 'react-router-dom';
 
@@ -140,35 +139,19 @@ const AuthPage = () => {
         overflow: 'hidden'
       }}>
         <FormContainer className={`sign-in ${isSignUp ? 'active' : ''}`}>
-          <Typography variant="h4" gutterBottom sx={{ fontWeight: 'bold', color: '#861F41' }}>
+          <Typography variant="h4" gutterBottom sx={{ fontWeight: 'bold', color: '#861F41', textAlign: 'center' }}>
             Welcome Back!
           </Typography>
-          <Typography variant="body1" sx={{ mb: 3, color: '#666' }}>
+          <Typography variant="body1" sx={{ mb: 4, color: '#666', textAlign: 'center' }}>
             Ready to continue your journey with ChalBeyy?
           </Typography>
           
-          <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center', mb: 3 }}>
-            <IconButton sx={{ color: '#1877F2' }}>
-              <Facebook />
-            </IconButton>
-            <IconButton sx={{ color: '#DB4437' }}>
-              <Google />
-            </IconButton>
-            <IconButton sx={{ color: '#0077B5' }}>
-              <LinkedIn />
-            </IconButton>
-          </Box>
-
-          <Typography variant="body2" sx={{ textAlign: 'center', mb: 2, color: '#666' }}>
-            or use your email to sign in
-          </Typography>
-
           <TextField
             fullWidth
             label="Email"
             variant="outlined"
             margin="normal"
-            sx={{ mb: 2 }}
+            sx={{ mb: 3 }}
           />
           <TextField
             fullWidth
@@ -176,7 +159,7 @@ const AuthPage = () => {
             type="password"
             variant="outlined"
             margin="normal"
-            sx={{ mb: 2 }}
+            sx={{ mb: 4 }}
           />
           <Button
             fullWidth
@@ -197,7 +180,7 @@ const AuthPage = () => {
             variant="body2" 
             sx={{ 
               textAlign: 'center', 
-              mt: 2, 
+              mt: 3, 
               color: '#861F41',
               cursor: 'pointer'
             }}
@@ -208,42 +191,26 @@ const AuthPage = () => {
         </FormContainer>
 
         <FormContainer className={`sign-up ${isSignUp ? 'active' : ''}`}>
-          <Typography variant="h4" gutterBottom sx={{ fontWeight: 'bold', color: '#861F41' }}>
+          <Typography variant="h4" gutterBottom sx={{ fontWeight: 'bold', color: '#861F41', textAlign: 'center' }}>
             Create Account
           </Typography>
-          <Typography variant="body1" sx={{ mb: 3, color: '#666' }}>
+          <Typography variant="body1" sx={{ mb: 4, color: '#666', textAlign: 'center' }}>
             Join ChalBeyy and start your journey today!
           </Typography>
           
-          <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center', mb: 3 }}>
-            <IconButton sx={{ color: '#1877F2' }}>
-              <Facebook />
-            </IconButton>
-            <IconButton sx={{ color: '#DB4437' }}>
-              <Google />
-            </IconButton>
-            <IconButton sx={{ color: '#0077B5' }}>
-              <LinkedIn />
-            </IconButton>
-          </Box>
-
-          <Typography variant="body2" sx={{ textAlign: 'center', mb: 2, color: '#666' }}>
-            or use your email for registration
-          </Typography>
-
           <TextField
             fullWidth
             label="Full Name"
             variant="outlined"
             margin="normal"
-            sx={{ mb: 2 }}
+            sx={{ mb: 3 }}
           />
           <TextField
             fullWidth
             label="Email"
             variant="outlined"
             margin="normal"
-            sx={{ mb: 2 }}
+            sx={{ mb: 3 }}
           />
           <TextField
             fullWidth
@@ -251,7 +218,7 @@ const AuthPage = () => {
             type="password"
             variant="outlined"
             margin="normal"
-            sx={{ mb: 2 }}
+            sx={{ mb: 4 }}
           />
           <Button
             fullWidth
@@ -272,7 +239,7 @@ const AuthPage = () => {
             variant="body2" 
             sx={{ 
               textAlign: 'center', 
-              mt: 2, 
+              mt: 3, 
               color: '#861F41',
               cursor: 'pointer'
             }}
