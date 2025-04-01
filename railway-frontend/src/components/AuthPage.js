@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Box, Container, Typography, TextField, Button, Paper, FormControl, RadioGroup, FormControlLabel, Radio, FormLabel } from '@mui/material';
+import { Box, Container, Typography, TextField, Button, Paper, FormControl, FormLabel } from '@mui/material';
 import { styled } from '@mui/material/styles';
 import { useNavigate } from 'react-router-dom';
 import DirectionsCarIcon from '@mui/icons-material/DirectionsCar';
@@ -15,108 +15,60 @@ const StyledContainer = styled(Container)(({ theme }) => ({
   overflow: 'hidden',
 }));
 
-const FormContainer = styled(Box)(({ theme }) => ({
+const FormContainer = styled(Box)(({ theme, isActive }) => ({
   position: 'absolute',
   top: 0,
   height: '100%',
+  width: '50%',
   transition: 'all 0.6s ease-in-out',
-  padding: theme.spacing(4),
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
-  flexDirection: 'column',
   backgroundColor: '#fff',
+  opacity: isActive ? 1 : 0,
+  zIndex: isActive ? 5 : 1,
 }));
 
-const SignInContainer = styled(FormContainer)(({ theme }) => ({
+const SignInContainer = styled(FormContainer)(({ theme, isActive }) => ({
   left: 0,
-  width: '50%',
-  zIndex: isSignUp => (isSignUp ? 1 : 2),
-  opacity: isSignUp => (isSignUp ? 0 : 1),
-  transform: isSignUp => isSignUp ? 'translateX(-100%)' : 'translateX(0)',
+  transform: isActive ? 'translateX(0)' : 'translateX(-100%)',
 }));
 
-const SignUpContainer = styled(FormContainer)(({ theme }) => ({
-  left: 0,
-  width: '50%',
-  opacity: isSignUp => (isSignUp ? 1 : 0),
-  zIndex: isSignUp => (isSignUp ? 2 : 1),
-  transform: isSignUp => isSignUp ? 'translateX(100%)' : 'translateX(0)',
+const SignUpContainer = styled(FormContainer)(({ theme, isActive }) => ({
+  left: '50%',
+  transform: isActive ? 'translateX(0)' : 'translateX(100%)',
 }));
 
-const OverlayContainer = styled(Box)(({ theme }) => ({
+const OverlayContainer = styled(Box)(({ theme, isSignUp }) => ({
   position: 'absolute',
   top: 0,
-  left: '50%',
+  left: isSignUp ? 0 : '50%',
   width: '50%',
   height: '100%',
   overflow: 'hidden',
-  transition: 'transform 0.6s ease-in-out',
-  zIndex: 100,
-  transform: isSignUp => isSignUp ? 'translateX(-100%)' : 'translateX(0)',
+  transition: 'transform 0.6s ease-in-out, left 0.6s ease-in-out',
+  zIndex: 10,
 }));
 
 const Overlay = styled(Box)(({ theme }) => ({
   background: 'linear-gradient(to right, #861F41, #A52A55)',
   color: '#FFFFFF',
   position: 'relative',
-  left: '-100%',
   height: '100%',
-  width: '200%',
-  transform: isSignUp => isSignUp ? 'translateX(50%)' : 'translateX(0)',
-  transition: 'transform 0.6s ease-in-out',
-}));
-
-const OverlayPanel = styled(Box)(({ theme }) => ({
-  position: 'absolute',
+  width: '100%',
   display: 'flex',
-  alignItems: 'center',
   justifyContent: 'center',
-  flexDirection: 'column',
-  padding: theme.spacing(4),
-  textAlign: 'center',
-  top: 0,
-  height: '100%',
-  width: '50%',
-  transform: 'translateX(0)',
-  transition: 'transform 0.6s ease-in-out',
-}));
-
-const LeftOverlayPanel = styled(OverlayPanel)(({ theme }) => ({
-  transform: isSignUp => isSignUp ? 'translateX(0)' : 'translateX(-20%)',
-}));
-
-const RightOverlayPanel = styled(OverlayPanel)(({ theme }) => ({
-  right: 0,
-  transform: isSignUp => isSignUp ? 'translateX(20%)' : 'translateX(0)',
-}));
-
-const GhostButton = styled(Button)(({ theme }) => ({
-  background: 'transparent',
-  border: '1px solid #FFFFFF',
-  color: '#FFFFFF',
-  padding: theme.spacing(1, 3),
-  borderRadius: '20px',
-  fontSize: '14px',
-  fontWeight: 'bold',
-  cursor: 'pointer',
-  letterSpacing: '1px',
-  textTransform: 'uppercase',
-  transition: 'transform 80ms ease-in',
-  '&:active': {
-    transform: 'scale(0.95)',
-  },
-  '&:focus': {
-    outline: 'none',
-  },
+  alignItems: 'center',
 }));
 
 const FormPaper = styled(Paper)(({ theme }) => ({
   padding: theme.spacing(4),
   borderRadius: '10px',
   boxShadow: '0 0 15px rgba(0,0,0,0.1)',
-  width: '100%',
+  width: '90%',
   maxWidth: '400px',
+  maxHeight: '90%',
+  overflowY: 'auto',
 }));
 
 const UserTypeOption = styled(Box)(({ theme, selected }) => ({
@@ -153,6 +105,20 @@ const AuthPage = () => {
     setUserType(type);
   };
 
+  const handleLogin = () => {
+    // Simulated login logic
+    console.log('Logging in with:', { email, password });
+    // navigate to appropriate page after login
+    navigate(userType === 'DRIVER' ? '/offer' : '/rides');
+  };
+
+  const handleSignup = () => {
+    // Simulated signup logic
+    console.log('Signing up with:', { fullName, email, password, userType });
+    // navigate to appropriate page after signup
+    navigate(userType === 'DRIVER' ? '/offer' : '/rides');
+  };
+
   return (
     <StyledContainer>
       <Box sx={{ 
@@ -165,7 +131,7 @@ const AuthPage = () => {
         boxShadow: '0 14px 28px rgba(0,0,0,0.25), 0 10px 10px rgba(0,0,0,0.22)',
         overflow: 'hidden'
       }}>
-        <SignInContainer isSignUp={isSignUp}>
+        <SignInContainer isActive={!isSignUp}>
           <FormPaper>
             <Typography variant="h4" gutterBottom sx={{ fontWeight: 'bold', color: '#861F41', textAlign: 'center' }}>
               Welcome Back!
@@ -196,6 +162,7 @@ const AuthPage = () => {
             <Button
               fullWidth
               variant="contained"
+              onClick={handleLogin}
               sx={{
                 backgroundColor: '#861F41',
                 '&:hover': { backgroundColor: '#A52A55' },
@@ -223,7 +190,7 @@ const AuthPage = () => {
           </FormPaper>
         </SignInContainer>
 
-        <SignUpContainer isSignUp={isSignUp}>
+        <SignUpContainer isActive={isSignUp}>
           <FormPaper>
             <Typography variant="h4" gutterBottom sx={{ fontWeight: 'bold', color: '#861F41', textAlign: 'center' }}>
               Create Account
@@ -239,7 +206,7 @@ const AuthPage = () => {
               margin="normal"
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
-              sx={{ mb: 3 }}
+              sx={{ mb: 2 }}
             />
             <TextField
               fullWidth
@@ -248,7 +215,7 @@ const AuthPage = () => {
               margin="normal"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              sx={{ mb: 3 }}
+              sx={{ mb: 2 }}
             />
             <TextField
               fullWidth
@@ -258,7 +225,7 @@ const AuthPage = () => {
               margin="normal"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              sx={{ mb: 3 }}
+              sx={{ mb: 2 }}
             />
             
             <FormControl component="fieldset" sx={{ width: '100%', mb: 3 }}>
@@ -292,6 +259,7 @@ const AuthPage = () => {
             <Button
               fullWidth
               variant="contained"
+              onClick={handleSignup}
               sx={{
                 backgroundColor: '#861F41',
                 '&:hover': { backgroundColor: '#A52A55' },
@@ -320,29 +288,48 @@ const AuthPage = () => {
         </SignUpContainer>
 
         <OverlayContainer isSignUp={isSignUp}>
-          <Overlay isSignUp={isSignUp}>
-            <LeftOverlayPanel isSignUp={isSignUp}>
-              <Typography variant="h4" gutterBottom sx={{ fontWeight: 'bold' }}>
-                Welcome Back!
-              </Typography>
-              <Typography variant="body1" sx={{ mb: 3 }}>
-                Ready to continue your journey with ChalBeyy? Sign in to access your rides and connect with fellow travelers.
-              </Typography>
-              <GhostButton onClick={handleSignInClick}>
-                Sign In
-              </GhostButton>
-            </LeftOverlayPanel>
-            <RightOverlayPanel isSignUp={isSignUp}>
-              <Typography variant="h4" gutterBottom sx={{ fontWeight: 'bold' }}>
-                Hello, Friend!
-              </Typography>
-              <Typography variant="body1" sx={{ mb: 3 }}>
-                Join ChalBeyy today and experience hassle-free ride sharing. Create your account to start your journey!
-              </Typography>
-              <GhostButton onClick={handleSignUpClick}>
-                Sign Up
-              </GhostButton>
-            </RightOverlayPanel>
+          <Overlay>
+            {isSignUp ? (
+              <Box sx={{ p: 4, textAlign: 'center' }}>
+                <Typography variant="h4" gutterBottom sx={{ fontWeight: 'bold' }}>
+                  Welcome Back!
+                </Typography>
+                <Typography variant="body1" sx={{ mb: 3 }}>
+                  Ready to continue your journey with ChalBeyy? Sign in to access your rides.
+                </Typography>
+                <Button 
+                  variant="outlined" 
+                  onClick={handleSignInClick}
+                  sx={{ 
+                    color: 'white', 
+                    borderColor: 'white',
+                    '&:hover': { borderColor: 'white', backgroundColor: 'rgba(255,255,255,0.1)' }
+                  }}
+                >
+                  Sign In
+                </Button>
+              </Box>
+            ) : (
+              <Box sx={{ p: 4, textAlign: 'center' }}>
+                <Typography variant="h4" gutterBottom sx={{ fontWeight: 'bold' }}>
+                  Hello, Friend!
+                </Typography>
+                <Typography variant="body1" sx={{ mb: 3 }}>
+                  Join ChalBeyy today and experience hassle-free ride sharing.
+                </Typography>
+                <Button 
+                  variant="outlined" 
+                  onClick={handleSignUpClick}
+                  sx={{ 
+                    color: 'white', 
+                    borderColor: 'white',
+                    '&:hover': { borderColor: 'white', backgroundColor: 'rgba(255,255,255,0.1)' }
+                  }}
+                >
+                  Sign Up
+                </Button>
+              </Box>
+            )}
           </Overlay>
         </OverlayContainer>
       </Box>
