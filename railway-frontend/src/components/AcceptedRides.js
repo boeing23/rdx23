@@ -276,6 +276,8 @@ const AcceptedRides = () => {
 
   // Add a function to render pickup and dropoff information with the optimal points
   const renderLocationDetails = (ride) => {
+    if (!ride) return null;
+    
     const isDriver = userType === '"DRIVER"' || userType === 'DRIVER';
     const hasOptimalPickup = ride.optimal_pickup_info && ride.optimal_pickup_info.address;
     const hasNearestDropoff = ride.nearest_dropoff_info && ride.nearest_dropoff_info.address;
@@ -324,14 +326,14 @@ const AcceptedRides = () => {
 
   // Update the RideCard component to use the new renderLocationDetails function
   const RideCard = ({ ride }) => {
-    // Rest of the code remains the same...
+    if (!ride) return null;
 
     return (
       <Card sx={{ mb: 3, borderRadius: '12px', boxShadow: 2 }}>
         <CardContent sx={{ p: 2 }}>
           {/* Status chip and departure time */}
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-            {getStatusChip(ride.status)}
+            {getStatusChip(ride.status || 'UNKNOWN')}
             <Typography variant="body2" color="text.secondary">
               {formatDate(ride.departure_time)}
             </Typography>
@@ -384,7 +386,7 @@ const AcceptedRides = () => {
                   } 
                 />
               </ListItem>
-              {userType !== '"DRIVER"' && userType !== 'DRIVER' && (
+              {userType !== '"DRIVER"' && userType !== 'DRIVER' && ride.ride_details?.driver && (
                 <ListItem>
                   <ListItemIcon>
                     <DirectionsCar sx={{ color: '#861F41' }} />
@@ -392,10 +394,10 @@ const AcceptedRides = () => {
                   <ListItemText 
                     primary="Vehicle" 
                     secondary={
-                      ride.ride_details?.driver 
-                        ? `${ride.ride_details.driver.vehicle_color} ${ride.ride_details.driver.vehicle_make} ${ride.ride_details.driver.vehicle_model} (${ride.ride_details.driver.license_plate})`
+                      ride.ride_details?.driver?.vehicle_make 
+                        ? `${ride.ride_details.driver.vehicle_color || ''} ${ride.ride_details.driver.vehicle_make || ''} ${ride.ride_details.driver.vehicle_model || ''} ${ride.ride_details.driver.license_plate ? `(${ride.ride_details.driver.license_plate})` : ''}`
                         : 'No vehicle information'
-                    } 
+                    }
                   />
                 </ListItem>
               )}
