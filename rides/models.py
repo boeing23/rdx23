@@ -113,12 +113,13 @@ class RideRequest(models.Model):
     pickup_longitude = models.FloatField()
     dropoff_latitude = models.FloatField()
     dropoff_longitude = models.FloatField()
-    departure_time = models.DateTimeField(null=True, blank=True)
+    departure_time = models.DateTimeField()
     seats_needed = models.IntegerField()
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     nearest_dropoff_point = models.JSONField(null=True, blank=True, help_text="Information about the nearest point on driver's route to rider's destination")
+    optimal_pickup_point = models.JSONField(null=True, blank=True, help_text="Information about the optimal pickup point along driver's route")
 
     class Meta:
         ordering = ['-created_at']

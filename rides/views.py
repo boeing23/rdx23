@@ -20,6 +20,7 @@ from geopy.distance import great_circle
 from .services import send_ride_match_notification, send_ride_accepted_notification
 import math
 import random
+import pytz
 
 logger = logging.getLogger(__name__)
 
@@ -81,6 +82,47 @@ def closest_point_on_segment(p1, p2, d):
     closest = (p1[0] + t * segment_vec[0], p1[1] + t * segment_vec[1])
     return closest
 
+def find_optimal_pickup(driver_route, rider_pickup):
+    """
+    Find the optimal pickup point for a rider along a driver's route.
+    
+    Parameters:
+    driver_route: List of (lat, lng) coordinates representing the driver's route
+    rider_pickup: (lat, lng) coordinate of the rider's requested pickup location
+    
+    Returns:
+    Tuple of (optimal_pickup_point, distance_to_pickup, pickup_index)
+    - optimal_pickup_point: (lat, lng) coordinate of the optimal pickup point
+    - distance_to_pickup: Distance in km from optimal pickup to rider's requested pickup
+    - pickup_index: Index in driver_route that's nearest to the pickup location
+    """
+    # Find the segment on driver's route closest to pickup point
+    min_pickup_dist = float('inf')
+    pickup_index = 0
+    optimal_pickup = None
+    
+    # Find the closest point on each segment
+    for i in range(len(driver_route) - 1):
+        p1 = driver_route[i]
+        p2 = driver_route[i + 1]
+        closest = closest_point_on_segment(p1, p2, rider_pickup)
+        dist = great_circle(closest, rider_pickup).kilometers
+        if dist < min_pickup_dist:
+            min_pickup_dist = dist
+            pickup_index = i
+            optimal_pickup = closest
+    
+    if not optimal_pickup:
+        # Fallback to the point on route closest to pickup
+        for i, point in enumerate(driver_route):
+            dist = great_circle(point, rider_pickup).kilometers
+            if dist < min_pickup_dist:
+                min_pickup_dist = dist
+                pickup_index = i
+                optimal_pickup = point
+    
+    return optimal_pickup, min_pickup_dist, pickup_index
+
 def find_optimal_dropoff(driver_route, rider_pickup, rider_dropoff):
     """
     Find the optimal drop-off point for a rider along a driver's route.
@@ -138,7 +180,7 @@ def calculate_route_overlap(driver_start, driver_end, rider_pickup, rider_dropof
     rider_dropoff: (lng, lat) tuple for rider's destination
     
     Returns:
-    tuple of (overlap_percentage, nearest_dropoff_point)
+    tuple of (overlap_percentage, nearest_dropoff_point, optimal_pickup_point)
     """
     try:
         # Log the input coordinates for debugging
@@ -174,8 +216,14 @@ def calculate_route_overlap(driver_start, driver_end, rider_pickup, rider_dropof
         # We'll use the detour ratio: (distance to pickup + distance from pickup to drop-off) / (direct driver route)
         direct_driver_distance = great_circle(driver_start_lat_lng, driver_end_lat_lng).kilometers
         
+        # Find optimal pickup point along the driver's route
+        optimal_pickup, pickup_distance, pickup_index = find_optimal_pickup(
+            driver_route_lat_lng,
+            rider_pickup_lat_lng
+        )
+        
         # Find optimal dropoff using the projection method
-        optimal_dropoff, distance_to_dest, pickup_index = find_optimal_dropoff(
+        optimal_dropoff, distance_to_dest, dropoff_index = find_optimal_dropoff(
             driver_route_lat_lng,
             rider_pickup_lat_lng,
             rider_dropoff_lat_lng
@@ -196,13 +244,9 @@ def calculate_route_overlap(driver_start, driver_end, rider_pickup, rider_dropof
         for i in range(len(driver_route_lat_lng) - 1):
             driver_distance += great_circle(driver_route_lat_lng[i], driver_route_lat_lng[i+1]).kilometers
         
-        # Calculate pickup and dropoff distances
-        pickup_distance = great_circle(rider_pickup_lat_lng, driver_route_lat_lng[pickup_index]).kilometers
-        dropoff_distance = distance_to_dest  # Already calculated
-        
         # Log intermediate distance calculations
         logger.info(f"Route distances - Driver: {driver_distance:.2f}km, Rider: {rider_distance:.2f}km")
-        logger.info(f"Pickup distance: {pickup_distance:.2f}km, Dropoff distance: {dropoff_distance:.2f}km")
+        logger.info(f"Pickup distance: {pickup_distance:.2f}km, Dropoff distance: {distance_to_dest:.2f}km")
         
         # Special case: Check if this is a case of shared start points but very different destinations
         # Consider the rider's relative travel direction compared to the driver
@@ -253,11 +297,11 @@ def calculate_route_overlap(driver_start, driver_end, rider_pickup, rider_dropof
                         # Improve the dropoff distance calculation
                         # Instead of using the existing end of driver's route, calculate as if
                         # the driver might extend their route to accommodate the rider
-                        extension_dropoff_distance = min(dropoff_distance, direct_distance_to_rider_dest)
+                        extension_dropoff_distance = min(distance_to_dest, direct_distance_to_rider_dest)
                         logger.info(f"Potential extension drop-off distance: {extension_dropoff_distance:.2f}km")
                         
                         # Use the better of the two distances
-                        dropoff_distance = extension_dropoff_distance
+                        distance_to_dest = extension_dropoff_distance
         else:
             # Regular case - standard thresholds for typical ride-sharing
             MAX_PICKUP_DIST = 1.0  # km (about 10 city blocks)
@@ -265,7 +309,7 @@ def calculate_route_overlap(driver_start, driver_end, rider_pickup, rider_dropof
             
         # Calculate proximity scores (0-100)
         pickup_score = max(0, 100 - (pickup_distance * 100 / MAX_PICKUP_DIST))
-        dropoff_score = max(0, 100 - (dropoff_distance * 100 / MAX_DROPOFF_DIST))
+        dropoff_score = max(0, 100 - (distance_to_dest * 100 / MAX_DROPOFF_DIST))
         
         # Direction alignment - calculate dot product of route vectors
         # Ensure we use (lng, lat) format consistently for the vector calculations
@@ -287,14 +331,14 @@ def calculate_route_overlap(driver_start, driver_end, rider_pickup, rider_dropof
         
         # Calculate detour factor
         # How much extra distance driver has to travel compared to their original route
-        total_detour = pickup_distance + dropoff_distance
+        total_detour = pickup_distance + distance_to_dest
         detour_factor = total_detour / max(driver_distance, 0.1)  # Avoid division by zero
         
         # Adjust the detour calculation for shared-start scenarios
         if is_shared_start_point:
             # If they start from the same point, the "detour" is more about extending the trip
             # rather than deviating from the route
-            detour_factor = dropoff_distance / max(direct_driver_distance, 0.1)
+            detour_factor = distance_to_dest / max(direct_driver_distance, 0.1)
             logger.info(f"Adjusted detour factor for shared starting point: {detour_factor:.2f}")
         
         detour_score = max(0, 100 - (detour_factor * 100))
@@ -325,7 +369,8 @@ def calculate_route_overlap(driver_start, driver_end, rider_pickup, rider_dropof
                    f"Detour={detour_score:.2f}%")
         logger.info(f"Final overlap score: {overlap_percentage:.2f}%")
         
-        # Convert optimal_dropoff back to (lng, lat) format for storage
+        # Convert optimal_dropoff and optimal_pickup back to (lng, lat) format for storage
+        nearest_dropoff_point = None
         if optimal_dropoff:
             # Convert from (lat, lng) back to (lng, lat) format
             optimal_dropoff_lng_lat = (optimal_dropoff[1], optimal_dropoff[0])
@@ -335,15 +380,24 @@ def calculate_route_overlap(driver_start, driver_end, rider_pickup, rider_dropof
                 'unit': 'kilometers',
                 'address': get_address_from_coordinates(optimal_dropoff_lng_lat[0], optimal_dropoff_lng_lat[1])
             }
-        else:
-            nearest_dropoff_point = None
         
-        return overlap_percentage, nearest_dropoff_point
+        optimal_pickup_point = None
+        if optimal_pickup:
+            # Convert from (lat, lng) back to (lng, lat) format
+            optimal_pickup_lng_lat = (optimal_pickup[1], optimal_pickup[0])
+            optimal_pickup_point = {
+                'coordinates': optimal_pickup_lng_lat,
+                'distance_to_rider_pickup': pickup_distance,
+                'unit': 'kilometers',
+                'address': get_address_from_coordinates(optimal_pickup_lng_lat[0], optimal_pickup_lng_lat[1])
+            }
+        
+        return overlap_percentage, nearest_dropoff_point, optimal_pickup_point
         
     except Exception as e:
         logger.error(f"Error calculating route overlap: {str(e)}")
         logger.exception("Exception details:")
-        return 0, None
+        return 0, None, None
 
 def generate_route(start, end, num_points=20):
     """
@@ -593,7 +647,7 @@ def find_suitable_rides(rides, ride_request_data):
         rider_pickup = (ride_request_data['pickup_longitude'], ride_request_data['pickup_latitude'])
         rider_dropoff = (ride_request_data['dropoff_longitude'], ride_request_data['dropoff_latitude'])
         
-        overlap_percentage, nearest_point = calculate_route_overlap(
+        overlap_percentage, nearest_point, optimal_pickup_point = calculate_route_overlap(
             driver_start, driver_end, rider_pickup, rider_dropoff
         )
         
@@ -611,7 +665,8 @@ def find_suitable_rides(rides, ride_request_data):
                 'overlap_percentage': overlap_percentage,
                 'matching_score': matching_score,
                 'time_diff': time_diff,
-                'nearest_dropoff_point': nearest_point
+                'nearest_dropoff_point': nearest_point,
+                'optimal_pickup_point': optimal_pickup_point
             })
     
     # Sort rides by matching score (descending)
@@ -767,7 +822,7 @@ class RideViewSet(viewsets.ModelViewSet):
                     
                     # Calculate route overlap
                     try:
-                        overlap_percentage, nearest_point = calculate_route_overlap(
+                        overlap_percentage, nearest_point, optimal_pickup_point = calculate_route_overlap(
                             driver_start, driver_end, rider_pickup, rider_dropoff
                         )
                         
@@ -791,7 +846,8 @@ class RideViewSet(viewsets.ModelViewSet):
                                      ('' if is_match else f" (below {MIN_OVERLAP_THRESHOLD}% threshold)"),
                             'overlap': overlap_percentage,
                             'score': matching_score,
-                            'time_diff': time_diff
+                            'time_diff': time_diff,
+                            'optimal_pickup_point': optimal_pickup_point
                         }
                         match_results.append(result)
                         
@@ -930,7 +986,7 @@ class RideViewSet(viewsets.ModelViewSet):
                     continue
                 
                 # Calculate route overlap
-                overlap_percentage, nearest_point = calculate_route_overlap(
+                overlap_percentage, nearest_point, optimal_pickup_point = calculate_route_overlap(
                     driver_start, driver_end, rider_pickup, rider_dropoff
                 )
                 
@@ -959,7 +1015,8 @@ class RideViewSet(viewsets.ModelViewSet):
                             'overlap': overlap_percentage,
                             'matching_score': matching_score,
                             'distance_to_dest': nearest_point.get('distance_to_destination', float('inf')),
-                            'nearest_point': nearest_point
+                            'nearest_point': nearest_point,
+                            'optimal_pickup_point': optimal_pickup_point
                         })
                     else:
                         logger.warning(f"No nearest dropoff point found for request {pending_request.id}")
@@ -999,7 +1056,8 @@ class RideViewSet(viewsets.ModelViewSet):
                     departure_time=ride.departure_time,
                     seats_needed=pending_request.seats_needed,
                     status='PENDING',
-                    nearest_dropoff_point=nearest_point
+                    nearest_dropoff_point=nearest_point,
+                    optimal_pickup_point=match['optimal_pickup_point']
                 )
                 
                 logger.info(f"Created ride request {ride_request.id} for pending request {pending_request.id}")
@@ -1156,7 +1214,7 @@ class RideRequestViewSet(viewsets.ModelViewSet):
             logger.info(f"Rider route: {rider_pickup} -> {rider_dropoff}")
             
             # Calculate route overlap
-            overlap_percentage, nearest_point = calculate_route_overlap(
+            overlap_percentage, nearest_point, optimal_pickup_point = calculate_route_overlap(
                 driver_start, driver_end, rider_pickup, rider_dropoff
             )
             
@@ -1182,7 +1240,8 @@ class RideRequestViewSet(viewsets.ModelViewSet):
                     'overlap_percentage': overlap_percentage,
                     'matching_score': matching_score,
                     'time_diff': time_diff,
-                    'nearest_dropoff_point': nearest_point
+                    'nearest_dropoff_point': nearest_point,
+                    'optimal_pickup_point': optimal_pickup_point
                 })
             else:
                 logger.info(f"Ride ID {ride.id} excluded: low route overlap ({overlap_percentage:.2f}% < {MIN_OVERLAP_THRESHOLD}%)")
@@ -1305,7 +1364,8 @@ class RideRequestViewSet(viewsets.ModelViewSet):
                     rider=request.user,
                     ride=matched_ride,
                     status='PENDING',
-                    nearest_dropoff_point=best_match['nearest_dropoff_point']
+                    nearest_dropoff_point=best_match['nearest_dropoff_point'],
+                    optimal_pickup_point=best_match['optimal_pickup_point']
                 )
                 
                 logger.info(f"DATABASE DEBUG - Created ride request: {ride_request.id}")
@@ -1814,7 +1874,7 @@ class RideRequestViewSet(viewsets.ModelViewSet):
                     
                     # Calculate route overlap
                     try:
-                        overlap_percentage, nearest_point = calculate_route_overlap(
+                        overlap_percentage, nearest_point, optimal_pickup_point = calculate_route_overlap(
                             driver_start, driver_end, rider_pickup, rider_dropoff
                         )
                         
@@ -1842,7 +1902,8 @@ class RideRequestViewSet(viewsets.ModelViewSet):
                                 'result': f'Match found! Overlap: {overlap_percentage:.2f}%, Score: {matching_score:.2f}',
                                 'matched': True,
                                 'overlap': overlap_percentage,
-                                'score': matching_score
+                                'score': matching_score,
+                                'optimal_pickup_point': optimal_pickup_point
                             })
                             
                             # Actually create a match if requested
@@ -1861,7 +1922,8 @@ class RideRequestViewSet(viewsets.ModelViewSet):
                                         departure_time=ride.departure_time,
                                         seats_needed=pending_request.seats_needed,
                                         status='PENDING',
-                                        nearest_dropoff_point=nearest_point
+                                        nearest_dropoff_point=nearest_point,
+                                        optimal_pickup_point=optimal_pickup_point
                                     )
                                     
                                     logger.info(f"Created ride request {ride_request.id}")
@@ -1890,7 +1952,8 @@ class RideRequestViewSet(viewsets.ModelViewSet):
                                 'result': f'Overlap too low: {overlap_percentage:.2f}% < {MIN_OVERLAP_THRESHOLD}%',
                                 'matched': False,
                                 'overlap': overlap_percentage,
-                                'score': matching_score
+                                'score': matching_score,
+                                'optimal_pickup_point': optimal_pickup_point
                             })
                     except Exception as e:
                         logger.error(f"Error calculating overlap: {str(e)}")

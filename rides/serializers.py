@@ -198,6 +198,7 @@ class RideRequestSerializer(serializers.ModelSerializer):
     rider = serializers.SerializerMethodField()
     ride_details = serializers.SerializerMethodField()
     nearest_dropoff_info = serializers.SerializerMethodField()
+    optimal_pickup_info = serializers.SerializerMethodField()
     
     class Meta:
         model = RideRequest
@@ -205,190 +206,104 @@ class RideRequestSerializer(serializers.ModelSerializer):
             'id', 'rider', 'ride', 'ride_details', 'pickup_location', 'dropoff_location',
             'pickup_latitude', 'pickup_longitude', 'dropoff_latitude',
             'dropoff_longitude', 'departure_time', 'seats_needed',
-            'status', 'created_at', 'updated_at', 'nearest_dropoff_point', 'nearest_dropoff_info'
+            'status', 'created_at', 'updated_at', 'nearest_dropoff_point', 
+            'nearest_dropoff_info', 'optimal_pickup_point', 'optimal_pickup_info'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
-        extra_kwargs = {
-            'ride': {'required': False}  # Make ride field optional during creation
-        }
-
+    
     def get_rider(self, obj):
-        """
-        Get rider details including contact information
-        """
-        if not obj.rider:
-            return None
-            
-        # Log for debugging
-        logger.info(f"Serializing rider {obj.rider.username} for ride request {obj.id}")
-        logger.info(f"Rider has phone_number attribute: {hasattr(obj.rider, 'phone_number')}")
-        phone = getattr(obj.rider, 'phone_number', None)
-        logger.info(f"Rider phone_number value: {phone}")
-        
+        user = obj.rider
         return {
-            'id': obj.rider.id,
-            'username': obj.rider.username,
-            'first_name': obj.rider.first_name,
-            'last_name': obj.rider.last_name,
-            'email': obj.rider.email,
-            'phone_number': phone
+            'id': user.id,
+            'username': user.username,
+            'first_name': user.first_name,
+            'last_name': user.last_name,
+            'email': user.email,
+            'phone_number': user.phone_number
         }
     
     def get_ride_details(self, obj):
-        """
-        Get ride details including driver information
-        """
-        if not obj.ride:
+        ride = obj.ride
+        if not ride:
             return None
-            
-        # Initialize driver information
-        driver_info = None
         
-        # Get driver details if available
-        if obj.ride.driver:
-            driver = obj.ride.driver
-            logger.info(f"Serializing driver {driver.username} for ride request {obj.id}")
-            logger.info(f"Driver has phone_number attribute: {hasattr(driver, 'phone_number')}")
-            phone = getattr(driver, 'phone_number', None)
-            logger.info(f"Driver phone_number value: {phone}")
-            
-            driver_info = {
+        driver = ride.driver
+        return {
+            'id': ride.id,
+            'driver': {
                 'id': driver.id,
                 'username': driver.username,
                 'first_name': driver.first_name,
                 'last_name': driver.last_name,
                 'email': driver.email,
-                'phone_number': phone,
-                # Include vehicle information
-                'vehicle_make': getattr(driver, 'vehicle_make', ''),
-                'vehicle_model': getattr(driver, 'vehicle_model', ''),
-                'vehicle_year': getattr(driver, 'vehicle_year', ''),
-                'vehicle_color': getattr(driver, 'vehicle_color', ''),
-                'license_plate': getattr(driver, 'license_plate', '')
-            }
-        
-        return {
-            'id': obj.ride.id,
-            'start_location': obj.ride.start_location,
-            'end_location': obj.ride.end_location,
-            'departure_time': obj.ride.departure_time,
-            'driver': driver_info
+                'phone_number': driver.phone_number,
+                'vehicle_make': driver.vehicle_make,
+                'vehicle_model': driver.vehicle_model,
+                'vehicle_color': driver.vehicle_color,
+                'license_plate': driver.license_plate
+            },
+            'start_location': ride.start_location,
+            'end_location': ride.end_location,
+            'departure_time': ride.departure_time,
+            'seats_available': ride.seats_available,
+            'route_distance': ride.route_distance,
+            'route_duration': ride.route_duration
         }
     
     def get_nearest_dropoff_info(self, obj):
-        """Format the nearest_dropoff_point data in a user-friendly way"""
         if not obj.nearest_dropoff_point:
             return None
         
         try:
-            dropoff_point = obj.nearest_dropoff_point
+            # Directly return the JSONField data if it's already in the right format
+            if isinstance(obj.nearest_dropoff_point, dict) and 'address' in obj.nearest_dropoff_point:
+                return obj.nearest_dropoff_point
             
-            # Log the original data for debugging
-            logger.info(f"Processing nearest_dropoff_point for ride request {obj.id}: {repr(dropoff_point)}")
+            # Parse string JSON if needed
+            import json
+            if isinstance(obj.nearest_dropoff_point, str):
+                data = json.loads(obj.nearest_dropoff_point)
+                if isinstance(data, dict) and 'address' in data:
+                    return data
             
-            # Handle case where dropoff_point is already a JSON-parsed dict
-            if isinstance(dropoff_point, dict):
-                logger.info(f"nearest_dropoff_point is a dict: {dropoff_point}")
-            # Handle case where dropoff_point is a string (JSON or otherwise)
-            elif isinstance(dropoff_point, str):
-                try:
-                    dropoff_point = json.loads(dropoff_point)
-                    logger.info(f"Parsed nearest_dropoff_point from JSON string: {dropoff_point}")
-                except json.JSONDecodeError:
-                    logger.error(f"Could not parse nearest_dropoff_point as JSON: {dropoff_point}")
-                    return {
-                        'coordinates': {'latitude': 0, 'longitude': 0},
-                        'distance_to_destination': "Unknown",
-                        'address': "Unknown location",
-                        'message': "Dropoff information is not available."
-                    }
-            else:
-                logger.error(f"Unexpected nearest_dropoff_point type: {type(dropoff_point)}")
-                return None
-            
-            # Extract coordinates with fallbacks
-            coordinates = dropoff_point.get('coordinates', [0, 0])
-            
-            # Handle different coordinate formats consistently
-            if isinstance(coordinates, list) or isinstance(coordinates, tuple):
-                # For list/tuple format, assume (lng, lat) format
-                if len(coordinates) >= 2:
-                    longitude, latitude = coordinates[0], coordinates[1]
-                    logger.info(f"Extracted coordinates from list/tuple: lng={longitude}, lat={latitude}")
-                else:
-                    longitude, latitude = 0, 0
-                    logger.warning(f"Incomplete coordinates list/tuple: {coordinates}")
-            elif isinstance(coordinates, dict):
-                # For dict format, check for various key combinations
-                if 'longitude' in coordinates and 'latitude' in coordinates:
-                    longitude = coordinates.get('longitude', 0)
-                    latitude = coordinates.get('latitude', 0)
-                    logger.info(f"Extracted coordinates from dict with lng/lat keys: lng={longitude}, lat={latitude}")
-                elif 'lng' in coordinates and 'lat' in coordinates:
-                    longitude = coordinates.get('lng', 0)
-                    latitude = coordinates.get('lat', 0)
-                    logger.info(f"Extracted coordinates from dict with lng/lat keys: lng={longitude}, lat={latitude}")
-                elif 'lon' in coordinates and 'lat' in coordinates:
-                    longitude = coordinates.get('lon', 0)
-                    latitude = coordinates.get('lat', 0)
-                    logger.info(f"Extracted coordinates from dict with lon/lat keys: lng={longitude}, lat={latitude}")
-                elif 0 in coordinates and 1 in coordinates:
-                    # Indexed dict like {0: lng, 1: lat}
-                    longitude, latitude = coordinates[0], coordinates[1]
-                    logger.info(f"Extracted coordinates from indexed dict: lng={longitude}, lat={latitude}")
-                else:
-                    longitude, latitude = 0, 0
-                    logger.warning(f"Could not extract coordinates from dict: {coordinates}")
-            else:
-                longitude, latitude = 0, 0
-                logger.error(f"Unexpected coordinates format: {coordinates}")
-            
-            # Validate coordinates
-            if not (-180 <= longitude <= 180 and -90 <= latitude <= 90):
-                # Try swapping if they appear to be reversed
-                if (-90 <= longitude <= 90 and -180 <= latitude <= 180):
-                    logger.warning(f"Coordinates appear to be reversed. Swapping lat/lng values.")
-                    longitude, latitude = latitude, longitude
-                else:
-                    logger.error(f"Invalid coordinate values outside normal ranges: lng={longitude}, lat={latitude}")
-                    # Use fallback values
-                    longitude, latitude = 0, 0
-            
-            # Get distance with fallbacks
-            distance = dropoff_point.get('distance_to_destination', 0)
-            unit = dropoff_point.get('unit', 'kilometers')
-            
-            # Get address with fallback
-            address = dropoff_point.get('address', 'Unknown location')
-            if not address or address == 'None':
-                address = 'Location near your destination'
-            
-            # Format distance for display
-            formatted_distance = f"{distance:.2f} {unit}" if isinstance(distance, (int, float)) else "Unknown distance"
-            if isinstance(distance, (int, float)) and distance < 1:
-                formatted_distance = f"{distance * 1000:.0f} meters"
-            
-            result = {
-                'coordinates': {
-                    'latitude': latitude,
-                    'longitude': longitude
-                },
-                'distance_to_destination': formatted_distance,
-                'address': address,
-                'message': f"The driver can drop you off at {address}, which is {formatted_distance} from your destination."
-            }
-            
-            logger.info(f"Formatted nearest_dropoff_info: {result}")
-            return result
-        except Exception as e:
-            logger.error(f"Error formatting nearest_dropoff_info: {str(e)}")
-            logger.exception("Exception details:")
-            # Return minimal valid data rather than None
+            # If we don't have a properly formatted record, return basic info
             return {
-                'coordinates': {'latitude': 0, 'longitude': 0},
-                'distance_to_destination': "Unknown",
-                'address': "Near destination",
-                'message': "The driver can drop you off near your destination."
+                'coordinates': obj.nearest_dropoff_point,
+                'address': 'Near your destination'
+            }
+        except Exception as e:
+            logger.error(f"Error parsing nearest_dropoff_point: {e}")
+            return {
+                'coordinates': None,
+                'address': 'Near your destination'
+            }
+    
+    def get_optimal_pickup_info(self, obj):
+        if not obj.optimal_pickup_point:
+            return None
+        
+        try:
+            # Directly return the JSONField data if it's already in the right format
+            if isinstance(obj.optimal_pickup_point, dict) and 'address' in obj.optimal_pickup_point:
+                return obj.optimal_pickup_point
+            
+            # Parse string JSON if needed
+            import json
+            if isinstance(obj.optimal_pickup_point, str):
+                data = json.loads(obj.optimal_pickup_point)
+                if isinstance(data, dict) and 'address' in data:
+                    return data
+            
+            # If we don't have a properly formatted record, return basic info
+            return {
+                'coordinates': obj.optimal_pickup_point,
+                'address': 'Suggested pickup location'
+            }
+        except Exception as e:
+            logger.error(f"Error parsing optimal_pickup_point: {e}")
+            return {
+                'coordinates': None,
+                'address': 'Suggested pickup location'
             }
 
     def validate(self, data):

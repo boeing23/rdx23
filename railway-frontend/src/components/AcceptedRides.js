@@ -234,6 +234,189 @@ const AcceptedRides = () => {
     setOpenCompleteDialog(false);
   };
 
+  // Add a function to render pickup and dropoff information with the optimal points
+  const renderLocationDetails = (ride) => {
+    const isDriver = userType === '"DRIVER"' || userType === 'DRIVER';
+    const hasOptimalPickup = ride.optimal_pickup_info && ride.optimal_pickup_info.address;
+    const hasNearestDropoff = ride.nearest_dropoff_info && ride.nearest_dropoff_info.address;
+    
+    return (
+      <>
+        <ListItem>
+          <ListItemIcon>
+            <LocationOn sx={{ color: '#861F41' }} />
+          </ListItemIcon>
+          <ListItemText 
+            primary="Pickup" 
+            secondary={
+              <>
+                <Typography variant="body2">{ride.pickup_location}</Typography>
+                {isDriver && hasOptimalPickup && (
+                  <Typography variant="body2" sx={{ color: 'success.main', mt: 0.5 }}>
+                    <b>Suggested pickup point:</b> {ride.optimal_pickup_info.address}
+                  </Typography>
+                )}
+              </>
+            } 
+          />
+        </ListItem>
+        <ListItem>
+          <ListItemIcon>
+            <ArrowForward sx={{ color: '#861F41' }} />
+          </ListItemIcon>
+          <ListItemText 
+            primary="Dropoff" 
+            secondary={
+              <>
+                <Typography variant="body2">{ride.dropoff_location}</Typography>
+                {!isDriver && hasNearestDropoff && (
+                  <Typography variant="body2" sx={{ color: 'success.main', mt: 0.5 }}>
+                    <b>Nearest dropoff point:</b> {ride.nearest_dropoff_info.address}
+                  </Typography>
+                )}
+              </>
+            } 
+          />
+        </ListItem>
+      </>
+    );
+  };
+
+  // Update the RideCard component to use the new renderLocationDetails function
+  const RideCard = ({ ride }) => {
+    // Rest of the code remains the same...
+
+    return (
+      <Card sx={{ mb: 3, borderRadius: '12px', boxShadow: 2 }}>
+        <CardContent sx={{ p: 2 }}>
+          {/* Status chip and departure time */}
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+            {getStatusChip(ride.status)}
+            <Typography variant="body2" color="text.secondary">
+              {formatDate(ride.departure_time)}
+            </Typography>
+          </Box>
+          
+          <Divider sx={{ my: 1.5 }} />
+          
+          {/* User details */}
+          <Box sx={{ my: 2 }}>
+            <Typography variant="subtitle1" gutterBottom>
+              {userType === '"DRIVER"' || userType === 'DRIVER' ? 'Rider Details' : 'Driver Details'}
+            </Typography>
+            <List dense>
+              <ListItem>
+                <ListItemIcon>
+                  <Person sx={{ color: '#861F41' }} />
+                </ListItemIcon>
+                <ListItemText 
+                  primary="Name" 
+                  secondary={
+                    userType === '"DRIVER"' || userType === 'DRIVER' 
+                      ? getFullName(ride.rider) 
+                      : getFullName(ride.ride_details?.driver)
+                  } 
+                />
+              </ListItem>
+              <ListItem>
+                <ListItemIcon>
+                  <Phone sx={{ color: '#861F41' }} />
+                </ListItemIcon>
+                <ListItemText 
+                  primary="Phone" 
+                  secondary={
+                    userType === '"DRIVER"' || userType === 'DRIVER' 
+                      ? getPhoneNumber(ride.rider) 
+                      : getPhoneNumber(ride.ride_details?.driver)
+                  } 
+                />
+              </ListItem>
+              <ListItem>
+                <ListItemIcon>
+                  <Email sx={{ color: '#861F41' }} />
+                </ListItemIcon>
+                <ListItemText 
+                  primary="Email" 
+                  secondary={
+                    userType === '"DRIVER"' || userType === 'DRIVER' 
+                      ? getEmail(ride.rider) 
+                      : getEmail(ride.ride_details?.driver)
+                  } 
+                />
+              </ListItem>
+              {userType !== '"DRIVER"' && userType !== 'DRIVER' && (
+                <ListItem>
+                  <ListItemIcon>
+                    <DirectionsCar sx={{ color: '#861F41' }} />
+                  </ListItemIcon>
+                  <ListItemText 
+                    primary="Vehicle" 
+                    secondary={
+                      ride.ride_details?.driver 
+                        ? `${ride.ride_details.driver.vehicle_color} ${ride.ride_details.driver.vehicle_make} ${ride.ride_details.driver.vehicle_model} (${ride.ride_details.driver.license_plate})`
+                        : 'No vehicle information'
+                    } 
+                  />
+                </ListItem>
+              )}
+            </List>
+          </Box>
+          
+          <Divider sx={{ my: 1.5 }} />
+          
+          {/* Ride details */}
+          <Box sx={{ my: 2 }}>
+            <Typography variant="subtitle1" gutterBottom>
+              Ride Details
+            </Typography>
+            <List dense>
+              <ListItem>
+                <ListItemIcon>
+                  <Event sx={{ color: '#861F41' }} />
+                </ListItemIcon>
+                <ListItemText primary="Date" secondary={formatDate(ride.departure_time, true)} />
+              </ListItem>
+              <ListItem>
+                <ListItemIcon>
+                  <AccessTime sx={{ color: '#861F41' }} />
+                </ListItemIcon>
+                <ListItemText primary="Time" secondary={formatDate(ride.departure_time, false, true)} />
+              </ListItem>
+              
+              {/* Use the new function to render pickup and dropoff with optimal points */}
+              {renderLocationDetails(ride)}
+              
+            </List>
+          </Box>
+          
+          {/* Action buttons */}
+          {ride.status === 'ACCEPTED' && (
+            <Box sx={{ mt: 2, display: 'flex', justifyContent: 'space-between' }}>
+              <Button
+                variant="outlined"
+                color="error"
+                startIcon={<Cancel />}
+                onClick={() => handleOpenCancelDialog(ride)}
+                size="small"
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="contained"
+                color="success"
+                endIcon={<CheckCircle />}
+                onClick={() => handleOpenCompleteDialog(ride)}
+                size="small"
+              >
+                Mark as Completed
+              </Button>
+            </Box>
+          )}
+        </CardContent>
+      </Card>
+    );
+  };
+
   if (loading) {
     return (
       <Container>
