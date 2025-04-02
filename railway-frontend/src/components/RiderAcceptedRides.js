@@ -42,34 +42,66 @@ const RiderAcceptedRides = () => {
         return;
       }
 
-      const response = await fetch(`${API_BASE_URL}/api/rides/requests/accepted/`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
+      // Add a timeout to the fetch request
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 seconds timeout
+      
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/rides/requests/accepted/`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          },
+          signal: controller.signal
+        });
 
-      if (!response.ok) {
-        throw new Error('Failed to fetch accepted rides');
-      }
+        if (!response.ok) {
+          // For 404 Not Found or 204 No Content, it's likely the user just hasn't started any trips yet
+          if (response.status === 404 || response.status === 204 || response.status === 403) {
+            console.log(`No rides found (${response.status} response) - treating as empty state`);
+            setAcceptedRides([]);
+            setLoading(false);
+            return;
+          }
+          
+          // Log the exact response status and statusText for debugging
+          console.error(`API response error: ${response.status} ${response.statusText}`);
+          
+          throw new Error(`Failed to fetch accepted rides: ${response.status} ${response.statusText}`);
+        }
 
-      const data = await response.json();
-      
-      // Filter out cancelled rides
-      const filteredRides = data.filter(ride => ride.status !== 'CANCELLED');
-      
-      // Sort rides by departure time (most recent first)
-      const sortedRides = filteredRides.sort((a, b) => 
-        new Date(b.departure_time) - new Date(a.departure_time)
-      );
-      
-      setAcceptedRides(sortedRides);
-      if (sortedRides.length > 0) {
-        setSelectedRide(sortedRides[0]);
+        const data = await response.json();
+        
+        // Filter out cancelled rides
+        const filteredRides = data.filter(ride => ride.status !== 'CANCELLED');
+        
+        // Sort rides by departure time (most recent first)
+        const sortedRides = filteredRides.sort((a, b) => 
+          new Date(b.departure_time) - new Date(a.departure_time)
+        );
+        
+        setAcceptedRides(sortedRides);
+        if (sortedRides.length > 0) {
+          setSelectedRide(sortedRides[0]);
+        }
+        setLoading(false);
+      } finally {
+        clearTimeout(timeoutId); // Always clear the timeout
       }
-      setLoading(false);
     } catch (err) {
       console.error('Error fetching accepted rides:', err);
-      setError('Failed to load accepted rides. Please try again.');
+      
+      // Special handling for request timeout
+      if (err.name === 'AbortError') {
+        setError('Request timed out. Please check your connection and try again.');
+      } else {
+        // For other errors, treat as no rides available
+        console.log('Treating error as empty rides list:', err.message);
+        setAcceptedRides([]);
+        setError(''); // Clear the error to not show the error message
+      }
+      
       setLoading(false);
     }
   };
@@ -160,8 +192,57 @@ const RiderAcceptedRides = () => {
   }
 
   if (error) {
+    // If it's the common error message about failing to load rides, show a friendly UI
+    if (error === 'Failed to load accepted rides. Please try again.' || 
+        error.includes('Failed to fetch') || 
+        error.includes('Failed to load')) {
+      return (
+        <Container maxWidth="lg" sx={{ py: 4 }}>
+          <Typography variant="h4" component="h1" gutterBottom sx={{ textAlign: 'center', mb: 4 }}>
+            My Trips
+          </Typography>
+          <Paper elevation={2} sx={{ p: 4, borderRadius: '12px', mt: 3, textAlign: 'center' }}>
+            <Box sx={{ 
+              display: 'flex', 
+              flexDirection: 'column', 
+              alignItems: 'center',
+              justifyContent: 'center',
+              py: 4
+            }}>
+              <Schedule sx={{ fontSize: 80, color: '#861F41', mb: 2, opacity: 0.8 }} />
+              <Typography variant="h5" gutterBottom sx={{ fontWeight: 'bold', color: '#861F41' }}>
+                The road's calling your name!
+              </Typography>
+              <Typography variant="body1" gutterBottom color="text.secondary" sx={{ maxWidth: 600, mb: 3 }}>
+                Looks like you haven't started your journey yet. Time to hop in and explore the world with ChalBeyy!
+              </Typography>
+              <Button 
+                variant="contained" 
+                onClick={() => window.location.href = '/request-ride'}
+                sx={{ 
+                  borderRadius: '12px',
+                  py: 1.5,
+                  px: 4,
+                  textTransform: 'none',
+                  fontWeight: 600,
+                  bgcolor: '#861F41', 
+                  '&:hover': { bgcolor: '#5e0d29' }
+                }}
+              >
+                Find a Ride
+              </Button>
+            </Box>
+          </Paper>
+        </Container>
+      );
+    }
+    
+    // For other types of errors, show the alert
     return (
       <Container>
+        <Typography variant="h4" component="h1" gutterBottom sx={{ textAlign: 'center', mb: 4 }}>
+          My Trips
+        </Typography>
         <Alert severity="error" sx={{ mt: 2 }}>{error}</Alert>
       </Container>
     );
@@ -170,12 +251,41 @@ const RiderAcceptedRides = () => {
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
       <Typography variant="h4" component="h1" gutterBottom sx={{ textAlign: 'center', mb: 4 }}>
-        My Accepted Rides
+        My Trips
       </Typography>
 
       {acceptedRides.length === 0 ? (
-        <Paper sx={{ p: 3, textAlign: 'center' }}>
-          <Typography>You don't have any accepted rides yet.</Typography>
+        <Paper elevation={2} sx={{ p: 4, borderRadius: '12px', mt: 3, textAlign: 'center' }}>
+          <Box sx={{ 
+            display: 'flex', 
+            flexDirection: 'column', 
+            alignItems: 'center',
+            justifyContent: 'center',
+            py: 4
+          }}>
+            <Schedule sx={{ fontSize: 80, color: '#861F41', mb: 2, opacity: 0.8 }} />
+            <Typography variant="h5" gutterBottom sx={{ fontWeight: 'bold', color: '#861F41' }}>
+              Rides waiting, seats inviting!
+            </Typography>
+            <Typography variant="body1" gutterBottom color="text.secondary" sx={{ maxWidth: 600, mb: 3 }}>
+              Your journey begins with just one click! Find your perfect ride and let the adventures begin.
+            </Typography>
+            <Button 
+              variant="contained" 
+              onClick={() => window.location.href = '/request-ride'}
+              sx={{ 
+                borderRadius: '12px',
+                py: 1.5,
+                px: 4,
+                textTransform: 'none',
+                fontWeight: 600,
+                bgcolor: '#861F41', 
+                '&:hover': { bgcolor: '#5e0d29' }
+              }}
+            >
+              Find a Ride
+            </Button>
+          </Box>
         </Paper>
       ) : (
         <Grid container spacing={3}>
