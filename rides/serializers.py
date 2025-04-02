@@ -57,12 +57,75 @@ class NotificationSerializer(serializers.ModelSerializer):
 
     def get_ride_details(self, obj):
         if obj.ride:
+            # Get nearest dropoff point if this is a ride match notification
+            nearest_dropoff_info = None
+            if obj.notification_type == 'RIDE_MATCH' and obj.ride_request and obj.ride_request.nearest_dropoff_point:
+                try:
+                    # Try to get the nearest dropoff point coordinates
+                    dropoff_point = obj.ride_request.nearest_dropoff_point
+                    
+                    # Get a more readable address for the dropoff point
+                    address = "Near destination"
+                    try:
+                        from geopy.geocoders import Nominatim
+                        import json
+                        
+                        # Parse coordinates from different possible formats
+                        if isinstance(dropoff_point, str):
+                            try:
+                                dropoff_point = json.loads(dropoff_point)
+                            except:
+                                # If can't parse as JSON, try to extract coordinates directly
+                                import re
+                                coords = re.findall(r"[-+]?\d*\.\d+|\d+", dropoff_point)
+                                if len(coords) >= 2:
+                                    lat, lng = float(coords[0]), float(coords[1])
+                                    dropoff_point = [lat, lng]
+                        
+                        # Extract coordinates based on format
+                        if isinstance(dropoff_point, list) or isinstance(dropoff_point, tuple):
+                            if len(dropoff_point) >= 2:
+                                lat, lng = dropoff_point[0], dropoff_point[1]
+                        elif isinstance(dropoff_point, dict):
+                            if 'coordinates' in dropoff_point:
+                                coords = dropoff_point['coordinates']
+                                if isinstance(coords, list) and len(coords) >= 2:
+                                    lat, lng = coords[0], coords[1]
+                            elif 'lat' in dropoff_point and 'lng' in dropoff_point:
+                                lat, lng = dropoff_point['lat'], dropoff_point['lng']
+                            elif 'latitude' in dropoff_point and 'longitude' in dropoff_point:
+                                lat, lng = dropoff_point['latitude'], dropoff_point['longitude']
+                        
+                        # Get address using geocoding
+                        geolocator = Nominatim(user_agent="chalbeyy")
+                        location = geolocator.reverse((lat, lng))
+                        if location and location.address:
+                            address = location.address
+                    except Exception as e:
+                        logger.error(f"Error getting address for nearest dropoff: {str(e)}")
+                    
+                    nearest_dropoff_info = {
+                        'coordinates': dropoff_point,
+                        'address': address
+                    }
+                except Exception as e:
+                    logger.error(f"Error processing nearest dropoff point: {str(e)}")
+            
+            # Format departure time in EDT timezone
+            import pytz
+            departure_time = obj.ride.departure_time
+            est = pytz.timezone('America/New_York')
+            departure_time_edt = departure_time.astimezone(est)
+            formatted_time = departure_time_edt.strftime("%m/%d/%Y, %I:%M:%S %p EDT")
+            
             return {
                 'id': obj.ride.id,
                 'start_location': obj.ride.start_location,
                 'end_location': obj.ride.end_location,
                 'departure_time': obj.ride.departure_time,
-                'available_seats': obj.ride.available_seats
+                'formatted_departure_time': formatted_time,
+                'available_seats': obj.ride.available_seats,
+                'nearest_dropoff_info': nearest_dropoff_info
             }
         return None
 

@@ -9,7 +9,8 @@ import {
   Badge,
   Divider,
   Popover,
-  Button
+  Button,
+  Container
 } from '@mui/material';
 import NotificationsIcon from '@mui/icons-material/Notifications';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
@@ -154,6 +155,27 @@ function NotificationList() {
     }
   };
 
+  const formatDateTime = (dateString) => {
+    try {
+      // Create a formatter with EDT timezone specification
+      const date = new Date(dateString);
+      // Format as MM/DD/YYYY, HH:MM:SS AM/PM EDT
+      return new Intl.DateTimeFormat('en-US', {
+        month: '2-digit',
+        day: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        timeZone: 'America/New_York',
+        timeZoneName: 'short'
+      }).format(date);
+    } catch (error) {
+      console.error('Error formatting date:', error);
+      return 'Invalid date';
+    }
+  };
+
   const formatDate = (dateString) => {
     try {
       return new Date(dateString).toLocaleString();
@@ -200,130 +222,244 @@ function NotificationList() {
     return null;
   };
 
-  return (
-    <div style={{ display: 'inline-block', marginLeft: '10px' }}>
-      <IconButton 
-        ref={buttonRef}
-        color="inherit" 
-        onClick={handleClick}
-        sx={{ 
-          '&:hover': {
-            backgroundColor: 'rgba(255, 255, 255, 0.1)'
-          }
-        }}
-      >
-        <Badge badgeContent={unreadCount} color="error">
-          <NotificationsIcon />
-        </Badge>
-      </IconButton>
+  // Function to render ride match details for better readability
+  const renderRideMatchDetails = (notification) => {
+    if (notification.notification_type !== 'RIDE_MATCH' || !notification.ride_details) {
+      return null;
+    }
 
-      <Popover
-        open={open}
-        anchorEl={anchorEl}
-        onClose={handleClose}
-        slotProps={{
-          paper: {
-            elevation: 4,
-            sx: {
-              width: 400,
-              maxHeight: 500,
-              overflow: 'auto',
-              mt: 1,
-              '@media (max-width: 600px)': {
-                width: '300px',
+    const driver = notification.sender;
+    const ride = notification.ride_details;
+    const vehicle = notification.sender_vehicle;
+    const dropoffInfo = notification.ride_request && notification.ride_request.nearest_dropoff_info;
+    
+    return (
+      <Box sx={{ mt: 2, p: 2, bgcolor: 'background.paper', borderRadius: 1, boxShadow: 1 }}>
+        <Typography variant="subtitle1" sx={{ fontWeight: 'bold', mb: 1 }}>
+          Ride Match Found!
+        </Typography>
+        
+        {/* Driver Details */}
+        <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mt: 1 }}>
+          Driver Details
+        </Typography>
+        <Typography variant="body2">
+          Name: {driver ? `${driver.name}` : 'Unknown'}<br />
+          Email: {notification.sender_email || 'Not available'}<br />
+          Phone: {notification.sender_phone || 'Not available'}
+        </Typography>
+        
+        {/* Vehicle Details */}
+        {vehicle && (
+          <>
+            <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mt: 1 }}>
+              Vehicle Details
+            </Typography>
+            <Typography variant="body2">
+              {vehicle.year || ''} {vehicle.make || ''} {vehicle.model || ''}<br />
+              Color: {vehicle.color || 'Not specified'}<br />
+              License Plate: {vehicle.plate || 'Not specified'}<br />
+              {ride && ride.available_seats && <span>Available Seats: {ride.available_seats}</span>}
+            </Typography>
+          </>
+        )}
+        
+        {/* Ride Details */}
+        <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mt: 1 }}>
+          Ride Details
+        </Typography>
+        <Typography variant="body2">
+          From: {ride ? ride.start_location : 'Not specified'}<br />
+          To: {ride ? ride.end_location : 'Not specified'}<br />
+          {dropoffInfo && (
+            <span>Rider Dropoff: {dropoffInfo.address || 'Near destination'}<br /></span>
+          )}
+          Departure: {ride ? formatDateTime(ride.departure_time) : 'Not specified'}
+        </Typography>
+      </Box>
+    );
+  };
+
+  const renderNotificationContent = (notification) => {
+    switch (notification.notification_type) {
+      case 'RIDE_MATCH':
+        const rideDetails = notification.ride_details;
+        const formattedTime = rideDetails?.formatted_departure_time || 'Unknown time';
+        const dropoffInfo = rideDetails?.nearest_dropoff_info?.address || 'Near your destination';
+        
+        return (
+          <Box>
+            <Typography variant="body1" sx={{ fontWeight: 'medium' }}>
+              {notification.message}
+            </Typography>
+            <Typography variant="body2" sx={{ mt: 1 }}>
+              <strong>Driver:</strong> {notification.sender_details?.username || 'Unknown'}
+            </Typography>
+            {notification.sender_details?.phone_number && (
+              <Typography variant="body2">
+                <strong>Phone:</strong> {notification.sender_details.phone_number}
+              </Typography>
+            )}
+            <Typography variant="body2">
+              <strong>Dropoff:</strong> {dropoffInfo}
+            </Typography>
+            <Typography variant="body2">
+              <strong>Departure:</strong> {formattedTime}
+            </Typography>
+            {notification.ride_details && (
+              <Button 
+                variant="contained" 
+                size="small" 
+                sx={{ mt: 1, borderRadius: '8px' }}
+                onClick={() => handleViewRide(notification.ride_details.id)}
+              >
+                View Details
+              </Button>
+            )}
+          </Box>
+        );
+      default:
+        return (
+          <Typography variant="body1">
+            {notification.message}
+          </Typography>
+        );
+    }
+  };
+
+  return (
+    <Container maxWidth="md">
+      <Typography variant="h4" className="page-title" gutterBottom>
+        Notifications
+      </Typography>
+      <div style={{ display: 'inline-block', marginLeft: '10px' }}>
+        <IconButton 
+          ref={buttonRef}
+          color="inherit" 
+          onClick={handleClick}
+          sx={{ 
+            '&:hover': {
+              backgroundColor: 'rgba(255, 255, 255, 0.1)'
+            }
+          }}
+        >
+          <Badge badgeContent={unreadCount} color="error">
+            <NotificationsIcon />
+          </Badge>
+        </IconButton>
+
+        <Popover
+          open={open}
+          anchorEl={anchorEl}
+          onClose={handleClose}
+          slotProps={{
+            paper: {
+              elevation: 4,
+              sx: {
+                width: 400,
+                maxHeight: 500,
+                overflow: 'auto',
+                mt: 1,
+                '@media (max-width: 600px)': {
+                  width: '300px',
+                }
               }
             }
-          }
-        }}
-        anchorOrigin={{
-          vertical: 'bottom',
-          horizontal: 'right',
-        }}
-        transformOrigin={{
-          vertical: 'top',
-          horizontal: 'right',
-        }}
-      >
-        <Box sx={{ 
-          p: 2, 
-          bgcolor: 'primary.main',
-          color: 'primary.contrastText',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center'
-        }}>
-          <Typography variant="h6">Notifications</Typography>
-          {unreadCount > 0 && (
-            <Typography variant="body2">
-              {unreadCount} unread
-            </Typography>
-          )}
-        </Box>
-        <Divider />
-        <List sx={{ p: 0 }}>
-          {error ? (
-            <ListItem>
-              <ListItemText 
-                primary={error}
-                sx={{ textAlign: 'center', color: 'error.main' }}
-              />
-            </ListItem>
-          ) : notifications.length === 0 ? (
-            <ListItem>
-              <ListItemText 
-                primary="No notifications" 
-                sx={{ textAlign: 'center' }}
-              />
-            </ListItem>
-          ) : (
-            notifications.map((notification) => (
-              <ListItem
-                key={notification.id}
-                sx={{
-                  bgcolor: notification.is_read ? 'inherit' : 'action.hover',
-                  '&:hover': { bgcolor: 'action.selected' },
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'flex-start',
-                  py: 2
-                }}
-              >
-                <Box sx={{ display: 'flex', width: '100%' }}>
-                  <ListItemText
-                    primary={
-                      <Typography variant="body1" component="div">
-                        {notification.message}
-                      </Typography>
-                    }
-                    secondary={
-                      <Typography variant="caption" color="text.secondary">
-                        {formatDate(notification.created_at)}
-                      </Typography>
-                    }
-                    sx={{ 
-                      flex: 1,
-                      '& .MuiListItemText-primary': {
-                        mb: 0.5
-                      }
-                    }}
-                  />
-                  {!notification.is_read && (
-                    <IconButton
-                      size="small"
-                      onClick={() => handleMarkAsRead(notification.id)}
-                      sx={{ ml: 1 }}
-                    >
-                      <CheckCircleIcon color="primary" />
-                    </IconButton>
-                  )}
-                </Box>
-                {renderAcceptButton(notification)}
+          }}
+          anchorOrigin={{
+            vertical: 'bottom',
+            horizontal: 'right',
+          }}
+          transformOrigin={{
+            vertical: 'top',
+            horizontal: 'right',
+          }}
+        >
+          <Box sx={{ 
+            p: 2, 
+            bgcolor: 'primary.main',
+            color: 'primary.contrastText',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center'
+          }}>
+            <Typography variant="h6">Notifications</Typography>
+            {unreadCount > 0 && (
+              <Typography variant="body2">
+                {unreadCount} unread
+              </Typography>
+            )}
+          </Box>
+          <Divider />
+          <List sx={{ p: 0 }}>
+            {error ? (
+              <ListItem>
+                <ListItemText 
+                  primary={error}
+                  sx={{ textAlign: 'center', color: 'error.main' }}
+                />
               </ListItem>
-            ))
-          )}
-        </List>
-      </Popover>
-    </div>
+            ) : notifications.length === 0 ? (
+              <ListItem>
+                <ListItemText 
+                  primary="No notifications" 
+                  sx={{ textAlign: 'center' }}
+                />
+              </ListItem>
+            ) : (
+              notifications.map((notification) => (
+                <ListItem
+                  key={notification.id}
+                  sx={{
+                    bgcolor: notification.is_read ? 'inherit' : 'action.hover',
+                    '&:hover': { bgcolor: 'action.selected' },
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'flex-start',
+                    py: 2
+                  }}
+                >
+                  <Box sx={{ display: 'flex', width: '100%' }}>
+                    <ListItemText
+                      primary={
+                        <Typography variant="body1" component="div">
+                          {renderNotificationContent(notification)}
+                        </Typography>
+                      }
+                      secondary={
+                        <Typography variant="caption" color="text.secondary">
+                          {formatDate(notification.created_at)}
+                        </Typography>
+                      }
+                      sx={{ 
+                        flex: 1,
+                        '& .MuiListItemText-primary': {
+                          mb: 0.5
+                        }
+                      }}
+                    />
+                    {!notification.is_read && (
+                      <IconButton
+                        size="small"
+                        onClick={() => handleMarkAsRead(notification.id)}
+                        sx={{ ml: 1 }}
+                      >
+                        <CheckCircleIcon color="primary" />
+                      </IconButton>
+                    )}
+                  </Box>
+                  
+                  {/* Add ride match details */}
+                  {notification.notification_type === 'RIDE_MATCH' && renderRideMatchDetails(notification)}
+                  
+                  {renderAcceptButton(notification)}
+                </ListItem>
+              ))
+            )}
+          </List>
+        </Popover>
+      </div>
+    </Container>
   );
 }
 
