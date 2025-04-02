@@ -12,18 +12,22 @@ import {
   Button,
   Container,
   Alert,
-  Paper
+  Paper,
+  CircularProgress
 } from '@mui/material';
 import NotificationsIcon from '@mui/icons-material/Notifications';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import DirectionsCarIcon from '@mui/icons-material/DirectionsCar';
-import { API_BASE_URL } from '../config';
+import RefreshIcon from '@mui/icons-material/Refresh';
+import { API_BASE_URL, FALLBACK_API_URL, checkApiConnection } from '../config';
 
 function NotificationList() {
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
   const [anchorEl, setAnchorEl] = useState(null);
+  const [serverAvailable, setServerAvailable] = useState(true);
   const buttonRef = useRef(null);
   const open = Boolean(anchorEl);
 
@@ -38,42 +42,75 @@ function NotificationList() {
   const getToken = () => {
     try {
       const token = localStorage.getItem('token');
-      return token;
+      // Clean the token - remove any quotes or spaces
+      if (token) {
+        return token.trim().replace(/^["'](.*)["']$/, '$1');
+      }
+      return null;
     } catch (error) {
       console.error('Error getting token from localStorage:', error);
       return null;
     }
   };
 
-  const fetchNotifications = async () => {
+  // Function to check server availability
+  const checkServerAvailability = async () => {
+    const isAvailable = await checkApiConnection();
+    setServerAvailable(isAvailable);
+    return isAvailable;
+  };
+
+  const fetchNotifications = async (skipServerCheck = false) => {
+    if (loading) return; // Prevent multiple simultaneous requests
+    
+    setLoading(true);
+    setError('');
+    
     try {
+      // First check if server is available (unless we're skipping this check)
+      if (!skipServerCheck) {
+        const isAvailable = await checkServerAvailability();
+        if (!isAvailable) {
+          setError('Cannot connect to the notification server. Please check your internet connection or try again later.');
+          setLoading(false);
+          return;
+        }
+      }
+      
       const token = getToken();
       if (!token) {
         console.error('No authentication token found');
         setError('Please log in to view notifications');
+        setLoading(false);
         return;
       }
-
-      // Clean the token - remove any quotes or spaces
-      const cleanToken = token.trim().replace(/^["'](.*)["']$/, '$1');
       
       // Check token validity before making the request
-      if (!cleanToken || cleanToken.length < 10) {
+      if (!token || token.length < 10) {
         console.error('Invalid token format');
         setError('Invalid authentication token. Please log in again.');
         localStorage.removeItem('token');
+        setLoading(false);
         return;
       }
 
+      console.log('Fetching notifications from:', `${API_BASE_URL}/api/rides/notifications/`);
+      
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+      
       const response = await fetch(`${API_BASE_URL}/api/rides/notifications/`, {
         method: 'GET',
         headers: {
-          'Authorization': `Bearer ${cleanToken}`,
+          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
           'Accept': 'application/json'
         },
-        credentials: 'include'
+        credentials: 'include',
+        signal: controller.signal
       });
+      
+      clearTimeout(timeoutId);
 
       if (response.ok) {
         const data = await response.json();
@@ -84,6 +121,7 @@ function NotificationList() {
         syncUnreadCount(count);
         // Clear any previous errors
         setError('');
+        setServerAvailable(true);
         
         const rideMatches = data.filter(n => n.notification_type === 'RIDE_MATCH');
         if (rideMatches.length > 0) {
@@ -96,24 +134,61 @@ function NotificationList() {
         try {
           const errorData = await response.json();
           errorMessage = errorData.message || errorData.detail || errorMessage;
+          console.error('Error response data:', errorData);
         } catch (e) {
           // If can't parse JSON, use status text
           errorMessage = `${errorMessage}: ${response.statusText}`;
         }
         
         console.error('Error response status:', response.status, errorMessage);
-        setError(errorMessage);
+        console.error('Response URL:', response.url);
         
-        // Handle token expiration
+        // Handle specific HTTP errors
         if (response.status === 401) {
-          console.log('Token may be expired, clearing session');
+          errorMessage = 'Your session has expired. Please log in again.';
           localStorage.removeItem('token');
+        } else if (response.status === 403) {
+          errorMessage = 'You do not have permission to view notifications.';
+        } else if (response.status === 404) {
+          errorMessage = 'Notification service not found. Please try again later.';
+        } else if (response.status >= 500) {
+          errorMessage = 'Server error. Please try again later.';
+          setServerAvailable(false);
         }
+        
+        setError(errorMessage);
       }
     } catch (err) {
       console.error('Error fetching notifications:', err);
-      setError('Network error while fetching notifications. Please check your connection and try again.');
+      
+      // Handle abort error separately (timeout)
+      if (err.name === 'AbortError') {
+        setError('Request timed out. The server is taking too long to respond.');
+        setServerAvailable(false);
+      }
+      // Check if it's a network error
+      else if (err.name === 'TypeError' && err.message.includes('Network')) {
+        setError('Network error while fetching notifications. Please check your internet connection and try again.');
+        setServerAvailable(false);
+      } else {
+        setError('Failed to load notifications. Please try refreshing the page.');
+      }
+      
+      // Log additional debug info
+      console.error('API_BASE_URL:', API_BASE_URL);
+      console.error('Error details:', {
+        name: err.name,
+        message: err.message,
+        stack: err.stack
+      });
+    } finally {
+      setLoading(false);
     }
+  };
+  
+  // Retry function for users to manually retry fetching
+  const handleRetry = () => {
+    fetchNotifications(true); // Skip server check on manual retry
   };
 
   useEffect(() => {
@@ -401,6 +476,25 @@ function NotificationList() {
     }
   };
 
+  // Update the error display in the popover to include retry button
+  const renderErrorMessage = () => (
+    <Box sx={{ p: 2, textAlign: 'center' }}>
+      <Typography color="error" sx={{ mb: 1 }}>
+        {error}
+      </Typography>
+      <Button 
+        startIcon={<RefreshIcon />}
+        onClick={handleRetry}
+        disabled={loading}
+        variant="outlined" 
+        size="small"
+        sx={{ mt: 1 }}
+      >
+        {loading ? <CircularProgress size={20} /> : 'Retry'}
+      </Button>
+    </Box>
+  );
+
   return (
     <>
       {window.location.pathname === '/notifications' && (
@@ -410,7 +504,17 @@ function NotificationList() {
           </Typography>
           
           {error ? (
-            <Alert severity="error" sx={{ mt: 2, mb: 2 }}>{error}</Alert>
+            <Alert 
+              severity="error" 
+              sx={{ mt: 2, mb: 2 }}
+              action={
+                <Button color="inherit" size="small" onClick={handleRetry} disabled={loading}>
+                  {loading ? <CircularProgress size={20} color="inherit" /> : 'Retry'}
+                </Button>
+              }
+            >
+              {error}
+            </Alert>
           ) : notifications.length === 0 ? (
             <Alert severity="info" sx={{ mt: 2, mb: 2 }}>You have no notifications</Alert>
           ) : (
@@ -537,16 +641,17 @@ function NotificationList() {
           <List sx={{ p: 0 }}>
             {error ? (
               <ListItem>
-                <ListItemText 
-                  primary={error}
-                  sx={{ textAlign: 'center', color: 'error.main' }}
-                />
+                {renderErrorMessage()}
+              </ListItem>
+            ) : loading && notifications.length === 0 ? (
+              <ListItem sx={{ justifyContent: 'center', py: 3 }}>
+                <CircularProgress size={30} />
               </ListItem>
             ) : notifications.length === 0 ? (
               <ListItem>
                 <ListItemText 
-                  primary="No notifications" 
-                  sx={{ textAlign: 'center' }}
+                  primary="You have no notifications"
+                  sx={{ textAlign: 'center', color: 'text.secondary', py: 2 }} 
                 />
               </ListItem>
             ) : (
