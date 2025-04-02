@@ -44,6 +44,10 @@ const AcceptedRides = () => {
   const navigate = useNavigate();
 
   const fetchAcceptedRides = async () => {
+    // Create controller outside try block for scope
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 seconds timeout
+    
     try {
       const token = localStorage.getItem('token');
       const currentUserType = localStorage.getItem('userType');
@@ -51,7 +55,17 @@ const AcceptedRides = () => {
       setUserType(currentUserType || '');
       
       if (!token) {
+        console.log('No authentication token found');
         setError('Please log in to view your trips');
+        setLoading(false);
+        return;
+      }
+
+      // Validate token format (basic check)
+      if (token.trim() === '' || token === 'undefined' || token === 'null') {
+        console.error('Invalid token format:', token);
+        localStorage.removeItem('token'); // Clear invalid token
+        setError('Your session has expired. Please log in again');
         setLoading(false);
         return;
       }
@@ -63,17 +77,33 @@ const AcceptedRides = () => {
       const response = await fetch(`${API_BASE_URL}/api/rides/requests/accepted/`, {
         headers: {
           'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
         },
+        signal: controller.signal
       });
-
+      
       if (!response.ok) {
         // For 404 Not Found, it's likely the user just hasn't started any trips yet
         if (response.status === 404) {
+          console.log('No rides found (404 response)');
           setAcceptedRides([]);
           setLoading(false);
           return;
         }
-        throw new Error('Failed to fetch accepted rides');
+        
+        // Log the exact response status and statusText for debugging
+        console.error(`API response error: ${response.status} ${response.statusText}`);
+        
+        // Try to get more details from the response body if possible
+        try {
+          const errorData = await response.text();
+          console.error('Response body:', errorData);
+        } catch (e) {
+          console.error('Could not read response body:', e);
+        }
+        
+        throw new Error(`Failed to fetch accepted rides: ${response.status} ${response.statusText}`);
       }
 
       const data = await response.json();
@@ -108,9 +138,19 @@ const AcceptedRides = () => {
       setLoading(false);
     } catch (err) {
       console.error('Error fetching accepted rides:', err);
-      // Treat as a first-time user rather than showing error message
-      setAcceptedRides([]);
+
+      // Special handling for request timeout
+      if (err.name === 'AbortError') {
+        setError('Request timed out. Please check your connection and try again.');
+      } else {
+        // For other errors, just treat as no rides available
+        setAcceptedRides([]);
+        setError(''); // Clear the error state
+      }
+      
       setLoading(false);
+    } finally {
+      clearTimeout(timeoutId); // Always clear the timeout
     }
   };
 
