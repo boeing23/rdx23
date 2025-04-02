@@ -120,6 +120,13 @@ const AuthPage = () => {
     first_name: '',
     last_name: '',
     phone_number: '',
+    // Driver-specific fields
+    vehicle_make: '',
+    vehicle_model: '',
+    vehicle_year: '',
+    vehicle_color: '',
+    license_plate: '',
+    max_passengers: ''
   });
   
   const navigate = useNavigate();
@@ -538,6 +545,90 @@ const AuthPage = () => {
                   </UserTypeOption>
                 </Box>
               </FormControl>
+
+              {userType === 'DRIVER' && (
+                <Box sx={{ mb: isMobile ? 2 : 3 }}>
+                  <Typography variant="subtitle1" sx={{ mb: 2, color: '#666', fontSize: isMobile ? '0.875rem' : '1rem' }}>
+                    Vehicle Information
+                  </Typography>
+                  <TextField
+                    fullWidth
+                    label="Vehicle Make"
+                    name="vehicle_make"
+                    variant="outlined"
+                    margin="normal"
+                    value={registerData.vehicle_make}
+                    onChange={handleRegisterChange}
+                    required
+                    size={isMobile ? "small" : "medium"}
+                    sx={{ mb: isMobile ? 1.5 : 2 }}
+                  />
+                  <TextField
+                    fullWidth
+                    label="Vehicle Model"
+                    name="vehicle_model"
+                    variant="outlined"
+                    margin="normal"
+                    value={registerData.vehicle_model}
+                    onChange={handleRegisterChange}
+                    required
+                    size={isMobile ? "small" : "medium"}
+                    sx={{ mb: isMobile ? 1.5 : 2 }}
+                  />
+                  <TextField
+                    fullWidth
+                    label="Vehicle Year"
+                    name="vehicle_year"
+                    type="number"
+                    variant="outlined"
+                    margin="normal"
+                    value={registerData.vehicle_year}
+                    onChange={handleRegisterChange}
+                    required
+                    inputProps={{ min: "1900", max: "2025" }}
+                    size={isMobile ? "small" : "medium"}
+                    sx={{ mb: isMobile ? 1.5 : 2 }}
+                  />
+                  <TextField
+                    fullWidth
+                    label="Vehicle Color"
+                    name="vehicle_color"
+                    variant="outlined"
+                    margin="normal"
+                    value={registerData.vehicle_color}
+                    onChange={handleRegisterChange}
+                    required
+                    size={isMobile ? "small" : "medium"}
+                    sx={{ mb: isMobile ? 1.5 : 2 }}
+                  />
+                  <TextField
+                    fullWidth
+                    label="License Plate"
+                    name="license_plate"
+                    variant="outlined"
+                    margin="normal"
+                    value={registerData.license_plate}
+                    onChange={handleRegisterChange}
+                    required
+                    size={isMobile ? "small" : "medium"}
+                    sx={{ mb: isMobile ? 1.5 : 2 }}
+                  />
+                  <TextField
+                    fullWidth
+                    label="Maximum Passengers"
+                    name="max_passengers"
+                    type="number"
+                    variant="outlined"
+                    margin="normal"
+                    value={registerData.max_passengers}
+                    onChange={handleRegisterChange}
+                    required
+                    inputProps={{ min: "1", max: "8" }}
+                    size={isMobile ? "small" : "medium"}
+                    sx={{ mb: isMobile ? 1.5 : 2 }}
+                  />
+                </Box>
+              )}
               
               <Button
                 fullWidth
