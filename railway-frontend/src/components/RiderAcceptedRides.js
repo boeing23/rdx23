@@ -19,9 +19,10 @@ import {
   Dialog,
   DialogTitle,
   DialogContent,
-  DialogActions
+  DialogActions,
+  CircularProgress
 } from '@mui/material';
-import { Schedule, LocationOn, Person, Phone, Email, Event, AccessTime, Cancel } from '@mui/icons-material';
+import { Schedule, LocationOn, Person, Phone, Email, Event, AccessTime, Cancel, Refresh } from '@mui/icons-material';
 import { API_BASE_URL } from '../config';
 import { format } from 'date-fns';
 
@@ -31,6 +32,7 @@ const RiderAcceptedRides = () => {
   const [error, setError] = useState('');
   const [selectedRide, setSelectedRide] = useState(null);
   const [openCancelDialog, setOpenCancelDialog] = useState(false);
+  const [isRetrying, setIsRetrying] = useState(false);
 
   const fetchAcceptedRides = async () => {
     try {
@@ -42,36 +44,83 @@ const RiderAcceptedRides = () => {
         return;
       }
 
+      // Clean the token (remove quotes or spaces)
+      const cleanToken = token.trim().replace(/^["'](.*)["']$/, '$1');
+      
       // Add a timeout to the fetch request
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 seconds timeout
       
       try {
+        console.log(`Fetching accepted rides from: ${API_BASE_URL}/api/rides/requests/accepted/`);
+        
         const response = await fetch(`${API_BASE_URL}/api/rides/requests/accepted/`, {
           headers: {
-            'Authorization': `Bearer ${token}`,
+            'Authorization': `Bearer ${cleanToken}`,
             'Content-Type': 'application/json',
             'Accept': 'application/json'
           },
           signal: controller.signal
         });
 
-        if (!response.ok) {
-          // For 404 Not Found or 204 No Content, it's likely the user just hasn't started any trips yet
-          if (response.status === 404 || response.status === 204 || response.status === 403) {
-            console.log(`No rides found (${response.status} response) - treating as empty state`);
-            setAcceptedRides([]);
-            setLoading(false);
-            return;
-          }
-          
-          // Log the exact response status and statusText for debugging
+        // Handle common status codes
+        if (response.status === 404) {
+          console.log('No rides endpoint found (404) - user may have no trips yet');
+          setAcceptedRides([]);
+          setLoading(false);
+          setError('');
+          return;
+        } 
+        else if (response.status === 401) {
+          console.log('Authentication failed (401) - token may be expired');
+          localStorage.removeItem('token'); // Clear invalid token
+          setError('Your session has expired. Please log in again.');
+          setLoading(false);
+          return;
+        }
+        else if (response.status === 403) {
+          console.log('Permission denied (403) - user may not have rider role');
+          setAcceptedRides([]);
+          setError('You do not have permission to view trips. Please ensure you are registered as a rider.');
+          setLoading(false);
+          return;
+        }
+        else if (response.status === 500) {
+          console.error('Server error (500) - backend issue');
+          setError('The server encountered an error. Our team has been notified. Please try again later.');
+          setLoading(false);
+          return;
+        }
+        else if (!response.ok) {
+          // For any other non-successful response
           console.error(`API response error: ${response.status} ${response.statusText}`);
           
-          throw new Error(`Failed to fetch accepted rides: ${response.status} ${response.statusText}`);
+          // Try to get error details from response
+          let errorMessage = `Failed to fetch accepted rides: ${response.status}`;
+          try {
+            const errorData = await response.json();
+            if (errorData.detail || errorData.message) {
+              errorMessage = `Error: ${errorData.detail || errorData.message}`;
+            }
+          } catch (e) {
+            // If JSON parsing fails, use the status text
+            errorMessage = `Failed to fetch accepted rides: ${response.status} ${response.statusText}`;
+          }
+          
+          setError(errorMessage);
+          setLoading(false);
+          return;
         }
 
         const data = await response.json();
+        
+        if (!Array.isArray(data)) {
+          console.error('Expected array but got:', typeof data, data);
+          setError('Received invalid data format from the server');
+          setAcceptedRides([]);
+          setLoading(false);
+          return;
+        }
         
         // Filter out cancelled rides
         const filteredRides = data.filter(ride => ride.status !== 'CANCELLED');
@@ -85,6 +134,7 @@ const RiderAcceptedRides = () => {
         if (sortedRides.length > 0) {
           setSelectedRide(sortedRides[0]);
         }
+        setError(''); // Clear any previous errors
         setLoading(false);
       } finally {
         clearTimeout(timeoutId); // Always clear the timeout
@@ -92,23 +142,31 @@ const RiderAcceptedRides = () => {
     } catch (err) {
       console.error('Error fetching accepted rides:', err);
       
-      // Special handling for request timeout
+      // Special handling for common errors
       if (err.name === 'AbortError') {
         setError('Request timed out. Please check your connection and try again.');
+      } else if (err.name === 'TypeError' && err.message.includes('Failed to fetch')) {
+        setError('Network error. Please check your internet connection and try again.');
       } else {
-        // For other errors, treat as no rides available
-        console.log('Treating error as empty rides list:', err.message);
-        setAcceptedRides([]);
-        setError(''); // Clear the error to not show the error message
+        setError(`Error: ${err.message || 'Something went wrong'}`);
       }
       
       setLoading(false);
+    } finally {
+      setIsRetrying(false);
     }
   };
 
   useEffect(() => {
     fetchAcceptedRides();
   }, []);
+
+  const handleRetry = () => {
+    setIsRetrying(true);
+    setLoading(true);
+    setError('');
+    fetchAcceptedRides();
+  };
 
   const handleRideClick = (ride) => {
     setSelectedRide(ride);
@@ -185,65 +243,66 @@ const RiderAcceptedRides = () => {
     return (
       <Container>
         <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
-          <Typography>Loading your accepted rides...</Typography>
+          <CircularProgress size={40} sx={{ mr: 2 }} />
+          <Typography>Loading your trips...</Typography>
         </Box>
       </Container>
     );
   }
 
   if (error) {
-    // If it's the common error message about failing to load rides, show a friendly UI
-    if (error === 'Failed to load accepted rides. Please try again.' || 
-        error.includes('Failed to fetch') || 
-        error.includes('Failed to load')) {
-      return (
-        <Container maxWidth="lg" sx={{ py: 4 }}>
-          <Typography variant="h4" component="h1" gutterBottom sx={{ textAlign: 'center', mb: 4 }}>
-            My Trips
-          </Typography>
-          <Paper elevation={2} sx={{ p: 4, borderRadius: '12px', mt: 3, textAlign: 'center' }}>
-            <Box sx={{ 
-              display: 'flex', 
-              flexDirection: 'column', 
-              alignItems: 'center',
-              justifyContent: 'center',
-              py: 4
-            }}>
-              <Schedule sx={{ fontSize: 80, color: '#861F41', mb: 2, opacity: 0.8 }} />
-              <Typography variant="h5" gutterBottom sx={{ fontWeight: 'bold', color: '#861F41' }}>
-                The road's calling your name!
-              </Typography>
-              <Typography variant="body1" gutterBottom color="text.secondary" sx={{ maxWidth: 600, mb: 3 }}>
-                Looks like you haven't started your journey yet. Time to hop in and explore the world with ChalBeyy!
-              </Typography>
-              <Button 
-                variant="contained" 
-                onClick={() => window.location.href = '/request-ride'}
-                sx={{ 
-                  borderRadius: '12px',
-                  py: 1.5,
-                  px: 4,
-                  textTransform: 'none',
-                  fontWeight: 600,
-                  bgcolor: '#861F41', 
-                  '&:hover': { bgcolor: '#5e0d29' }
-                }}
-              >
-                Find a Ride
-              </Button>
-            </Box>
-          </Paper>
-        </Container>
-      );
-    }
-    
-    // For other types of errors, show the alert
     return (
-      <Container>
-        <Typography variant="h4" component="h1" gutterBottom sx={{ textAlign: 'center', mb: 4 }}>
-          My Trips
-        </Typography>
-        <Alert severity="error" sx={{ mt: 2 }}>{error}</Alert>
+      <Container maxWidth="lg" sx={{ py: 4 }}>
+        <Paper elevation={2} sx={{ p: 3, borderRadius: 2 }}>
+          <Alert 
+            severity="error" 
+            sx={{ mb: 2 }}
+            action={
+              <Button 
+                color="inherit" 
+                size="small" 
+                startIcon={isRetrying ? <CircularProgress size={20} color="inherit" /> : <Refresh />}
+                onClick={handleRetry}
+                disabled={isRetrying}
+              >
+                Retry
+              </Button>
+            }
+          >
+            {error}
+          </Alert>
+          <Typography variant="h5" gutterBottom>
+            Unable to load your trips
+          </Typography>
+          <Typography variant="body1" color="text.secondary" paragraph>
+            We encountered a problem while trying to fetch your trip information. This could be due to:
+          </Typography>
+          <List>
+            <ListItem>
+              <ListItemIcon><Cancel /></ListItemIcon>
+              <ListItemText primary="Network connectivity issues" />
+            </ListItem>
+            <ListItem>
+              <ListItemIcon><Cancel /></ListItemIcon>
+              <ListItemText primary="Server maintenance" />
+            </ListItem>
+            <ListItem>
+              <ListItemIcon><Cancel /></ListItemIcon>
+              <ListItemText primary="Session timeout" />
+            </ListItem>
+          </List>
+          <Box sx={{ mt: 2 }}>
+            <Button 
+              variant="contained" 
+              color="primary"
+              onClick={handleRetry}
+              startIcon={isRetrying ? <CircularProgress size={20} color="inherit" /> : <Refresh />}
+              disabled={isRetrying}
+            >
+              {isRetrying ? 'Retrying...' : 'Retry'}
+            </Button>
+          </Box>
+        </Paper>
       </Container>
     );
   }
