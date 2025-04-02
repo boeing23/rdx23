@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Button, Box, Container } from '@mui/material';
+import { Button, Box, Container, Paper, Grid, useTheme, useMediaQuery } from '@mui/material';
 import Typography from '@mui/material/Typography';
 import TextField from '@mui/material/TextField';
 import Alert from '@mui/material/Alert';
@@ -9,6 +9,9 @@ import Switch from '@mui/material/Switch';
 import { API_BASE_URL } from '../config';
 
 function Register() {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  
   const [formData, setFormData] = useState({
     username: '',
     email: '',
@@ -162,184 +165,349 @@ function Register() {
   };
 
   return (
-    <Container maxWidth="sm">
-      <Box sx={{ mt: 8, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-        <Typography component="h1" variant="h5">
-          Register
-        </Typography>
-        {error && (
-          <Alert severity="error" sx={{ mt: 2, width: '100%' }}>
-            {error}
-          </Alert>
-        )}
-        <Box component="form" onSubmit={handleSubmit} sx={{ mt: 1, width: '100%' }}>
-          <TextField
-            margin="normal"
-            required
-            fullWidth
-            id="username"
-            label="Username"
-            name="username"
-            autoComplete="username"
-            autoFocus
-            value={formData.username}
-            onChange={handleChange}
-          />
-          <TextField
-            margin="normal"
-            required
-            fullWidth
-            id="email"
-            label="Email Address"
-            name="email"
-            autoComplete="email"
-            value={formData.email}
-            onChange={handleChange}
-          />
-          <TextField
-            margin="normal"
-            required
-            fullWidth
-            id="phone_number"
-            label="Phone Number"
-            name="phone_number"
-            autoComplete="tel"
-            value={formData.phone_number}
-            onChange={handleChange}
-          />
-          <TextField
-            margin="normal"
-            required
-            fullWidth
-            id="first_name"
-            label="First Name"
-            name="first_name"
-            value={formData.first_name}
-            onChange={handleChange}
-          />
-          <TextField
-            margin="normal"
-            required
-            fullWidth
-            id="last_name"
-            label="Last Name"
-            name="last_name"
-            value={formData.last_name}
-            onChange={handleChange}
-          />
-          <TextField
-            margin="normal"
-            required
-            fullWidth
-            name="password"
-            label="Password"
-            type="password"
-            id="password"
-            value={formData.password}
-            onChange={handleChange}
-          />
-          <TextField
-            margin="normal"
-            required
-            fullWidth
-            name="password2"
-            label="Confirm Password"
-            type="password"
-            id="password2"
-            value={formData.password2}
-            onChange={handleChange}
-          />
-          <FormControlLabel
-            control={
-              <Switch
-                checked={formData.is_driver}
-                onChange={handleChange}
-                name="is_driver"
-                color="primary"
-              />
-            }
-            label="Register as a Driver"
-            sx={{ mt: 2 }}
-          />
-          
-          {formData.is_driver && (
-            <>
-              <TextField
-                margin="normal"
-                required
-                fullWidth
-                id="vehicle_make"
-                label="Vehicle Make"
-                name="vehicle_make"
-                value={formData.vehicle_make}
-                onChange={handleChange}
-              />
-              <TextField
-                margin="normal"
-                required
-                fullWidth
-                id="vehicle_model"
-                label="Vehicle Model"
-                name="vehicle_model"
-                value={formData.vehicle_model}
-                onChange={handleChange}
-              />
-              <TextField
-                margin="normal"
-                required
-                fullWidth
-                id="vehicle_year"
-                label="Vehicle Year"
-                name="vehicle_year"
-                type="number"
-                value={formData.vehicle_year}
-                onChange={handleChange}
-              />
-              <TextField
-                margin="normal"
-                required
-                fullWidth
-                id="vehicle_color"
-                label="Vehicle Color"
-                name="vehicle_color"
-                value={formData.vehicle_color}
-                onChange={handleChange}
-              />
-              <TextField
-                margin="normal"
-                required
-                fullWidth
-                id="license_plate"
-                label="License Plate"
-                name="license_plate"
-                value={formData.license_plate}
-                onChange={handleChange}
-              />
-              <TextField
-                margin="normal"
-                required
-                fullWidth
-                id="max_passengers"
-                label="Maximum Passengers"
-                name="max_passengers"
-                type="number"
-                inputProps={{ min: "1", max: "8" }}
-                value={formData.max_passengers}
-                onChange={handleChange}
-              />
-            </>
-          )}
-
-          <Button
-            type="submit"
-            fullWidth
-            variant="contained"
-            sx={{ mt: 3, mb: 2 }}
+    <Container 
+      maxWidth="sm" 
+      sx={{ 
+        py: { xs: 2, sm: 4 },
+        px: { xs: 1, sm: 2 }
+      }}
+    >
+      <Paper 
+        elevation={3} 
+        sx={{ 
+          p: { xs: 2, sm: 3 },
+          borderRadius: 2,
+          width: '100%'
+        }}
+      >
+        <Box sx={{ 
+          display: 'flex', 
+          flexDirection: 'column', 
+          alignItems: 'center',
+          width: '100%'
+        }}>
+          <Typography 
+            component="h1" 
+            variant={isMobile ? "h5" : "h4"} 
+            sx={{ 
+              mb: 2,
+              textAlign: 'center'
+            }}
           >
-            Register
-          </Button>
+            Create an Account
+          </Typography>
+          
+          {error && (
+            <Alert 
+              severity="error" 
+              sx={{ 
+                mt: 1, 
+                mb: 2, 
+                width: '100%',
+                fontSize: { xs: '0.875rem', sm: '1rem' }
+              }}
+            >
+              {error}
+            </Alert>
+          )}
+          
+          <Box 
+            component="form" 
+            onSubmit={handleSubmit} 
+            sx={{ 
+              mt: 1, 
+              width: '100%'
+            }}
+          >
+            <Grid container spacing={2}>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  required
+                  fullWidth
+                  id="first_name"
+                  label="First Name"
+                  name="first_name"
+                  value={formData.first_name}
+                  onChange={handleChange}
+                  variant="outlined"
+                  margin="dense"
+                  size={isMobile ? "small" : "medium"}
+                  InputProps={{
+                    sx: { borderRadius: 1.5 }
+                  }}
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  required
+                  fullWidth
+                  id="last_name"
+                  label="Last Name"
+                  name="last_name"
+                  value={formData.last_name}
+                  onChange={handleChange}
+                  variant="outlined"
+                  margin="dense"
+                  size={isMobile ? "small" : "medium"}
+                  InputProps={{
+                    sx: { borderRadius: 1.5 }
+                  }}
+                />
+              </Grid>
+              <Grid item xs={12}>
+                <TextField
+                  required
+                  fullWidth
+                  id="username"
+                  label="Username"
+                  name="username"
+                  autoComplete="username"
+                  autoFocus
+                  value={formData.username}
+                  onChange={handleChange}
+                  variant="outlined"
+                  margin="dense"
+                  size={isMobile ? "small" : "medium"}
+                  InputProps={{
+                    sx: { borderRadius: 1.5 }
+                  }}
+                />
+              </Grid>
+              <Grid item xs={12}>
+                <TextField
+                  required
+                  fullWidth
+                  id="email"
+                  label="Email Address"
+                  name="email"
+                  autoComplete="email"
+                  value={formData.email}
+                  onChange={handleChange}
+                  variant="outlined"
+                  margin="dense"
+                  size={isMobile ? "small" : "medium"}
+                  InputProps={{
+                    sx: { borderRadius: 1.5 }
+                  }}
+                />
+              </Grid>
+              <Grid item xs={12}>
+                <TextField
+                  required
+                  fullWidth
+                  id="phone_number"
+                  label="Phone Number"
+                  name="phone_number"
+                  autoComplete="tel"
+                  value={formData.phone_number}
+                  onChange={handleChange}
+                  variant="outlined"
+                  margin="dense"
+                  size={isMobile ? "small" : "medium"}
+                  InputProps={{
+                    sx: { borderRadius: 1.5 }
+                  }}
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  required
+                  fullWidth
+                  name="password"
+                  label="Password"
+                  type="password"
+                  id="password"
+                  value={formData.password}
+                  onChange={handleChange}
+                  variant="outlined"
+                  margin="dense"
+                  size={isMobile ? "small" : "medium"}
+                  InputProps={{
+                    sx: { borderRadius: 1.5 }
+                  }}
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  required
+                  fullWidth
+                  name="password2"
+                  label="Confirm Password"
+                  type="password"
+                  id="password2"
+                  value={formData.password2}
+                  onChange={handleChange}
+                  variant="outlined"
+                  margin="dense"
+                  size={isMobile ? "small" : "medium"}
+                  InputProps={{
+                    sx: { borderRadius: 1.5 }
+                  }}
+                />
+              </Grid>
+              <Grid item xs={12}>
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={formData.is_driver}
+                      onChange={handleChange}
+                      name="is_driver"
+                      color="primary"
+                    />
+                  }
+                  label="Register as a Driver"
+                  sx={{ mt: 1 }}
+                />
+              </Grid>
+              
+              {formData.is_driver && (
+                <>
+                  <Grid item xs={12}>
+                    <Typography variant="subtitle1" sx={{ mt: 1, mb: 1, fontWeight: 'medium' }}>
+                      Vehicle Information
+                    </Typography>
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <TextField
+                      required
+                      fullWidth
+                      id="vehicle_make"
+                      label="Vehicle Make"
+                      name="vehicle_make"
+                      value={formData.vehicle_make}
+                      onChange={handleChange}
+                      variant="outlined"
+                      margin="dense"
+                      size={isMobile ? "small" : "medium"}
+                      InputProps={{
+                        sx: { borderRadius: 1.5 }
+                      }}
+                    />
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <TextField
+                      required
+                      fullWidth
+                      id="vehicle_model"
+                      label="Vehicle Model"
+                      name="vehicle_model"
+                      value={formData.vehicle_model}
+                      onChange={handleChange}
+                      variant="outlined"
+                      margin="dense"
+                      size={isMobile ? "small" : "medium"}
+                      InputProps={{
+                        sx: { borderRadius: 1.5 }
+                      }}
+                    />
+                  </Grid>
+                  <Grid item xs={12} sm={4}>
+                    <TextField
+                      required
+                      fullWidth
+                      id="vehicle_year"
+                      label="Year"
+                      name="vehicle_year"
+                      type="number"
+                      value={formData.vehicle_year}
+                      onChange={handleChange}
+                      variant="outlined"
+                      margin="dense"
+                      size={isMobile ? "small" : "medium"}
+                      InputProps={{
+                        sx: { borderRadius: 1.5 }
+                      }}
+                    />
+                  </Grid>
+                  <Grid item xs={12} sm={4}>
+                    <TextField
+                      required
+                      fullWidth
+                      id="vehicle_color"
+                      label="Color"
+                      name="vehicle_color"
+                      value={formData.vehicle_color}
+                      onChange={handleChange}
+                      variant="outlined"
+                      margin="dense"
+                      size={isMobile ? "small" : "medium"}
+                      InputProps={{
+                        sx: { borderRadius: 1.5 }
+                      }}
+                    />
+                  </Grid>
+                  <Grid item xs={12} sm={4}>
+                    <TextField
+                      required
+                      fullWidth
+                      id="license_plate"
+                      label="License Plate"
+                      name="license_plate"
+                      value={formData.license_plate}
+                      onChange={handleChange}
+                      variant="outlined"
+                      margin="dense"
+                      size={isMobile ? "small" : "medium"}
+                      InputProps={{
+                        sx: { borderRadius: 1.5 }
+                      }}
+                    />
+                  </Grid>
+                  <Grid item xs={12}>
+                    <TextField
+                      required
+                      fullWidth
+                      id="max_passengers"
+                      label="Maximum Passengers"
+                      name="max_passengers"
+                      type="number"
+                      inputProps={{ min: "1", max: "8" }}
+                      value={formData.max_passengers}
+                      onChange={handleChange}
+                      variant="outlined"
+                      margin="dense"
+                      size={isMobile ? "small" : "medium"}
+                      InputProps={{
+                        sx: { borderRadius: 1.5 }
+                      }}
+                    />
+                  </Grid>
+                </>
+              )}
+
+              <Grid item xs={12}>
+                <Button
+                  type="submit"
+                  fullWidth
+                  variant="contained"
+                  sx={{ 
+                    mt: 2, 
+                    mb: 1, 
+                    py: { xs: 1.5, sm: 2 },
+                    borderRadius: 1.5,
+                    fontSize: { xs: '0.9rem', sm: '1rem' }
+                  }}
+                >
+                  Register
+                </Button>
+              </Grid>
+              <Grid item xs={12}>
+                <Button
+                  variant="text"
+                  fullWidth
+                  onClick={() => navigate('/login')}
+                  sx={{ 
+                    mt: 1,
+                    fontSize: { xs: '0.85rem', sm: '0.9rem' }
+                  }}
+                >
+                  Already have an account? Login
+                </Button>
+              </Grid>
+            </Grid>
+          </Box>
         </Box>
-      </Box>
+      </Paper>
     </Container>
   );
 }
