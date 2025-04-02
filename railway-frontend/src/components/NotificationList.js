@@ -193,6 +193,15 @@ function NotificationList() {
     setAnchorEl(null);
   };
   
+  // Add handleViewRide function to fix the no-undef error
+  const handleViewRide = (rideId) => {
+    console.log(`Viewing ride details for ride ${rideId}`);
+    // Close the notification popover
+    handleClose();
+    // Navigate to the ride details page
+    window.location.href = `/rides/${rideId}`;
+  };
+  
   // Function to render accept button for ride match notifications
   const renderAcceptButton = (notification) => {
     console.log('Checking notification for Accept button:', notification.id, notification.notification_type);
