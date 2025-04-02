@@ -48,16 +48,20 @@ function NotificationList() {
       if (!token) {
         console.error('No authentication token found');
         setError('Please log in to view notifications');
-        // Clear any invalid data
-        localStorage.removeItem('token');
-        localStorage.removeItem('userType');
-        window.location.href = '/login';
         return;
       }
 
       // Make sure token is properly formatted (no extra quotes or spaces)
       const cleanToken = token.trim().replace(/^["'](.*)["']$/, '$1');
-      console.log('Using cleaned token:', cleanToken.substring(0, 10) + '...');
+      
+      // Check token validity before making the request
+      if (!cleanToken || cleanToken.length < 10) {
+        console.error('Invalid token format');
+        setError('Invalid authentication token. Please log in again.');
+        localStorage.removeItem('token');
+        localStorage.removeItem('userType');
+        return;
+      }
 
       console.log('Fetching notifications with token...');
       const headers = {
@@ -65,48 +69,46 @@ function NotificationList() {
         'Content-Type': 'application/json',
         'Accept': 'application/json'
       };
-      console.log('Request headers:', headers);
-      console.log('Authorization header exact value:', `Bearer ${cleanToken}`);
 
-      // Try without credentials first
       const response = await fetch(`${API_BASE_URL}/api/rides/notifications/`, {
         method: 'GET',
         headers: headers,
-        // Removing credentials to test if that's causing issues
-        // credentials: 'include'
+        // Adding credentials to ensure cookies are sent
+        credentials: 'include'
       });
-
-      console.log('Response status:', response.status);
-      console.log('Response headers:', Object.fromEntries(response.headers.entries()));
-      console.log('Response URL:', response.url);
 
       if (response.ok) {
         const data = await response.json();
         console.log('Fetched notifications:', data.length);
         setNotifications(data);
         setUnreadCount(data.filter(n => !n.is_read).length);
-        
-        const rideMatches = data.filter(n => n.notification_type === 'RIDE_MATCH');
-        if (rideMatches.length > 0) {
-          console.log(`Found ${rideMatches.length} ride match notifications`);
-          console.log('Sample ride match:', rideMatches[0]);
-        }
+        // Clear any previous errors
+        setError('');
       } else {
-        const errorData = await response.json().catch(() => ({}));
-        console.error('Error response:', errorData);
-        setError(errorData.message || 'Failed to fetch notifications');
+        // Handle response error
+        let errorMessage = 'Failed to fetch notifications';
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.message || errorData.detail || errorMessage;
+        } catch (e) {
+          // If can't parse JSON, use status text
+          errorMessage = `${errorMessage}: ${response.statusText}`;
+        }
         
-        // If unauthorized, redirect to login
+        console.error('Error response status:', response.status, errorMessage);
+        setError(errorMessage);
+        
+        // If unauthorized, handle token expiration
         if (response.status === 401) {
           console.log('Unauthorized, clearing token and redirecting to login');
           localStorage.removeItem('token');
           localStorage.removeItem('userType');
-          window.location.href = '/login';
+          // Don't redirect immediately to avoid disruptive user experience
         }
       }
     } catch (err) {
       console.error('Error fetching notifications:', err);
-      setError('Network error while fetching notifications');
+      setError('Network error while fetching notifications. Please check your connection.');
     }
   };
 
@@ -332,8 +334,7 @@ function NotificationList() {
           </>
         );
         
-      case 'REQUEST_ACCEPTED':
-      case 'RIDE_ACCEPTED_BY_DRIVER':
+      case 'RIDE_ACCEPTED':
         return (
           <>
             <Typography variant="body1" component="div" fontWeight="bold" color="success.main">
@@ -342,52 +343,6 @@ function NotificationList() {
             <Typography variant="body2" component="div">
               {notification.message}
             </Typography>
-            {notification.ride_details && (
-              <Box sx={{ mt: 1, p: 1, bgcolor: 'rgba(0, 200, 0, 0.04)', borderRadius: 1 }}>
-                <Typography variant="body2">
-                  <strong>Pickup:</strong> {notification.ride_details.start_location}
-                </Typography>
-                <Typography variant="body2">
-                  <strong>Dropoff:</strong> {notification.ride_details.end_location}
-                </Typography>
-                <Typography variant="body2">
-                  <strong>Departure:</strong> {formatDate(notification.ride_details.departure_time)}
-                </Typography>
-              </Box>
-            )}
-            {notification.sender && (
-              <Box sx={{ mt: 1, p: 1, bgcolor: 'rgba(0, 0, 0, 0.04)', borderRadius: 1 }}>
-                <Typography variant="body2" fontWeight="bold">
-                  Contact Information
-                </Typography>
-                <Typography variant="body2">
-                  <strong>Name:</strong> {notification.sender.name}
-                </Typography>
-                {notification.sender_email && (
-                  <Typography variant="body2">
-                    <strong>Email:</strong> {notification.sender_email}
-                  </Typography>
-                )}
-                {notification.sender_phone && (
-                  <Typography variant="body2">
-                    <strong>Phone:</strong> {notification.sender_phone}
-                  </Typography>
-                )}
-                {notification.sender_vehicle && (
-                  <>
-                    <Typography variant="body2" fontWeight="bold" sx={{ mt: 1 }}>
-                      Vehicle Details
-                    </Typography>
-                    <Typography variant="body2">
-                      <strong>Vehicle:</strong> {notification.sender_vehicle.make} {notification.sender_vehicle.model} ({notification.sender_vehicle.color})
-                    </Typography>
-                    <Typography variant="body2">
-                      <strong>License Plate:</strong> {notification.sender_vehicle.plate}
-                    </Typography>
-                  </>
-                )}
-              </Box>
-            )}
           </>
         );
         

@@ -49,19 +49,30 @@ function NotificationList() {
     try {
       const token = getToken();
       if (!token) {
-        setError('No authentication token found');
+        console.error('No authentication token found');
+        setError('Please log in to view notifications');
         return;
       }
 
       // Clean the token - remove any quotes or spaces
       const cleanToken = token.trim().replace(/^["'](.*)["']$/, '$1');
+      
+      // Check token validity before making the request
+      if (!cleanToken || cleanToken.length < 10) {
+        console.error('Invalid token format');
+        setError('Invalid authentication token. Please log in again.');
+        localStorage.removeItem('token');
+        return;
+      }
 
       const response = await fetch(`${API_BASE_URL}/api/rides/notifications/`, {
+        method: 'GET',
         headers: {
           'Authorization': `Bearer ${cleanToken}`,
           'Content-Type': 'application/json',
           'Accept': 'application/json'
-        }
+        },
+        credentials: 'include'
       });
 
       if (response.ok) {
@@ -71,6 +82,8 @@ function NotificationList() {
         const count = data.filter(n => !n.is_read).length;
         setUnreadCount(count);
         syncUnreadCount(count);
+        // Clear any previous errors
+        setError('');
         
         const rideMatches = data.filter(n => n.notification_type === 'RIDE_MATCH');
         if (rideMatches.length > 0) {
@@ -99,7 +112,7 @@ function NotificationList() {
       }
     } catch (err) {
       console.error('Error fetching notifications:', err);
-      setError('Network error while fetching notifications');
+      setError('Network error while fetching notifications. Please check your connection and try again.');
     }
   };
 
