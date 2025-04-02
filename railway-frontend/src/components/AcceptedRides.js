@@ -84,9 +84,9 @@ const AcceptedRides = () => {
       });
       
       if (!response.ok) {
-        // For 404 Not Found, it's likely the user just hasn't started any trips yet
-        if (response.status === 404) {
-          console.log('No rides found (404 response)');
+        // For 404 Not Found or 204 No Content, it's likely the user just hasn't started any trips yet
+        if (response.status === 404 || response.status === 204 || response.status === 403) {
+          console.log(`No rides found (${response.status} response) - treating as empty state`);
           setAcceptedRides([]);
           setLoading(false);
           return;
@@ -142,10 +142,16 @@ const AcceptedRides = () => {
       // Special handling for request timeout
       if (err.name === 'AbortError') {
         setError('Request timed out. Please check your connection and try again.');
-      } else {
-        // For other errors, just treat as no rides available
+      } else if (err.message.includes('Failed to fetch accepted rides')) {
+        // This is likely a case where there are no rides yet, so just show empty state
+        console.log('Treating as empty rides list case:', err.message);
         setAcceptedRides([]);
-        setError(''); // Clear the error state
+        setError(''); // Don't show error for no rides
+      } else {
+        // For other errors, still treat as no rides available by default
+        console.log('Unknown error, treating as empty rides list:', err.message);
+        setAcceptedRides([]);
+        setError(''); // Don't show error for no rides
       }
       
       setLoading(false);
@@ -521,7 +527,9 @@ const AcceptedRides = () => {
 
   if (error) {
     // Check if the error is about loading rides and user has no rides yet
-    if (error === 'Failed to load accepted rides. Please try again.') {
+    if (error === 'Failed to load accepted rides. Please try again.' || 
+        error.includes('Failed to fetch') || 
+        error.includes('Failed to load')) {
       return (
         <Container maxWidth="lg" sx={{ px: 4, py: 5 }}>
           <Typography variant="h4" className="page-title" gutterBottom>
@@ -537,14 +545,16 @@ const AcceptedRides = () => {
             }}>
               <DirectionsCar sx={{ fontSize: 80, color: '#861F41', mb: 2, opacity: 0.8 }} />
               <Typography variant="h5" gutterBottom sx={{ fontWeight: 'bold', color: '#861F41' }}>
-                The road's calling your name!
+                {userType === 'DRIVER' ? 'Ready to hit the road?' : 'The road\'s calling your name!'}
               </Typography>
               <Typography variant="body1" gutterBottom color="text.secondary" sx={{ maxWidth: 600, mb: 3 }}>
-                Looks like you haven't started your journey yet. Time to hop in and explore the world with ChalBeyy!
+                {userType === 'DRIVER'
+                  ? "Looks like your trip history is empty. Start by viewing available ride requests and accepting passengers!"
+                  : "Looks like you haven't started your journey yet. Time to hop in and explore the world with ChalBeyy!"}
               </Typography>
               <Button 
                 variant="contained" 
-                onClick={() => navigate('/request-ride')}
+                onClick={() => navigate(userType === 'DRIVER' ? '/rides' : '/request-ride')}
                 sx={{ 
                   borderRadius: '12px',
                   py: 1.5,
@@ -555,7 +565,7 @@ const AcceptedRides = () => {
                   '&:hover': { bgcolor: '#5e0d29' }
                 }}
               >
-                Find a Ride
+                {userType === 'DRIVER' ? 'View Ride Requests' : 'Find a Ride'}
               </Button>
             </Box>
           </Paper>
@@ -591,14 +601,16 @@ const AcceptedRides = () => {
           }}>
             <DirectionsCar sx={{ fontSize: 80, color: '#861F41', mb: 2, opacity: 0.8 }} />
             <Typography variant="h5" gutterBottom sx={{ fontWeight: 'bold', color: '#861F41' }}>
-              Rides waiting, seats inviting!
+              {userType === 'DRIVER' ? 'No passengers yet? Your car is waiting!' : 'Rides waiting, seats inviting!'}
             </Typography>
             <Typography variant="body1" gutterBottom color="text.secondary" sx={{ maxWidth: 600, mb: 3 }}>
-              Your journey begins with just one click! Find your perfect ride and let the adventures begin.
+              {userType === 'DRIVER' 
+                ? "You haven't accepted any ride requests yet. Check out the available requests and start driving!" 
+                : "Your journey begins with just one click! Find your perfect ride and let the adventures begin."}
             </Typography>
             <Button 
               variant="contained" 
-              onClick={() => navigate('/request-ride')}
+              onClick={() => navigate(userType === 'DRIVER' ? '/rides' : '/request-ride')}
               sx={{ 
                 borderRadius: '12px',
                 py: 1.5,
@@ -609,7 +621,7 @@ const AcceptedRides = () => {
                 '&:hover': { bgcolor: '#5e0d29' }
               }}
             >
-              Find a Ride
+              {userType === 'DRIVER' ? 'Find Passengers' : 'Find a Ride'}
             </Button>
           </Box>
         </Paper>
