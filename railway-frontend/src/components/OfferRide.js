@@ -12,12 +12,14 @@ import {
   Grid,
   Paper,
   InputAdornment,
-  IconButton
+  IconButton,
+  CircularProgress
 } from '@mui/material';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
 import SearchIcon from '@mui/icons-material/Search';
+import { getUserCurrentLocation, DEFAULT_LOCATION, geocodeWithPriority } from '../utils/locationUtils';
 
 const OfferRide = () => {
   const navigate = useNavigate();
@@ -33,20 +35,33 @@ const OfferRide = () => {
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [locationLoading, setLocationLoading] = useState(false);
   const [locationStatus, setLocationStatus] = useState({
     start: false,
     end: false
   });
+  const [userLocation, setUserLocation] = useState(null);
+  
+  // Get user's location on component mount
+  useEffect(() => {
+    const fetchUserLocation = async () => {
+      const location = await getUserCurrentLocation();
+      setUserLocation(location || DEFAULT_LOCATION);
+    };
+    
+    fetchUserLocation();
+  }, []);
 
   const handleLocationSearch = async (location, isStart) => {
     try {
+      setLocationLoading(true);
       setError('');
-      const response = await axios.get(
-        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(location)}`
-      );
       
-      if (response.data && response.data[0]) {
-        const { lat, lon, display_name } = response.data[0];
+      // Use the geocoder with proximity bias
+      const geocodeResult = await geocodeWithPriority(location, userLocation);
+      
+      if (geocodeResult) {
+        const { lat, lon, display_name } = geocodeResult;
         if (isStart) {
           setFormData(prev => ({
             ...prev,
@@ -68,7 +83,10 @@ const OfferRide = () => {
         setError('Location not found. Please try a different address.');
       }
     } catch (err) {
+      console.error('Error searching for location:', err);
       setError('Error searching for location. Please try again.');
+    } finally {
+      setLocationLoading(false);
     }
   };
 
@@ -216,12 +234,21 @@ const OfferRide = () => {
 
   return (
     <Container maxWidth="md" sx={{ mt: 4, mb: 8 }}>
-      <Typography variant="h4" className="page-title" gutterBottom>
-        Offer a Ride
-      </Typography>
-      <Typography variant="subtitle1" color="textSecondary" gutterBottom>
-        Only drivers can offer rides
-      </Typography>
+      <Box sx={{ 
+        textAlign: 'center', 
+        mb: 4, 
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        width: '100%'
+      }}>
+        <Typography variant="h4" className="page-title" gutterBottom align="center">
+          Offer a Ride
+        </Typography>
+        <Typography variant="subtitle1" color="textSecondary" gutterBottom sx={{ textAlign: 'center' }}>
+          Enter your ride details to help others find your route
+        </Typography>
+      </Box>
 
       {error && (
         <Alert severity="error" sx={{ mb: 2 }}>
@@ -229,7 +256,7 @@ const OfferRide = () => {
         </Alert>
       )}
 
-      <Paper sx={{ p: 3 }}>
+      <Paper sx={{ p: 4, borderRadius: '12px' }}>
         <form onSubmit={handleSubmit}>
           <Grid container spacing={3}>
             <Grid item xs={12}>
@@ -247,12 +274,15 @@ const OfferRide = () => {
                       <IconButton
                         onClick={() => handleLocationSearch(formData.start_location, true)}
                         edge="end"
+                        disabled={locationLoading}
                       >
-                        <SearchIcon />
+                        {locationLoading ? <CircularProgress size={24} /> : <SearchIcon />}
                       </IconButton>
                     </InputAdornment>
                   ),
+                  sx: { borderRadius: '12px' }
                 }}
+                sx={{ '& .MuiOutlinedInput-root': { borderRadius: '12px' } }}
                 error={!locationStatus.start && formData.start_location !== ''}
                 helperText={!locationStatus.start && formData.start_location !== '' ? "Please search and select a valid location" : ""}
               />
@@ -273,12 +303,15 @@ const OfferRide = () => {
                       <IconButton
                         onClick={() => handleLocationSearch(formData.end_location, false)}
                         edge="end"
+                        disabled={locationLoading}
                       >
-                        <SearchIcon />
+                        {locationLoading ? <CircularProgress size={24} /> : <SearchIcon />}
                       </IconButton>
                     </InputAdornment>
                   ),
+                  sx: { borderRadius: '12px' }
                 }}
+                sx={{ '& .MuiOutlinedInput-root': { borderRadius: '12px' } }}
                 error={!locationStatus.end && formData.end_location !== ''}
                 helperText={!locationStatus.end && formData.end_location !== '' ? "Please search and select a valid location" : ""}
               />
@@ -289,14 +322,23 @@ const OfferRide = () => {
                 <DateTimePicker
                   label="Departure Time"
                   value={formData.departure_time}
-                  onChange={handleChange}
-                  renderInput={(params) => <TextField {...params} fullWidth required />}
+                  onChange={(newValue) => setFormData(prev => ({
+                    ...prev,
+                    departure_time: newValue
+                  }))}
+                  slotProps={{
+                    textField: {
+                      fullWidth: true,
+                      required: true,
+                      sx: { '& .MuiOutlinedInput-root': { borderRadius: '12px' } }
+                    }
+                  }}
                   minDateTime={new Date()}
                 />
               </LocalizationProvider>
             </Grid>
 
-            <Grid item xs={12} sm={6}>
+            <Grid item xs={12}>
               <TextField
                 required
                 fullWidth
@@ -306,6 +348,7 @@ const OfferRide = () => {
                 value={formData.available_seats}
                 onChange={handleChange}
                 inputProps={{ min: 1 }}
+                sx={{ '& .MuiOutlinedInput-root': { borderRadius: '12px' } }}
               />
             </Grid>
 
@@ -317,6 +360,12 @@ const OfferRide = () => {
                 size="large"
                 fullWidth
                 disabled={loading}
+                sx={{ 
+                  borderRadius: '12px',
+                  py: 1.5,
+                  textTransform: 'none',
+                  fontWeight: 600
+                }}
               >
                 {loading ? 'Creating Ride...' : 'Offer Ride'}
               </Button>

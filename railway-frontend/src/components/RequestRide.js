@@ -20,12 +20,14 @@ import {
   Dialog,
   DialogTitle,
   DialogContent,
-  DialogActions
+  DialogActions,
+  CircularProgress
 } from '@mui/material';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
 import SearchIcon from '@mui/icons-material/Search';
+import { getUserCurrentLocation, DEFAULT_LOCATION, geocodeWithPriority } from '../utils/locationUtils';
 
 const RequestRide = () => {
   const navigate = useNavigate();
@@ -36,23 +38,37 @@ const RequestRide = () => {
   const [seatsNeeded, setSeatsNeeded] = useState(1);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [locationLoading, setLocationLoading] = useState(false);
   const [routeData, setRouteData] = useState(null);
   const [departureTime, setDepartureTime] = useState(null);
   const [success, setSuccess] = useState(null);
   const [matchDetails, setMatchDetails] = useState(null);
   const [showMatchDialog, setShowMatchDialog] = useState(false);
+  const [userLocation, setUserLocation] = useState(null);
   const isSubmitting = useRef(false);
 
   const ORS_API_KEY = "5b3ce3597851110001cf62482c1ae097a0b848ef81a1e5085aa27c1f";
+  
+  // Get user's location on component mount
+  useEffect(() => {
+    const fetchUserLocation = async () => {
+      const location = await getUserCurrentLocation();
+      setUserLocation(location || DEFAULT_LOCATION);
+    };
+    
+    fetchUserLocation();
+  }, []);
 
   const handleLocationSearch = async (location, isPickup) => {
     try {
-      const response = await axios.get(
-        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(location)}`
-      );
+      setLocationLoading(true);
+      setError('');
       
-      if (response.data && response.data[0]) {
-        const { lat, lon, display_name } = response.data[0];
+      // Use the geocoder with proximity bias
+      const geocodeResult = await geocodeWithPriority(location, userLocation);
+      
+      if (geocodeResult) {
+        const { lat, lon, display_name } = geocodeResult;
         if (isPickup) {
           setPickupLocation(display_name);
           setPickupCoordinates({ lat: parseFloat(lat), lng: parseFloat(lon) });
@@ -64,7 +80,10 @@ const RequestRide = () => {
         setError('Location not found. Please try a different address.');
       }
     } catch (err) {
+      console.error('Error searching for location:', err);
       setError('Error searching for location. Please try again.');
+    } finally {
+      setLocationLoading(false);
     }
   };
 
