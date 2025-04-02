@@ -151,8 +151,9 @@ function Navbar() {
 
   return (
     <AppBar position="static" sx={{ bgcolor: '#861F41' }}>
-      <Toolbar>
-        <Box sx={{ display: 'flex', alignItems: 'center', flexGrow: 1 }}>
+      <Toolbar sx={{ display: 'flex', justifyContent: 'space-between' }}>
+        {/* Logo and Brand Name */}
+        <Box sx={{ display: 'flex', alignItems: 'center' }}>
           <FontAwesomeIcon 
             icon={faCar} 
             style={{ 
@@ -182,40 +183,80 @@ function Navbar() {
         </Box>
 
         {/* Desktop Menu */}
-        <Box sx={{ display: { xs: 'none', sm: 'flex' }, alignItems: 'center', gap: 2 }}>
+        <Box sx={{ 
+          display: { xs: 'none', sm: 'flex' }, 
+          alignItems: 'center', 
+          gap: 1.5,
+          flexGrow: 0,
+          height: '64px'
+        }}>
           {isAuthenticated ? (
             <>
               {userType === 'DRIVER' ? (
-                <Button color="inherit" component={Link} to="/offer">
+                <Button 
+                  color="inherit" 
+                  component={Link} 
+                  to="/offer"
+                  sx={{ minHeight: '40px' }}
+                >
                   Offer Ride
                 </Button>
               ) : userType === 'RIDER' ? (
                 <>
-                  <Button color="inherit" component={Link} to="/request-ride">
+                  <Button 
+                    color="inherit" 
+                    component={Link} 
+                    to="/request-ride"
+                    sx={{ minHeight: '40px' }}
+                  >
                     Find Rides
                   </Button>
-                  <Button color="inherit" component={Link} to="/rides">
+                  <Button 
+                    color="inherit" 
+                    component={Link} 
+                    to="/rides"
+                    sx={{ minHeight: '40px' }}
+                  >
                     Rides
                   </Button>
                 </>
               ) : null}
-              <Button color="inherit" component={Link} to="/accepted-rides">
+              <Button 
+                color="inherit" 
+                component={Link} 
+                to="/accepted-rides"
+                sx={{ minHeight: '40px' }}
+              >
                 My Trips
               </Button>
-              <NotificationList />
+              {/* Remove the Container from NotificationList to prevent alignment issues */}
+              <Box sx={{ display: 'flex', alignItems: 'center', height: '40px' }}>
+                <NotificationList />
+              </Box>
               <IconButton
                 color="inherit"
                 onClick={handleSettingsMenuOpen}
+                sx={{ height: '40px', width: '40px' }}
               >
                 <SettingsIcon />
               </IconButton>
             </>
           ) : (
             <>
-              <Button color="inherit" component={Link} to="/login">
+              <Button 
+                color="inherit" 
+                component={Link} 
+                to="/login"
+                sx={{ minHeight: '40px' }}
+              >
                 Login
               </Button>
-              <Button color="inherit" component={Link} to="/register">
+              <Button 
+                color="inherit" 
+                component={Link} 
+                to="/register"
+                sx={{ minHeight: '40px' }}
+              >
                 Register
               </Button>
             </>

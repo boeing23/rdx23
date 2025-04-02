@@ -337,11 +337,13 @@ function NotificationList() {
   };
 
   return (
-    <Container maxWidth="md">
-      <Typography variant="h4" className="page-title" gutterBottom>
-        Notifications
-      </Typography>
-      <div style={{ display: 'inline-block', marginLeft: '10px' }}>
+    <>
+      {window.location.pathname === '/notifications' && (
+        <Typography variant="h4" className="page-title" gutterBottom>
+          Notifications
+        </Typography>
+      )}
+      <div style={{ display: 'inline-block' }}>
         <IconButton 
           ref={buttonRef}
           color="inherit" 
@@ -468,7 +470,7 @@ function NotificationList() {
           </List>
         </Popover>
       </div>
-    </Container>
+    </>
   );
 }
 
