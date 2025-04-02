@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { AppBar, Toolbar, Button, Typography, Box, IconButton, Menu, MenuItem, useTheme, useMediaQuery, Avatar } from '@mui/material';
+import { AppBar, Toolbar, Button, Typography, Box, IconButton, Menu, MenuItem, useTheme, useMediaQuery, Avatar, Badge } from '@mui/material';
 import { Link, useNavigate } from 'react-router-dom';
 import MenuIcon from '@mui/icons-material/Menu';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
@@ -8,12 +8,14 @@ import NotificationList from './NotificationList';
 import SettingsIcon from '@mui/icons-material/Settings';
 import AccountCircleIcon from '@mui/icons-material/AccountCircle';
 import ExitToAppIcon from '@mui/icons-material/ExitToApp';
+import NotificationsIcon from '@mui/icons-material/Notifications';
 
 function Navbar() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [userType, setUserType] = useState(null);
   const [mobileMenuAnchorEl, setMobileMenuAnchorEl] = useState(null);
   const [settingsAnchorEl, setSettingsAnchorEl] = useState(null);
+  const [unreadCount, setUnreadCount] = useState(0);
   const navigate = useNavigate();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
@@ -44,6 +46,28 @@ function Navbar() {
     };
 
     initializeAuth();
+  }, []);
+
+  // Setup sync with NotificationList component
+  useEffect(() => {
+    // Create global object for syncing if it doesn't exist
+    if (!window.navbarSync) {
+      window.navbarSync = {};
+    }
+    
+    // Add method to update unread count from NotificationList
+    window.navbarSync.setNavbarUnreadCount = (count) => {
+      if (typeof count === 'number') {
+        setUnreadCount(count);
+      }
+    };
+    
+    return () => {
+      // Clean up global object
+      if (window.navbarSync) {
+        delete window.navbarSync.setNavbarUnreadCount;
+      }
+    };
   }, []);
 
   const handleMobileMenuOpen = (event) => {
@@ -101,9 +125,35 @@ function Navbar() {
           <MenuItem component={Link} to="/accepted-rides" onClick={handleMobileMenuClose}>
             My Trips
           </MenuItem>
-          <Box sx={{ px: 2, py: 1 }}>
-            <NotificationList />
-          </Box>
+          <MenuItem onClick={(e) => {
+            handleMobileMenuClose();
+            const notificationButton = document.getElementById('notification-button');
+            if (notificationButton) {
+              notificationButton.click();
+            }
+          }}>
+            <NotificationsIcon sx={{ mr: 1, fontSize: 20 }} />
+            Notifications
+            {unreadCount > 0 && (
+              <Box 
+                component="span" 
+                sx={{ 
+                  ml: 1,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  bgcolor: 'error.main',
+                  color: 'white',
+                  borderRadius: '50%',
+                  width: 18,
+                  height: 18,
+                  fontSize: 12,
+                }}
+              >
+                {unreadCount}
+              </Box>
+            )}
+          </MenuItem>
           <MenuItem component={Link} to="/profile" onClick={handleMobileMenuClose}>
             <AccountCircleIcon sx={{ mr: 1, fontSize: 20 }} />
             Profile
@@ -229,7 +279,6 @@ function Navbar() {
               >
                 My Trips
               </Button>
-              {/* Remove the Container from NotificationList to prevent alignment issues */}
               <Box sx={{ display: 'flex', alignItems: 'center', height: '40px' }}>
                 <NotificationList />
               </Box>

@@ -25,6 +25,14 @@ function NotificationList() {
   const buttonRef = useRef(null);
   const open = Boolean(anchorEl);
 
+  // Get the Navbar's setUnreadCount function if available
+  const syncUnreadCount = (count) => {
+    // If navbar has a way to sync the count, use it
+    if (window.navbarSync && typeof window.navbarSync.setNavbarUnreadCount === 'function') {
+      window.navbarSync.setNavbarUnreadCount(count);
+    }
+  };
+
   const getToken = () => {
     try {
       const token = localStorage.getItem('token');
@@ -53,7 +61,9 @@ function NotificationList() {
         const data = await response.json();
         console.log('Fetched notifications:', data.length);
         setNotifications(data);
-        setUnreadCount(data.filter(n => !n.is_read).length);
+        const count = data.filter(n => !n.is_read).length;
+        setUnreadCount(count);
+        syncUnreadCount(count);
         
         const rideMatches = data.filter(n => n.notification_type === 'RIDE_MATCH');
         if (rideMatches.length > 0) {
@@ -74,7 +84,24 @@ function NotificationList() {
     fetchNotifications();
     // Poll for new notifications every 30 seconds
     const interval = setInterval(fetchNotifications, 30000);
-    return () => clearInterval(interval);
+    
+    // Setup global access for Navbar syncing
+    if (!window.navbarSync) {
+      window.navbarSync = {};
+    }
+    window.navbarSync.setUnreadCount = (count) => {
+      if (typeof count === 'number') {
+        setUnreadCount(count);
+      }
+    };
+    
+    return () => {
+      clearInterval(interval);
+      // Clean up global access
+      if (window.navbarSync) {
+        delete window.navbarSync.setUnreadCount;
+      }
+    };
   }, []);  // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleMarkAsRead = async (notificationId) => {
@@ -101,7 +128,9 @@ function NotificationList() {
               : notification
           )
         );
-        setUnreadCount(prev => Math.max(0, prev - 1));
+        const newCount = Math.max(0, unreadCount - 1);
+        setUnreadCount(newCount);
+        syncUnreadCount(newCount);
       } else {
         const errorData = await response.json().catch(() => ({}));
         console.error('Error marking notification as read:', errorData.message || 'Failed to mark as read');
@@ -345,6 +374,7 @@ function NotificationList() {
       )}
       <div style={{ display: 'inline-block' }}>
         <IconButton 
+          id="notification-button"
           ref={buttonRef}
           color="inherit" 
           onClick={handleClick}
