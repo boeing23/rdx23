@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Link, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Link, Navigate, useLocation } from 'react-router-dom';
 import { AppBar, Toolbar, Button, Container, Box, useTheme, useMediaQuery } from '@mui/material';
 import Typography from '@mui/material/Typography';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
@@ -21,13 +21,17 @@ import './App.css';
 function Home() {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const location = useLocation();
+  const isAuthenticated = localStorage.getItem('token');
+  const isLandingPage = location.pathname === '/';
+  const showAsFullPage = isLandingPage && !isAuthenticated;
 
   return (
     <Box 
       sx={{ 
-        mt: 4, 
+        mt: showAsFullPage ? 0 : 4, 
         textAlign: 'center',
-        minHeight: 'calc(100vh - 64px)',
+        minHeight: showAsFullPage ? '100vh' : 'calc(100vh - 64px)',
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
@@ -40,7 +44,7 @@ function Home() {
       <Box sx={{ mb: 4 }}>
         <FontAwesomeIcon 
           icon={faCar} 
-          size="4x" 
+          size={showAsFullPage ? "5x" : "4x"} 
           style={{ 
             color: 'white',
             marginBottom: '1rem',
@@ -49,7 +53,7 @@ function Home() {
         />
       </Box>
       <Typography 
-        variant={isMobile ? "h4" : "h3"} 
+        variant={isMobile ? (showAsFullPage ? "h3" : "h4") : (showAsFullPage ? "h2" : "h3")} 
         gutterBottom
         sx={{ 
           fontWeight: 'bold',
@@ -59,13 +63,28 @@ function Home() {
         ChalBeyy
       </Typography>
       <Typography 
-        variant={isMobile ? "h6" : "h5"} 
+        variant={isMobile ? (showAsFullPage ? "h5" : "h6") : (showAsFullPage ? "h4" : "h5")} 
         color="rgba(255, 255, 255, 0.9)" 
         gutterBottom
-        sx={{ mb: 4 }}
+        sx={{ mb: 4, maxWidth: '800px' }}
       >
-        Find and share rides easily
+        The Smart Way to Share Your Journey
       </Typography>
+      
+      {showAsFullPage && (
+        <Typography 
+          variant="body1" 
+          sx={{ 
+            mb: 4, 
+            maxWidth: '600px', 
+            fontSize: { xs: '1rem', sm: '1.1rem' }
+          }}
+        >
+          ChalBeyy connects drivers with empty seats to people traveling the same way. 
+          Save money, reduce traffic and enjoy your commute!
+        </Typography>
+      )}
+      
       <Box 
         sx={{ 
           mt: 4,
@@ -83,12 +102,14 @@ function Home() {
           color="primary" 
           component={Link} 
           to="/login"
+          size={showAsFullPage ? "large" : "medium"}
           sx={{ 
             bgcolor: 'white',
             color: '#861F41',
             '&:hover': {
               bgcolor: 'rgba(255, 255, 255, 0.9)'
-            }
+            },
+            px: showAsFullPage ? 4 : 2
           }}
         >
           Login
@@ -98,19 +119,48 @@ function Home() {
           color="inherit" 
           component={Link} 
           to="/register"
+          size={showAsFullPage ? "large" : "medium"}
           sx={{ 
             borderColor: 'white',
             color: 'white',
             '&:hover': {
               borderColor: 'white',
               bgcolor: 'rgba(255, 255, 255, 0.1)'
-            }
+            },
+            px: showAsFullPage ? 4 : 2
           }}
         >
           Register
         </Button>
       </Box>
     </Box>
+  );
+}
+
+// Main app content with Routes - this has access to location context
+function AppContent({ isAuthenticated, userType }) {
+  const location = useLocation();
+  const isLandingPage = location.pathname === '/';
+  
+  // Don't show navbar on landing page for non-authenticated users
+  const showNavbar = isAuthenticated || !isLandingPage;
+  
+  return (
+    <>
+      {showNavbar && <Navbar />}
+      <Routes>
+        <Route path="/" element={<Home />} />
+        <Route path="/login" element={<AuthPage />} />
+        <Route path="/register" element={<AuthPage />} />
+        <Route path="/offer" element={<OfferRide />} />
+        <Route path="/request-ride" element={<RequestRide />} />
+        <Route path="/rides" element={<RideList />} />
+        <Route path="/accepted-rides" element={
+          userType === 'DRIVER' ? <DriverAcceptedRides /> : <RiderAcceptedRides />
+        } />
+        <Route path="/profile" element={<UserProfile />} />
+      </Routes>
+    </>
   );
 }
 
@@ -163,19 +213,7 @@ function App() {
 
   return (
     <Router>
-      <Navbar />
-      <Routes>
-        <Route path="/" element={<Home />} />
-        <Route path="/login" element={<AuthPage />} />
-        <Route path="/register" element={<AuthPage />} />
-        <Route path="/offer" element={<OfferRide />} />
-        <Route path="/request-ride" element={<RequestRide />} />
-        <Route path="/rides" element={<RideList />} />
-        <Route path="/accepted-rides" element={
-          userType === 'DRIVER' ? <DriverAcceptedRides /> : <RiderAcceptedRides />
-        } />
-        <Route path="/profile" element={<UserProfile />} />
-      </Routes>
+      <AppContent isAuthenticated={isAuthenticated} userType={userType} />
     </Router>
   );
 }
