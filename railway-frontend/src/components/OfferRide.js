@@ -331,8 +331,12 @@ const OfferRide = () => {
                       fullWidth: true,
                       required: true,
                       sx: { '& .MuiOutlinedInput-root': { borderRadius: '12px' } }
+                    },
+                    popper: {
+                      sx: { zIndex: 1300 }
                     }
                   }}
+                  closeOnSelect={false}
                   minDateTime={new Date()}
                 />
               </LocalizationProvider>
