@@ -10,7 +10,9 @@ import {
   Divider,
   Popover,
   Button,
-  Container
+  Container,
+  Alert,
+  Paper
 } from '@mui/material';
 import NotificationsIcon from '@mui/icons-material/Notifications';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
@@ -51,9 +53,14 @@ function NotificationList() {
         return;
       }
 
+      // Clean the token - remove any quotes or spaces
+      const cleanToken = token.trim().replace(/^["'](.*)["']$/, '$1');
+
       const response = await fetch(`${API_BASE_URL}/api/rides/notifications/`, {
         headers: {
-          'Authorization': `Bearer ${token}`
+          'Authorization': `Bearer ${cleanToken}`,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
         }
       });
 
@@ -71,8 +78,24 @@ function NotificationList() {
           console.log('Sample ride match:', rideMatches[0]);
         }
       } else {
-        const errorData = await response.json().catch(() => ({}));
-        setError(errorData.message || 'Failed to fetch notifications');
+        // Better error handling
+        let errorMessage = 'Failed to fetch notifications';
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.message || errorData.detail || errorMessage;
+        } catch (e) {
+          // If can't parse JSON, use status text
+          errorMessage = `${errorMessage}: ${response.statusText}`;
+        }
+        
+        console.error('Error response status:', response.status, errorMessage);
+        setError(errorMessage);
+        
+        // Handle token expiration
+        if (response.status === 401) {
+          console.log('Token may be expired, clearing session');
+          localStorage.removeItem('token');
+        }
       }
     } catch (err) {
       console.error('Error fetching notifications:', err);
@@ -368,9 +391,71 @@ function NotificationList() {
   return (
     <>
       {window.location.pathname === '/notifications' && (
-        <Typography variant="h4" className="page-title" gutterBottom>
-          Notifications
-        </Typography>
+        <Container maxWidth="md" sx={{ mt: 4 }}>
+          <Typography variant="h4" className="page-title" gutterBottom sx={{ mb: 3 }}>
+            Notifications
+          </Typography>
+          
+          {error ? (
+            <Alert severity="error" sx={{ mt: 2, mb: 2 }}>{error}</Alert>
+          ) : notifications.length === 0 ? (
+            <Alert severity="info" sx={{ mt: 2, mb: 2 }}>You have no notifications</Alert>
+          ) : (
+            <Paper elevation={2} sx={{ borderRadius: '12px', overflow: 'hidden' }}>
+              <List sx={{ p: 0 }}>
+                {notifications.map((notification) => (
+                  <ListItem
+                    key={notification.id}
+                    sx={{
+                      bgcolor: notification.is_read ? 'inherit' : 'action.hover',
+                      '&:hover': { bgcolor: 'action.selected' },
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'flex-start',
+                      py: 2,
+                      borderBottom: '1px solid rgba(0, 0, 0, 0.1)'
+                    }}
+                  >
+                    <Box sx={{ display: 'flex', width: '100%' }}>
+                      <ListItemText
+                        primary={
+                          <Typography variant="body1" component="div">
+                            {renderNotificationContent(notification)}
+                          </Typography>
+                        }
+                        secondary={
+                          <Typography variant="caption" color="text.secondary">
+                            {formatDate(notification.created_at)}
+                          </Typography>
+                        }
+                        sx={{ 
+                          flex: 1,
+                          '& .MuiListItemText-primary': {
+                            mb: 0.5
+                          }
+                        }}
+                      />
+                      {!notification.is_read && (
+                        <IconButton
+                          size="small"
+                          onClick={() => handleMarkAsRead(notification.id)}
+                          sx={{ ml: 1 }}
+                        >
+                          <CheckCircleIcon color="primary" />
+                        </IconButton>
+                      )}
+                    </Box>
+                    
+                    {/* Add ride match details */}
+                    {notification.notification_type === 'RIDE_MATCH' && renderRideMatchDetails(notification)}
+                    
+                    {renderAcceptButton(notification)}
+                  </ListItem>
+                ))}
+              </List>
+            </Paper>
+          )}
+        </Container>
       )}
       <div style={{ display: 'inline-block' }}>
         <IconButton 
@@ -398,12 +483,15 @@ function NotificationList() {
             paper: {
               elevation: 4,
               sx: {
-                width: 400,
-                maxHeight: 500,
+                width: { xs: '90vw', sm: 400 },
+                maxHeight: { xs: '70vh', sm: 500 },
                 overflow: 'auto',
                 mt: 1,
                 '@media (max-width: 600px)': {
-                  width: '300px',
+                  left: '5% !important',
+                  right: '5% !important',
+                  maxWidth: '90% !important',
+                  margin: '0 auto'
                 }
               }
             }

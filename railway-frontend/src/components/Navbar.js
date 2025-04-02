@@ -127,7 +127,19 @@ function Navbar() {
           </MenuItem>
           <MenuItem onClick={(e) => {
             handleMobileMenuClose();
-            navigate('/notifications');
+            // Instead of navigating, find and click the notification button
+            const notificationButton = document.getElementById('notification-button');
+            if (notificationButton) {
+              notificationButton.click();
+            } else {
+              // Fallback if button not found
+              const event = new MouseEvent('click', {
+                bubbles: true,
+                cancelable: true,
+                view: window
+              });
+              document.querySelector('[aria-label="notifications"]')?.dispatchEvent(event);
+            }
           }}>
             <NotificationsIcon sx={{ mr: 1, fontSize: 20 }} />
             Notifications
