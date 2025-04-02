@@ -1,13 +1,13 @@
-import React, { useState } from 'react';
-import { Box, Container, Typography, TextField, Button, Paper, FormControl, FormLabel, Alert } from '@mui/material';
+import React, { useState, useEffect } from 'react';
+import { Box, Container, Typography, TextField, Button, Paper, FormControl, FormLabel, Alert, useTheme, useMediaQuery } from '@mui/material';
 import { styled } from '@mui/material/styles';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import DirectionsCarIcon from '@mui/icons-material/DirectionsCar';
 import PersonIcon from '@mui/icons-material/Person';
 import { API_BASE_URL } from '../config';
 
 const StyledContainer = styled(Container)(({ theme }) => ({
-  height: '100vh',
+  minHeight: '100vh',
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
@@ -16,11 +16,11 @@ const StyledContainer = styled(Container)(({ theme }) => ({
   overflow: 'hidden',
 }));
 
-const FormContainer = styled(Box)(({ theme, isActive }) => ({
-  position: 'absolute',
+const FormContainer = styled(Box)(({ theme, isActive, isMobile }) => ({
+  position: isMobile ? 'relative' : 'absolute',
   top: 0,
   height: '100%',
-  width: '50%',
+  width: isMobile ? '100%' : '50%',
   transition: 'all 0.6s ease-in-out',
   display: 'flex',
   alignItems: 'center',
@@ -28,19 +28,22 @@ const FormContainer = styled(Box)(({ theme, isActive }) => ({
   backgroundColor: '#fff',
   opacity: isActive ? 1 : 0,
   zIndex: isActive ? 5 : 1,
+  padding: isMobile ? theme.spacing(2, 0) : 0,
 }));
 
-const SignInContainer = styled(FormContainer)(({ theme, isActive }) => ({
+const SignInContainer = styled(FormContainer)(({ theme, isActive, isMobile }) => ({
   left: 0,
-  transform: isActive ? 'translateX(0)' : 'translateX(-100%)',
+  transform: isMobile ? 'none' : (isActive ? 'translateX(0)' : 'translateX(-100%)'),
+  display: isMobile ? (isActive ? 'flex' : 'none') : 'flex',
 }));
 
-const SignUpContainer = styled(FormContainer)(({ theme, isActive }) => ({
-  left: '50%',
-  transform: isActive ? 'translateX(0)' : 'translateX(100%)',
+const SignUpContainer = styled(FormContainer)(({ theme, isActive, isMobile }) => ({
+  left: isMobile ? 0 : '50%',
+  transform: isMobile ? 'none' : (isActive ? 'translateX(0)' : 'translateX(100%)'),
+  display: isMobile ? (isActive ? 'flex' : 'none') : 'flex',
 }));
 
-const OverlayContainer = styled(Box)(({ theme, isSignUp }) => ({
+const OverlayContainer = styled(Box)(({ theme, isSignUp, isMobile }) => ({
   position: 'absolute',
   top: 0,
   left: isSignUp ? 0 : '50%',
@@ -49,6 +52,7 @@ const OverlayContainer = styled(Box)(({ theme, isSignUp }) => ({
   overflow: 'hidden',
   transition: 'transform 0.6s ease-in-out, left 0.6s ease-in-out',
   zIndex: 10,
+  display: isMobile ? 'none' : 'block', // Hide on mobile
 }));
 
 const Overlay = styled(Box)(({ theme }) => ({
@@ -62,13 +66,13 @@ const Overlay = styled(Box)(({ theme }) => ({
   alignItems: 'center',
 }));
 
-const FormPaper = styled(Paper)(({ theme }) => ({
-  padding: theme.spacing(4),
+const FormPaper = styled(Paper)(({ theme, isMobile }) => ({
+  padding: isMobile ? theme.spacing(3) : theme.spacing(4),
   borderRadius: '10px',
   boxShadow: '0 0 15px rgba(0,0,0,0.1)',
-  width: '90%',
+  width: isMobile ? '95%' : '90%',
   maxWidth: '400px',
-  maxHeight: '90%',
+  maxHeight: isMobile ? '95vh' : '90%',
   overflowY: 'auto',
 }));
 
@@ -87,10 +91,19 @@ const UserTypeOption = styled(Box)(({ theme, selected }) => ({
 }));
 
 const AuthPage = () => {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const location = useLocation();
+  
   const [isSignUp, setIsSignUp] = useState(false);
   const [userType, setUserType] = useState('RIDER');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  
+  // Set initial form based on route
+  useEffect(() => {
+    setIsSignUp(location.pathname === '/register');
+  }, [location.pathname]);
   
   // Login form state
   const [loginData, setLoginData] = useState({
@@ -112,12 +125,20 @@ const AuthPage = () => {
   const navigate = useNavigate();
 
   const handleSignUpClick = () => {
-    setIsSignUp(true);
+    if (isMobile) {
+      navigate('/register');
+    } else {
+      setIsSignUp(true);
+    }
     setError('');
   };
 
   const handleSignInClick = () => {
-    setIsSignUp(false);
+    if (isMobile) {
+      navigate('/login');
+    } else {
+      setIsSignUp(false);
+    }
     setError('');
   };
 
@@ -248,15 +269,15 @@ const AuthPage = () => {
           const errorData = JSON.parse(errorText);
           setError(errorData.detail || 'Registration failed');
         } catch (e) {
-          // If not JSON, show the raw error
+          // If not JSON, show the raw error or a generic message
           setError(`Registration failed: ${errorText.substring(0, 100)}...`);
         }
         return;
       }
       
       const data = await response.json();
-      console.log('Registration response:', data);
-
+      console.log('Registration successful, data:', data);
+      
       // Store token and user type
       localStorage.setItem('token', data.token);
       localStorage.setItem('userType', JSON.stringify(data.user_type));
@@ -275,23 +296,29 @@ const AuthPage = () => {
 
   return (
     <StyledContainer>
-      <Box sx={{ 
-        position: 'relative', 
-        width: '100%', 
-        maxWidth: '900px', 
-        height: '600px',
-        backgroundColor: '#fff',
-        borderRadius: '20px',
-        boxShadow: '0 14px 28px rgba(0,0,0,0.25), 0 10px 10px rgba(0,0,0,0.22)',
-        overflow: 'hidden'
+      <Box sx={{
+        position: 'relative',
+        width: '100%',
+        height: isMobile ? 'auto' : '550px',
+        maxWidth: isMobile ? '450px' : '900px',
       }}>
-        <SignInContainer isActive={!isSignUp}>
-          <FormPaper>
-            <Typography variant="h4" gutterBottom sx={{ fontWeight: 'bold', color: '#861F41', textAlign: 'center' }}>
-              Welcome Back!
+        <SignInContainer isActive={!isSignUp} isMobile={isMobile}>
+          <FormPaper isMobile={isMobile}>
+            <Typography variant="h4" gutterBottom sx={{ 
+              fontWeight: 'bold', 
+              color: '#861F41', 
+              textAlign: 'center',
+              fontSize: isMobile ? '1.5rem' : '2rem',
+            }}>
+              Welcome Back
             </Typography>
-            <Typography variant="body1" sx={{ mb: 2, color: '#666', textAlign: 'center' }}>
-              Ready to continue your journey with ChalBeyy?
+            <Typography variant="body1" sx={{ 
+              mb: 2, 
+              color: '#666', 
+              textAlign: 'center', 
+              fontSize: isMobile ? '0.875rem' : '1rem'
+            }}>
+              Sign in to continue your journey
             </Typography>
             
             {error && (
@@ -310,7 +337,8 @@ const AuthPage = () => {
                 value={loginData.username}
                 onChange={handleLoginChange}
                 required
-                sx={{ mb: 2 }}
+                size={isMobile ? "small" : "medium"}
+                sx={{ mb: isMobile ? 1.5 : 2 }}
               />
               <TextField
                 fullWidth
@@ -322,7 +350,8 @@ const AuthPage = () => {
                 value={loginData.password}
                 onChange={handleLoginChange}
                 required
-                sx={{ mb: 3 }}
+                size={isMobile ? "small" : "medium"}
+                sx={{ mb: isMobile ? 2 : 3 }}
               />
               <Button
                 fullWidth
@@ -332,10 +361,10 @@ const AuthPage = () => {
                 sx={{
                   backgroundColor: '#861F41',
                   '&:hover': { backgroundColor: '#A52A55' },
-                  py: 1.5,
+                  py: isMobile ? 1 : 1.5,
                   borderRadius: '25px',
                   textTransform: 'none',
-                  fontSize: '16px',
+                  fontSize: isMobile ? '14px' : '16px',
                   fontWeight: 'bold'
                 }}
               >
@@ -348,7 +377,8 @@ const AuthPage = () => {
                 textAlign: 'center', 
                 mt: 3, 
                 color: '#861F41',
-                cursor: 'pointer'
+                cursor: 'pointer',
+                fontSize: isMobile ? '0.8rem' : '0.875rem'
               }}
               onClick={handleSignUpClick}
             >
@@ -357,12 +387,22 @@ const AuthPage = () => {
           </FormPaper>
         </SignInContainer>
 
-        <SignUpContainer isActive={isSignUp}>
-          <FormPaper>
-            <Typography variant="h4" gutterBottom sx={{ fontWeight: 'bold', color: '#861F41', textAlign: 'center' }}>
+        <SignUpContainer isActive={isSignUp} isMobile={isMobile}>
+          <FormPaper isMobile={isMobile}>
+            <Typography variant="h4" gutterBottom sx={{ 
+              fontWeight: 'bold', 
+              color: '#861F41', 
+              textAlign: 'center',
+              fontSize: isMobile ? '1.5rem' : '2rem',
+            }}>
               Create Account
             </Typography>
-            <Typography variant="body1" sx={{ mb: 2, color: '#666', textAlign: 'center' }}>
+            <Typography variant="body1" sx={{ 
+              mb: 2, 
+              color: '#666', 
+              textAlign: 'center',
+              fontSize: isMobile ? '0.875rem' : '1rem'
+            }}>
               Join ChalBeyy and start your journey today!
             </Typography>
             
@@ -382,7 +422,8 @@ const AuthPage = () => {
                 value={registerData.username}
                 onChange={handleRegisterChange}
                 required
-                sx={{ mb: 2 }}
+                size={isMobile ? "small" : "medium"}
+                sx={{ mb: isMobile ? 1.5 : 2 }}
               />
               <TextField
                 fullWidth
@@ -394,7 +435,8 @@ const AuthPage = () => {
                 value={registerData.email}
                 onChange={handleRegisterChange}
                 required
-                sx={{ mb: 2 }}
+                size={isMobile ? "small" : "medium"}
+                sx={{ mb: isMobile ? 1.5 : 2 }}
               />
               <TextField
                 fullWidth
@@ -405,7 +447,8 @@ const AuthPage = () => {
                 value={registerData.first_name}
                 onChange={handleRegisterChange}
                 required
-                sx={{ mb: 2 }}
+                size={isMobile ? "small" : "medium"}
+                sx={{ mb: isMobile ? 1.5 : 2 }}
               />
               <TextField
                 fullWidth
@@ -416,7 +459,8 @@ const AuthPage = () => {
                 value={registerData.last_name}
                 onChange={handleRegisterChange}
                 required
-                sx={{ mb: 2 }}
+                size={isMobile ? "small" : "medium"}
+                sx={{ mb: isMobile ? 1.5 : 2 }}
               />
               <TextField
                 fullWidth
@@ -427,7 +471,8 @@ const AuthPage = () => {
                 value={registerData.phone_number}
                 onChange={handleRegisterChange}
                 required
-                sx={{ mb: 2 }}
+                size={isMobile ? "small" : "medium"}
+                sx={{ mb: isMobile ? 1.5 : 2 }}
               />
               <TextField
                 fullWidth
@@ -439,7 +484,8 @@ const AuthPage = () => {
                 value={registerData.password}
                 onChange={handleRegisterChange}
                 required
-                sx={{ mb: 2 }}
+                size={isMobile ? "small" : "medium"}
+                sx={{ mb: isMobile ? 1.5 : 2 }}
               />
               <TextField
                 fullWidth
@@ -451,21 +497,28 @@ const AuthPage = () => {
                 value={registerData.password2}
                 onChange={handleRegisterChange}
                 required
-                sx={{ mb: 2 }}
+                size={isMobile ? "small" : "medium"}
+                sx={{ mb: isMobile ? 1.5 : 2 }}
               />
               
-              <FormControl component="fieldset" sx={{ width: '100%', mb: 3 }}>
-                <FormLabel component="legend" sx={{ mb: 1, color: '#666' }}>I want to register as:</FormLabel>
+              <FormControl component="fieldset" sx={{ width: '100%', mb: isMobile ? 2 : 3 }}>
+                <FormLabel component="legend" sx={{ mb: 1, color: '#666', fontSize: isMobile ? '0.875rem' : '1rem' }}>
+                  I want to register as:
+                </FormLabel>
                 <Box sx={{ display: 'flex', gap: 2 }}>
                   <UserTypeOption
                     selected={userType === 'RIDER'}
                     onClick={() => handleUserTypeChange('RIDER')}
                     sx={{ flex: 1 }}
                   >
-                    <PersonIcon sx={{ color: '#861F41', mr: 1, fontSize: 28 }} />
+                    <PersonIcon sx={{ color: '#861F41', mr: 1, fontSize: isMobile ? 24 : 28 }} />
                     <Box>
-                      <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>Rider</Typography>
-                      <Typography variant="body2" sx={{ color: '#666' }}>Request rides</Typography>
+                      <Typography variant="subtitle1" sx={{ fontWeight: 'bold', fontSize: isMobile ? '0.9rem' : '1rem' }}>
+                        Rider
+                      </Typography>
+                      <Typography variant="body2" sx={{ color: '#666', fontSize: isMobile ? '0.75rem' : '0.875rem' }}>
+                        Request rides
+                      </Typography>
                     </Box>
                   </UserTypeOption>
                   <UserTypeOption
@@ -473,10 +526,14 @@ const AuthPage = () => {
                     onClick={() => handleUserTypeChange('DRIVER')}
                     sx={{ flex: 1 }}
                   >
-                    <DirectionsCarIcon sx={{ color: '#861F41', mr: 1, fontSize: 28 }} />
+                    <DirectionsCarIcon sx={{ color: '#861F41', mr: 1, fontSize: isMobile ? 24 : 28 }} />
                     <Box>
-                      <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>Driver</Typography>
-                      <Typography variant="body2" sx={{ color: '#666' }}>Offer rides</Typography>
+                      <Typography variant="subtitle1" sx={{ fontWeight: 'bold', fontSize: isMobile ? '0.9rem' : '1rem' }}>
+                        Driver
+                      </Typography>
+                      <Typography variant="body2" sx={{ color: '#666', fontSize: isMobile ? '0.75rem' : '0.875rem' }}>
+                        Offer rides
+                      </Typography>
                     </Box>
                   </UserTypeOption>
                 </Box>
@@ -490,10 +547,10 @@ const AuthPage = () => {
                 sx={{
                   backgroundColor: '#861F41',
                   '&:hover': { backgroundColor: '#A52A55' },
-                  py: 1.5,
+                  py: isMobile ? 1 : 1.5,
                   borderRadius: '25px',
                   textTransform: 'none',
-                  fontSize: '16px',
+                  fontSize: isMobile ? '14px' : '16px',
                   fontWeight: 'bold'
                 }}
               >
@@ -506,7 +563,8 @@ const AuthPage = () => {
                 textAlign: 'center', 
                 mt: 3, 
                 color: '#861F41',
-                cursor: 'pointer'
+                cursor: 'pointer',
+                fontSize: isMobile ? '0.8rem' : '0.875rem'
               }}
               onClick={handleSignInClick}
             >
@@ -515,7 +573,7 @@ const AuthPage = () => {
           </FormPaper>
         </SignUpContainer>
 
-        <OverlayContainer isSignUp={isSignUp}>
+        <OverlayContainer isSignUp={isSignUp} isMobile={isMobile}>
           <Overlay>
             {isSignUp ? (
               <Box sx={{ p: 4, textAlign: 'center' }}>
