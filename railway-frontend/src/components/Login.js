@@ -92,7 +92,12 @@ function Login() {
         window.location.reload(); // Reload to update the UI state
       } else {
         console.error('Login failed:', data);
-        setError(data.detail || 'Login failed. Please check your credentials.');
+        // Provide more user-friendly error messages
+        if (data.detail && data.detail.includes('Invalid credentials')) {
+          setError('Invalid username or password. If you don\'t have an account, please register first.');
+        } else {
+          setError(data.detail || 'Login failed. Please check your credentials.');
+        }
       }
     } catch (err) {
       console.error('Login error:', err);

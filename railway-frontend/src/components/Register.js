@@ -135,7 +135,19 @@ function Register() {
         try {
           // Try to parse as JSON if possible
           const errorData = JSON.parse(errorText);
-          setError(errorData.detail || 'Registration failed');
+          
+          // Check for specific email duplicate error
+          if (errorData.email && errorData.email[0].includes('already exists')) {
+            setError('This email address is already registered. Please use a different email or log in to your existing account.');
+          } else if (errorData.username && errorData.username[0].includes('already exists')) {
+            setError('This username is already taken. Please choose a different username.');
+          } else {
+            // Handle other validation errors
+            const errorMessage = Object.entries(errorData)
+              .map(([field, errors]) => `${field}: ${errors.join(', ')}`)
+              .join('; ');
+            setError(errorMessage || 'Registration failed');
+          }
         } catch (e) {
           // If not JSON, show the raw error or a generic message
           setError(`Registration failed: ${errorText.substring(0, 100)}...`);
