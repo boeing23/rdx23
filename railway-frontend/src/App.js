@@ -159,6 +159,7 @@ function AppContent({ isAuthenticated, userType }) {
           userType === 'DRIVER' ? <DriverAcceptedRides /> : <RiderAcceptedRides />
         } />
         <Route path="/profile" element={<UserProfile />} />
+        <Route path="/notifications" element={<NotificationList />} />
       </Routes>
     </>
   );

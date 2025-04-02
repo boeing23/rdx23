@@ -127,10 +127,7 @@ function Navbar() {
           </MenuItem>
           <MenuItem onClick={(e) => {
             handleMobileMenuClose();
-            const notificationButton = document.getElementById('notification-button');
-            if (notificationButton) {
-              notificationButton.click();
-            }
+            navigate('/notifications');
           }}>
             <NotificationsIcon sx={{ mr: 1, fontSize: 20 }} />
             Notifications

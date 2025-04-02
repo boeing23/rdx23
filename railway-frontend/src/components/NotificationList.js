@@ -378,6 +378,7 @@ function NotificationList() {
           ref={buttonRef}
           color="inherit" 
           onClick={handleClick}
+          aria-label="notifications"
           sx={{ 
             '&:hover': {
               backgroundColor: 'rgba(255, 255, 255, 0.1)'

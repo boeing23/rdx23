@@ -164,8 +164,18 @@ const UserProfile = () => {
       )}
 
       <Paper elevation={3} sx={{ p: 4, borderRadius: 2 }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+        <Box sx={{ 
+          display: 'flex', 
+          flexDirection: { xs: 'column', sm: 'row' }, 
+          justifyContent: 'space-between', 
+          alignItems: { xs: 'flex-start', sm: 'center' }, 
+          mb: 3 
+        }}>
+          <Box sx={{ 
+            display: 'flex', 
+            alignItems: 'center',
+            mb: { xs: 2, sm: 0 }
+          }}>
             <Avatar 
               sx={{ 
                 width: 80, 
@@ -196,6 +206,12 @@ const UserProfile = () => {
             type={editing ? "submit" : "button"}
             form={editing ? "profile-form" : undefined}
             disabled={updating}
+            sx={{
+              minWidth: { xs: '100%', sm: 'auto' },
+              p: { xs: 1, sm: 'auto' },
+              whiteSpace: 'nowrap',
+              mt: { xs: 1, sm: 0 }
+            }}
           >
             {updating ? 'Saving...' : editing ? 'Save Changes' : 'Edit Profile'}
           </Button>
