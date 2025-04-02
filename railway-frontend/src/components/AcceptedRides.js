@@ -67,6 +67,12 @@ const AcceptedRides = () => {
       });
 
       if (!response.ok) {
+        // For 404 Not Found, it's likely the user just hasn't started any trips yet
+        if (response.status === 404) {
+          setAcceptedRides([]);
+          setLoading(false);
+          return;
+        }
         throw new Error('Failed to fetch accepted rides');
       }
 
@@ -102,7 +108,8 @@ const AcceptedRides = () => {
       setLoading(false);
     } catch (err) {
       console.error('Error fetching accepted rides:', err);
-      setError('Failed to load accepted rides. Please try again.');
+      // Treat as a first-time user rather than showing error message
+      setAcceptedRides([]);
       setLoading(false);
     }
   };
@@ -461,16 +468,68 @@ const AcceptedRides = () => {
 
   if (loading) {
     return (
-      <Container>
-        <Typography>Loading your trips...</Typography>
+      <Container maxWidth="lg" sx={{ px: 4, py: 5 }}>
+        <Typography variant="h4" className="page-title" gutterBottom>
+          My Trips
+        </Typography>
+        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '40vh' }}>
+          <Typography>Loading your trips...</Typography>
+        </Box>
       </Container>
     );
   }
 
   if (error) {
+    // Check if the error is about loading rides and user has no rides yet
+    if (error === 'Failed to load accepted rides. Please try again.') {
+      return (
+        <Container maxWidth="lg" sx={{ px: 4, py: 5 }}>
+          <Typography variant="h4" className="page-title" gutterBottom>
+            My Trips
+          </Typography>
+          <Paper elevation={2} sx={{ p: 4, borderRadius: '12px', mt: 3, textAlign: 'center' }}>
+            <Box sx={{ 
+              display: 'flex', 
+              flexDirection: 'column', 
+              alignItems: 'center',
+              justifyContent: 'center',
+              py: 4
+            }}>
+              <DirectionsCar sx={{ fontSize: 80, color: '#861F41', mb: 2, opacity: 0.8 }} />
+              <Typography variant="h5" gutterBottom sx={{ fontWeight: 'bold', color: '#861F41' }}>
+                The road's calling your name!
+              </Typography>
+              <Typography variant="body1" gutterBottom color="text.secondary" sx={{ maxWidth: 600, mb: 3 }}>
+                Looks like you haven't started your journey yet. Time to hop in and explore the world with ChalBeyy!
+              </Typography>
+              <Button 
+                variant="contained" 
+                onClick={() => navigate('/request-ride')}
+                sx={{ 
+                  borderRadius: '12px',
+                  py: 1.5,
+                  px: 4,
+                  textTransform: 'none',
+                  fontWeight: 600,
+                  bgcolor: '#861F41', 
+                  '&:hover': { bgcolor: '#5e0d29' }
+                }}
+              >
+                Find a Ride
+              </Button>
+            </Box>
+          </Paper>
+        </Container>
+      );
+    }
+    
+    // For other errors, show the regular error message
     return (
-      <Container>
-        <Alert severity="error">{error}</Alert>
+      <Container maxWidth="lg" sx={{ px: 4, py: 5 }}>
+        <Typography variant="h4" className="page-title" gutterBottom>
+          My Trips
+        </Typography>
+        <Alert severity="error" sx={{ mt: 3 }}>{error}</Alert>
       </Container>
     );
   }
@@ -482,7 +541,38 @@ const AcceptedRides = () => {
       </Typography>
 
       {acceptedRides.length === 0 ? (
-        <Alert severity="info">You don't have any trips yet.</Alert>
+        <Paper elevation={2} sx={{ p: 4, borderRadius: '12px', mt: 3, textAlign: 'center' }}>
+          <Box sx={{ 
+            display: 'flex', 
+            flexDirection: 'column', 
+            alignItems: 'center',
+            justifyContent: 'center',
+            py: 4
+          }}>
+            <DirectionsCar sx={{ fontSize: 80, color: '#861F41', mb: 2, opacity: 0.8 }} />
+            <Typography variant="h5" gutterBottom sx={{ fontWeight: 'bold', color: '#861F41' }}>
+              Rides waiting, seats inviting!
+            </Typography>
+            <Typography variant="body1" gutterBottom color="text.secondary" sx={{ maxWidth: 600, mb: 3 }}>
+              Your journey begins with just one click! Find your perfect ride and let the adventures begin.
+            </Typography>
+            <Button 
+              variant="contained" 
+              onClick={() => navigate('/request-ride')}
+              sx={{ 
+                borderRadius: '12px',
+                py: 1.5,
+                px: 4,
+                textTransform: 'none',
+                fontWeight: 600,
+                bgcolor: '#861F41', 
+                '&:hover': { bgcolor: '#5e0d29' }
+              }}
+            >
+              Find a Ride
+            </Button>
+          </Box>
+        </Paper>
       ) : (
         <Box sx={{ 
           display: 'flex', 
