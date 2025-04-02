@@ -206,11 +206,51 @@ const AcceptedRides = () => {
     return user && user.email ? user.email : 'No email provided';
   };
 
-  const formatDate = (dateString) => {
+  const formatDate = (dateString, dateOnly = false, timeOnly = false) => {
     try {
       const date = new Date(dateString);
-      return format(date, 'MMM dd, yyyy h:mm a');
+      
+      // Check if date is valid
+      if (isNaN(date.getTime())) {
+        console.error('Invalid date:', dateString);
+        return 'Invalid date';
+      }
+      
+      // Options for date/time formatting
+      const options = {
+        timeZone: 'America/New_York' // Eastern Time
+      };
+      
+      if (dateOnly) {
+        // Date only format: "May 15, 2023"
+        return new Intl.DateTimeFormat('en-US', {
+          ...options,
+          month: 'short',
+          day: 'numeric',
+          year: 'numeric'
+        }).format(date);
+      } else if (timeOnly) {
+        // Time only format: "3:30 PM EDT"
+        return new Intl.DateTimeFormat('en-US', {
+          ...options,
+          hour: 'numeric',
+          minute: '2-digit',
+          timeZoneName: 'short'
+        }).format(date);
+      } else {
+        // Full format: "May 15, 2023, 3:30 PM EDT"
+        return new Intl.DateTimeFormat('en-US', {
+          ...options,
+          month: 'short',
+          day: 'numeric',
+          year: 'numeric',
+          hour: 'numeric',
+          minute: '2-digit',
+          timeZoneName: 'short'
+        }).format(date);
+      }
     } catch (e) {
+      console.error('Error formatting date:', e);
       return dateString || 'Unknown date';
     }
   };

@@ -130,6 +130,43 @@ const RideList = () => {
     }
   };
 
+  // Helper function for formatted date/time with timezone
+  const formatDateTime = (dateString) => {
+    try {
+      const date = new Date(dateString);
+      
+      // Check if date is valid
+      if (isNaN(date.getTime())) {
+        console.error('Invalid date:', dateString);
+        return 'Invalid date';
+      }
+      
+      // Format the date with Eastern timezone
+      const dateFormatter = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'America/New_York',
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric'
+      });
+      
+      // Format the time with Eastern timezone
+      const timeFormatter = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'America/New_York',
+        hour: 'numeric',
+        minute: '2-digit',
+        timeZoneName: 'short'
+      });
+      
+      return {
+        date: dateFormatter.format(date),
+        time: timeFormatter.format(date)
+      };
+    } catch (e) {
+      console.error('Error formatting date:', e);
+      return { date: 'Invalid date', time: 'Invalid time' };
+    }
+  };
+
   if (loading) {
     return (
       <Box sx={{ mt: 4, textAlign: 'center' }}>
@@ -207,9 +244,9 @@ const RideList = () => {
                     <div className="time-details">
                       <AccessTime className="time-icon" />
                       <Typography variant="body2">
-                        {new Date(ride.departure_time).toLocaleDateString()} 
+                        {formatDateTime(ride.departure_time).date}
                         <br />
-                        {new Date(ride.departure_time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                        {formatDateTime(ride.departure_time).time}
                       </Typography>
                     </div>
                     
