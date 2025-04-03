@@ -199,6 +199,7 @@ class RideRequestSerializer(serializers.ModelSerializer):
     ride_details = serializers.SerializerMethodField()
     nearest_dropoff_info = serializers.SerializerMethodField()
     optimal_pickup_info = serializers.SerializerMethodField()
+    driver_details = serializers.SerializerMethodField()
     
     class Meta:
         model = RideRequest
@@ -207,7 +208,8 @@ class RideRequestSerializer(serializers.ModelSerializer):
             'pickup_latitude', 'pickup_longitude', 'dropoff_latitude',
             'dropoff_longitude', 'departure_time', 'seats_needed',
             'status', 'created_at', 'updated_at', 'nearest_dropoff_point', 
-            'nearest_dropoff_info', 'optimal_pickup_point', 'optimal_pickup_info'
+            'nearest_dropoff_info', 'optimal_pickup_point', 'optimal_pickup_info',
+            'driver_details'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
     
@@ -313,6 +315,23 @@ class RideRequestSerializer(serializers.ModelSerializer):
         except Exception as e:
             logger.error(f"Error extracting optimal pickup info: {str(e)}")
             return None
+
+    def get_driver_details(self, obj):
+        if obj.ride and obj.ride.driver:
+            driver = obj.ride.driver
+            return {
+                'id': driver.id,
+                'username': driver.username,
+                'first_name': driver.first_name,
+                'last_name': driver.last_name,
+                'email': driver.email,
+                'phone_number': driver.phone_number,
+                'vehicle_make': driver.vehicle_make,
+                'vehicle_model': driver.vehicle_model,
+                'vehicle_color': driver.vehicle_color,
+                'license_plate': driver.license_plate
+            }
+        return None
 
     def validate(self, data):
         logger.info(f"Validating ride request data: {data}")

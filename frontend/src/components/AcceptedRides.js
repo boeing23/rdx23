@@ -45,8 +45,7 @@ const AcceptedRides = () => {
       console.log('User type:', currentUserType);
       console.log('User ID:', userId);
       
-      // Use the correct endpoint with detailed information
-      const response = await fetch(`${API_BASE_URL}/api/rides/requests/accepted/?include_details=true`, {
+      const response = await fetch(`${API_BASE_URL}/api/rides/requests/accepted/`, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
@@ -59,56 +58,8 @@ const AcceptedRides = () => {
       const data = await response.json();
       console.log('Fetched accepted rides:', data);
       
-      // Fetch additional driver information if needed
-      const ridesWithDetails = await Promise.all(data.map(async (ride) => {
-        // If this request already has driver_details, use them
-        if (ride.driver_details && Object.keys(ride.driver_details).length > 0) {
-          console.log(`Ride ${ride.id} already has driver details:`, ride.driver_details);
-          return ride;
-        }
-
-        // Otherwise, fetch the driver details
-        if (ride.driver_id || (ride.ride && ride.ride.driver)) {
-          const driverId = ride.driver_id || (ride.ride && ride.ride.driver);
-          console.log(`Fetching details for driver ${driverId}`);
-          
-          try {
-            const driverResponse = await fetch(`${API_BASE_URL}/api/users/drivers/${driverId}/`, {
-              headers: {
-                'Authorization': `Bearer ${token}`,
-              },
-            });
-            
-            if (driverResponse.ok) {
-              const driverData = await driverResponse.json();
-              console.log(`Driver details for ${driverId}:`, driverData);
-              return { ...ride, driver_details: driverData };
-            }
-          } catch (err) {
-            console.error(`Error fetching driver ${driverId} details:`, err);
-          }
-        }
-        
-        return ride;
-      }));
-      
-      // Log detailed information about each ride
-      ridesWithDetails.forEach((ride, index) => {
-        console.log(`Ride ${index + 1}:`, {
-          id: ride.id,
-          status: ride.status,
-          rider: ride.rider,
-          ride: ride.ride,
-          pickup: ride.pickup_location,
-          dropoff: ride.dropoff_location,
-          departure: ride.departure_time,
-          seats: ride.seats_needed,
-          driver_details: ride.driver_details
-        });
-      });
-      
       // Sort rides by departure time (most recent first)
-      const sortedRides = ridesWithDetails.sort((a, b) => 
+      const sortedRides = data.sort((a, b) => 
         new Date(b.departure_time) - new Date(a.departure_time)
       );
       
@@ -219,9 +170,8 @@ const AcceptedRides = () => {
   }
 
   const renderRideCard = (ride) => {
-    // Extract driver details from the ride object
-    const driverInfo = ride.driver_details || 
-                      (ride.ride && ride.ride.driver_details) || {};
+    // Get driver details directly from the API response
+    const driverInfo = ride.driver_details || {};
     
     // Get ride data from either the ride object or the ride.ride object
     const rideData = ride.ride || ride;

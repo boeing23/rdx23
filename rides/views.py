@@ -1647,163 +1647,28 @@ class RideRequestViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'])
     def accepted(self, request):
         """
-        Returns all accepted ride requests for the current user (either as rider or driver).
-        Includes detailed rider and driver information for the frontend.
+        Get all accepted ride requests for the current user (both as rider and driver)
         """
-        logger.info(f"Fetching accepted rides for user: {request.user.username}")
-        
         try:
-            # First, mark any past rides as complete
-            mark_past_rides_complete()
-            
-            user = request.user
-            user_type = getattr(user, 'user_type', None)
-            logger.info(f"User type: {user_type}")
-            
-            # Debug user details
-            logger.info(f"Current user details - ID: {user.id}, email: {user.email}, phone: {getattr(user, 'phone_number', 'Not found')}")
-            logger.info(f"User has phone_number attribute: {hasattr(user, 'phone_number')}")
-            
-            if user_type == 'DRIVER':
-                # For drivers, get rides where they are the driver
-                logger.info("Fetching rides where user is the driver")
-                ride_ids = Ride.objects.filter(driver=user).values_list('id', flat=True)
-                ride_requests = RideRequest.objects.filter(
-                    ride_id__in=ride_ids
-                ).exclude(status='REJECTED')
-            else:
-                # For riders, get their ride requests
-                logger.info("Fetching ride requests where user is the rider")
-                ride_requests = RideRequest.objects.filter(
-                    rider=user
-                ).exclude(status='REJECTED')
-            
-            logger.info(f"Found {ride_requests.count()} ride requests for user {user.username}")
-            
-            # Safe check for optimal_pickup_point
-            for req in ride_requests:
-                try:
-                    # Check if optimal_pickup_point might cause serialization issues
-                    if req.optimal_pickup_point and not isinstance(req.optimal_pickup_point, (dict, str)):
-                        logger.warning(f"Fixing invalid optimal_pickup_point format for request {req.id}")
-                        req.optimal_pickup_point = None
-                        req.save(update_fields=['optimal_pickup_point'])
-                    
-                    # Check if nearest_dropoff_point might cause serialization issues
-                    if req.nearest_dropoff_point and not isinstance(req.nearest_dropoff_point, (dict, str)):
-                        logger.warning(f"Fixing invalid nearest_dropoff_point format for request {req.id}")
-                        req.nearest_dropoff_point = None
-                        req.save(update_fields=['nearest_dropoff_point'])
-                except Exception as e:
-                    logger.error(f"Error checking request {req.id} fields: {str(e)}")
-            
-            # Debug each ride request's details
-            for req in ride_requests:
-                try:
-                    # Debug rider details
-                    if req.rider:
-                        rider = req.rider
-                        logger.info(f"Rider details for request {req.id}:")
-                        logger.info(f"  ID: {rider.id}, username: {rider.username}")
-                        logger.info(f"  Name: {rider.first_name} {rider.last_name}")
-                        logger.info(f"  Email: {rider.email}")
-                        logger.info(f"  Has phone_number: {hasattr(rider, 'phone_number')}")
-                        logger.info(f"  Phone: {getattr(rider, 'phone_number', 'Missing')}")
-                    
-                    # Debug driver details
-                    if req.ride and req.ride.driver:
-                        driver = req.ride.driver
-                        logger.info(f"Driver details for request {req.id}:")
-                        logger.info(f"  ID: {driver.id}, username: {driver.username}")
-                        logger.info(f"  Name: {driver.first_name} {driver.last_name}")
-                        logger.info(f"  Email: {driver.email}")
-                        logger.info(f"  Has phone_number: {hasattr(driver, 'phone_number')}")
-                        logger.info(f"  Phone: {getattr(driver, 'phone_number', 'Missing')}")
-                except Exception as e:
-                    logger.error(f"Error logging request {req.id} details: {str(e)}")
-            
-            try:
-                # Serialize with more detailed information
-                serializer = RideRequestSerializer(ride_requests, many=True, context={'request': request})
-                
-                # Debug serialized data
-                for idx, data in enumerate(serializer.data):
-                    logger.info(f"Serialized ride {idx+1}:")
-                    
-                    # Log rider info
-                    if 'rider' in data:
-                        rider_data = data['rider']
-                        logger.info(f"  Serialized rider: {rider_data.get('first_name', '')} {rider_data.get('last_name', '')}")
-                        logger.info(f"  Rider phone: {rider_data.get('phone_number', 'N/A')}")
-                    
-                    # Log driver info via ride_details
-                    if 'ride_details' in data and 'driver' in data['ride_details']:
-                        driver_data = data['ride_details']['driver']
-                        logger.info(f"  Serialized driver: {driver_data.get('first_name', '')} {driver_data.get('last_name', '')}")
-                        logger.info(f"  Driver phone: {driver_data.get('phone_number', 'N/A')}")
-                
-                return Response(serializer.data)
-            except Exception as e:
-                logger.error(f"Error serializing ride requests: {str(e)}")
-                logger.exception("Full serialization exception details:")
-                
-                # Try fallback approach with simpler serialization
-                try:
-                    logger.info("Attempting fallback serialization with simpler data")
-                    # Create a simplified version that excludes problematic fields
-                    simplified_data = []
-                    for req in ride_requests:
-                        try:
-                            ride = req.ride
-                            driver = ride.driver if ride else None
-                            
-                            # Construct simplified data with more complete driver information
-                            ride_data = {
-                                'id': req.id,
-                                'status': req.status,
-                                'ride_id': ride.id if ride else None,
-                                'pickup_location': req.pickup_location,
-                                'dropoff_location': req.dropoff_location,
-                                'departure_time': req.departure_time.isoformat() if req.departure_time else None,
-                                'seats_needed': req.seats_needed,
-                                'rider_name': f"{req.rider.first_name} {req.rider.last_name}" if req.rider else "Unknown"
-                            }
-                            
-                            # Add driver information if available
-                            if driver:
-                                ride_data.update({
-                                    'driver_name': f"{driver.first_name} {driver.last_name}",
-                                    'driver_email': driver.email,
-                                    'driver_phone': getattr(driver, 'phone_number', None),
-                                    'vehicle_make': getattr(driver, 'vehicle_make', None),
-                                    'vehicle_model': getattr(driver, 'vehicle_model', None),
-                                    'vehicle_color': getattr(driver, 'vehicle_color', None),
-                                    'vehicle_year': getattr(driver, 'vehicle_year', None),
-                                    'license_plate': getattr(driver, 'license_plate', None)
-                                })
-                            
-                            simplified_data.append(ride_data)
-                        except Exception as inner_error:
-                            logger.error(f"Error creating simplified data for ride request {req.id}: {str(inner_error)}")
-                    
-                    return Response(simplified_data)
-                except Exception as fallback_error:
-                    logger.error(f"Fallback serialization also failed: {str(fallback_error)}")
-                    return Response({
-                        'status': 'error',
-                        'message': 'Failed to retrieve accepted rides',
-                        'error_details': str(e)
-                    }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        
+            # Use select_related to fetch related ride and driver data in a single query
+            ride_requests = RideRequest.objects.filter(
+                Q(rider=request.user) | Q(ride__driver=request.user),
+                status__in=['ACCEPTED', 'COMPLETED']
+            ).select_related(
+                'ride',
+                'ride__driver',
+                'rider'
+            ).order_by('-departure_time')
+
+            serializer = RideRequestSerializer(ride_requests, many=True, context={'request': request})
+            return Response(serializer.data)
         except Exception as e:
-            logger.error(f"Error in accepted rides: {str(e)}")
-            logger.exception("Full exception details:")
-            return Response({
-                'status': 'error',
-                'message': 'Failed to retrieve accepted rides',
-                'error_details': str(e)
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        
+            logger.error(f"Error fetching accepted rides: {str(e)}")
+            return Response(
+                {"error": "Failed to fetch accepted rides"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
     @action(detail=True, methods=['post'])
     def cancel(self, request, pk=None):
         """Cancel an accepted ride request"""
