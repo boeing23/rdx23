@@ -30,7 +30,7 @@ export const AuthProvider = ({ children }) => {
           try {
             const response = await axios.get(`${API_BASE_URL}/api/users/me/`, {
               headers: {
-                Authorization: `Token ${token}`
+                Authorization: `Bearer ${token}`
               }
             });
             
@@ -84,6 +84,8 @@ export const AuthProvider = ({ children }) => {
       console.log('Login response status:', response.status);
       console.log('Login response data:', response.data);
 
+      // Django REST Framework SimpleJWT returns tokens as 'access' and 'refresh'
+      // But our custom login endpoint returns 'token'
       const token = response.data.token || response.data.access;
       
       if (!token) {
@@ -112,7 +114,7 @@ export const AuthProvider = ({ children }) => {
         // Get user info with the new token
         const userResponse = await axios.get(`${API_BASE_URL}/api/users/me/`, {
           headers: {
-            Authorization: `Token ${token}`
+            Authorization: `Bearer ${token}`
           }
         });
         

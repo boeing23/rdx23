@@ -10,9 +10,9 @@ export const getAuthHeader = () => {
   const token = localStorage.getItem('token');
   if (!token) return {};
   
-  // Important: Use 'Token' prefix for Django TokenAuthentication
+  // Important: Use 'Bearer' prefix for JWT authentication
   return {
-    'Authorization': `Token ${token}`
+    'Authorization': `Bearer ${token}`
   };
 };
 
