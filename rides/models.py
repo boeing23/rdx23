@@ -8,6 +8,7 @@ from django.core.validators import MinValueValidator, MaxValueValidator
 from django.utils import timezone
 import requests
 import logging
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -126,6 +127,43 @@ class RideRequest(models.Model):
 
     def __str__(self):
         return f"Ride request from {self.rider.username} for {self.ride}"
+
+    def save(self, *args, **kwargs):
+        # Ensure the JSON fields are valid before saving
+        self._validate_json_fields()
+        super().save(*args, **kwargs)
+        
+    def _validate_json_fields(self):
+        """Ensure JSON fields have proper format or set to default empty dict"""
+        # Check nearest_dropoff_point
+        if self.nearest_dropoff_point is not None:
+            if isinstance(self.nearest_dropoff_point, str):
+                try:
+                    # Try to parse as JSON
+                    json.loads(self.nearest_dropoff_point)
+                except json.JSONDecodeError:
+                    # If can't parse, set to empty dict
+                    logger.warning(f"Invalid nearest_dropoff_point JSON for ride request {self.id}, resetting to empty dict")
+                    self.nearest_dropoff_point = {}
+            elif not isinstance(self.nearest_dropoff_point, (dict, list)):
+                # If not dict or list, set to empty dict
+                logger.warning(f"Invalid nearest_dropoff_point format for ride request {self.id}, resetting to empty dict")
+                self.nearest_dropoff_point = {}
+                
+        # Check optimal_pickup_point
+        if self.optimal_pickup_point is not None:
+            if isinstance(self.optimal_pickup_point, str):
+                try:
+                    # Try to parse as JSON
+                    json.loads(self.optimal_pickup_point)
+                except json.JSONDecodeError:
+                    # If can't parse, set to empty dict
+                    logger.warning(f"Invalid optimal_pickup_point JSON for ride request {self.id}, resetting to empty dict")
+                    self.optimal_pickup_point = {}
+            elif not isinstance(self.optimal_pickup_point, (dict, list)):
+                # If not dict or list, set to empty dict
+                logger.warning(f"Invalid optimal_pickup_point format for ride request {self.id}, resetting to empty dict")
+                self.optimal_pickup_point = {}
 
 class Notification(models.Model):
     NOTIFICATION_TYPES = [

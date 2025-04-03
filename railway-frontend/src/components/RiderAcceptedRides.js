@@ -46,13 +46,55 @@ const RiderAcceptedRides = () => {
   const fetchAcceptedRides = async () => {
     setLoading(true);
     setError(null);
+    setRetryable(false);
+    
     try {
       console.log('Fetching accepted rides...');
-      const response = await axios.get(`${API_BASE_URL}/api/rides/requests/accepted/`, {
-        headers: getAuthHeader()
-      });
       
-      console.log('Full accepted rides data:', JSON.stringify(response.data, null, 2));
+      let response;
+      try {
+        response = await axios.get(`${API_BASE_URL}/api/rides/requests/accepted/`, {
+          headers: getAuthHeader()
+        });
+        console.log('Full accepted rides data:', JSON.stringify(response.data, null, 2));
+      } catch (apiError) {
+        console.error('API Error fetching accepted rides:', apiError);
+        
+        // If we get a 500 error, try using our fallback data structure
+        if (apiError.response && apiError.response.status === 500) {
+          console.log('Encountered 500 error, attempting to create fallback data');
+          setRetryable(true);
+          
+          // Create fallback placeholder ride data
+          const fallbackRides = [{
+            id: 'fallback-1',
+            status: 'ACCEPTED',
+            ride_id: 'unknown',
+            pickup_location: 'Unable to load from server',
+            dropoff_location: 'Unable to load from server',
+            departure_time: new Date().toISOString(),
+            seats_needed: 1,
+            driver: {
+              id: null,
+              first_name: '',
+              last_name: '',
+              full_name: 'Driver information unavailable',
+              email: null,
+              phone_number: null,
+              vehicle_make: null,
+              vehicle_model: null,
+              vehicle_color: null,
+              license_plate: null
+            }
+          }];
+          
+          setAcceptedRides(fallbackRides);
+          throw new Error('Server returned 500 error - possible data format issue');
+        }
+        
+        // Re-throw for normal error handling
+        throw apiError;
+      }
       
       // Map the response data based on its structure
       let mappedRides = [];
@@ -73,12 +115,12 @@ const RiderAcceptedRides = () => {
           
           // Create mapped object with all available driver info from API
           return {
-            id: ride.id,
+            id: ride.id || `temp-${Math.random().toString(36).substring(2, 9)}`,
             status: ride.status || 'PENDING',
-            ride_id: ride.ride_id,
+            ride_id: ride.ride_id || null,
             pickup_location: ride.pickup_location || 'Unknown location',
             dropoff_location: ride.dropoff_location || 'Unknown location',
-            departure_time: ride.departure_time,
+            departure_time: ride.departure_time || new Date().toISOString(),
             seats_needed: ride.seats_needed || 1,
             ride_details: null, // Not available in this format
             driver: {
@@ -96,83 +138,25 @@ const RiderAcceptedRides = () => {
             }
           };
         });
+      } else if (response.data && typeof response.data === 'object') {
+        console.log('Response appears to be in object format');
+        // Handle single object response (convert to array)
+        mappedRides = [safeMapRide(response.data)];
       } else {
-        console.log('Response appears to be in standard format');
-        // Create a safe mapping function to handle potentially missing fields
-        const safeMapRide = ride => {
-          try {
-            console.log('Processing ride in standard format:', ride);
-            
-            // Check if ride_details and driver are populated
-            const hasRideDetails = ride.ride_details && typeof ride.ride_details === 'object';
-            const hasDriverInRideDetails = hasRideDetails && ride.ride_details.driver;
-            
-            // Get driver info from the most appropriate location
-            const driver = hasDriverInRideDetails ? ride.ride_details.driver : 
-                          (ride.driver ? ride.driver : 
-                          (ride.driver_details ? ride.driver_details : null));
-            
-            console.log('Driver info available:', driver ? 'Yes' : 'No');
-            
-            // Create a safe driver object with fallbacks for all fields
-            const safeDriver = driver || {};
-            const driverObj = {
-              id: safeDriver.id || null,
-              first_name: safeDriver.first_name || '',
-              last_name: safeDriver.last_name || '',
-              full_name: safeDriver.full_name || 
-                        `${safeDriver.first_name || ''} ${safeDriver.last_name || ''}`.trim() || 
-                        'Unknown Driver',
-              email: safeDriver.email || null,
-              phone_number: safeDriver.phone_number || null,
-              vehicle_make: safeDriver.vehicle_make || null,
-              vehicle_model: safeDriver.vehicle_model || null,
-              vehicle_color: safeDriver.vehicle_color || null,
-              vehicle_year: safeDriver.vehicle_year || null,
-              license_plate: safeDriver.license_plate || null
-            };
-            
-            return {
-              id: ride.id,
-              status: ride.status || 'PENDING',
-              ride_id: ride.ride ? ride.ride.id : ride.ride_id,
-              pickup_location: ride.pickup_location || 'Unknown location',
-              dropoff_location: ride.dropoff_location || 'Unknown location',
-              departure_time: ride.departure_time,
-              seats_needed: ride.seats_needed || 1,
-              ride_details: ride.ride_details,
-              driver: driverObj,
-              // Handle optional fields that might be causing the error
-              nearest_dropoff_point: ride.nearest_dropoff_point || null,
-              optimal_pickup_point: ride.optimal_pickup_point || null,
-              nearest_dropoff_info: ride.nearest_dropoff_info || null,
-              optimal_pickup_info: ride.optimal_pickup_info || null
-            };
-          } catch (e) {
-            console.error('Error mapping ride:', e);
-            // Return a safe fallback object if mapping fails
-            return {
-              id: ride.id || Math.random().toString(),
-              status: 'PENDING',
-              ride_id: ride.ride_id || ride.id,
-              pickup_location: 'Data unavailable',
-              dropoff_location: 'Data unavailable',
-              departure_time: ride.departure_time || new Date(),
-              seats_needed: 1,
-              driver: {
-                full_name: 'Driver information unavailable'
-              }
-            };
-          }
-        };
-        
-        // Safely map all rides
+        console.log('Response appears to be in standard array format');
+        // Safely map all rides using our helper function
         mappedRides = Array.isArray(response.data) ? 
-                      response.data.map(safeMapRide) : 
-                      [safeMapRide(response.data)];
+                      response.data.map(safeMapRide) : [];
       }
       
       console.log(`Processed ${mappedRides.length} rides`);
+      
+      // If no rides were found, create an empty state message
+      if (mappedRides.length === 0) {
+        setAcceptedRides([]);
+        console.log('No rides found');
+        return;
+      }
       
       // Get the user IDs of all drivers
       const driverIds = mappedRides
@@ -184,39 +168,47 @@ const RiderAcceptedRides = () => {
       // If we have driver IDs, fetch their full details from users table
       if (driverIds.length > 0) {
         try {
-          // Fetch driver details from users_user table
-          await Promise.all(driverIds.map(async (driverId) => {
-            if (!driverId) return;
-            
-            try {
-              console.log(`Fetching details for driver ID: ${driverId}`);
-              const userResponse = await axios.get(`${API_BASE_URL}/api/users/${driverId}/`, {
-                headers: getAuthHeader()
-              });
-              
-              console.log(`User data for driver ${driverId}:`, userResponse.data);
-              
-              // Update the corresponding ride with complete driver info
-              mappedRides = mappedRides.map(ride => {
-                if (ride.driver && ride.driver.id === driverId) {
-                  return {
-                    ...ride,
-                    driver: {
-                      ...ride.driver,
-                      ...userResponse.data,
-                      // Keep the original full_name if it exists
-                      full_name: ride.driver.full_name || `${userResponse.data.first_name} ${userResponse.data.last_name}`
-                    }
-                  };
+          // Fetch all users in one request for efficiency
+          const usersResponse = await axios.get(`${API_BASE_URL}/api/users/`, {
+            headers: getAuthHeader()
+          });
+          
+          console.log('Users API response:', usersResponse.data);
+          console.log('Example user object structure:', usersResponse.data[0]);
+          
+          // Create a map of driver details for quick lookup
+          const driverDetailsMap = {};
+          if (Array.isArray(usersResponse.data)) {
+            usersResponse.data.forEach(user => {
+              if (user && user.id) {
+                driverDetailsMap[user.id] = user;
+              }
+            });
+          }
+          
+          console.log('Driver details map created with', Object.keys(driverDetailsMap).length, 'users');
+          
+          // Update rides with driver details
+          mappedRides = mappedRides.map(ride => {
+            if (ride.driver && ride.driver.id && driverDetailsMap[ride.driver.id]) {
+              const driverDetails = driverDetailsMap[ride.driver.id];
+              return {
+                ...ride,
+                driver: {
+                  ...ride.driver,
+                  ...driverDetails,
+                  // Keep the original full_name if it exists
+                  full_name: ride.driver.full_name || 
+                           `${driverDetails.first_name || ''} ${driverDetails.last_name || ''}`.trim() || 
+                           'Unknown Driver'
                 }
-                return ride;
-              });
-            } catch (err) {
-              console.error(`Error fetching driver ${driverId} details:`, err);
+              };
             }
-          }));
+            return ride;
+          });
         } catch (err) {
           console.error('Error fetching driver details:', err);
+          // Continue with partial data rather than failing completely
         }
       }
       
@@ -227,14 +219,110 @@ const RiderAcceptedRides = () => {
       if (err.response) {
         console.error('Error response:', err.response.data);
         console.error('Status code:', err.response.status);
-        setError(`Error ${err.response.status}: ${JSON.stringify(err.response.data)}`);
+        
+        // Special handling for 500 errors
+        if (err.response.status === 500) {
+          setError('The server encountered an error processing ride data. Basic information is displayed.');
+          setRetryable(true);
+        } else {
+          setError(`Error ${err.response.status}: ${JSON.stringify(err.response.data)}`);
+          setRetryable(true);
+        }
       } else {
         setError('Network error. Please check your connection.');
+        setRetryable(true);
       }
     } finally {
       setLoading(false);
     }
   };
+
+  // Helper function to safely map a ride object with fallbacks for all fields
+  const safeMapRide = ride => {
+    try {
+      console.log('Processing ride with safeMapRide:', ride);
+      
+      // Check if ride object is null or undefined
+      if (!ride) {
+        console.warn('Null or undefined ride object encountered');
+        return createEmptyRide();
+      }
+      
+      // Check if ride_details and driver are populated
+      const hasRideDetails = ride.ride_details && typeof ride.ride_details === 'object';
+      const hasDriverInRideDetails = hasRideDetails && ride.ride_details.driver;
+      
+      // Get driver info from the most appropriate location
+      const driver = hasDriverInRideDetails ? ride.ride_details.driver : 
+                    (ride.driver ? ride.driver : 
+                    (ride.driver_details ? ride.driver_details : null));
+      
+      console.log('Driver info available:', driver ? 'Yes' : 'No');
+      
+      // Create a safe driver object with fallbacks for all fields
+      const safeDriver = driver || {};
+      const driverObj = {
+        id: safeDriver.id || null,
+        first_name: safeDriver.first_name || '',
+        last_name: safeDriver.last_name || '',
+        full_name: safeDriver.full_name || 
+                  `${safeDriver.first_name || ''} ${safeDriver.last_name || ''}`.trim() || 
+                  'Unknown Driver',
+        email: safeDriver.email || null,
+        phone_number: safeDriver.phone_number || null,
+        vehicle_make: safeDriver.vehicle_make || null,
+        vehicle_model: safeDriver.vehicle_model || null,
+        vehicle_color: safeDriver.vehicle_color || null,
+        vehicle_year: safeDriver.vehicle_year || null,
+        license_plate: safeDriver.license_plate || null
+      };
+      
+      return {
+        id: ride.id || `temp-${Math.random().toString(36).substring(2, 9)}`,
+        status: ride.status || 'PENDING',
+        ride_id: (ride.ride && ride.ride.id) || ride.ride_id || null,
+        pickup_location: ride.pickup_location || 'Unknown location',
+        dropoff_location: ride.dropoff_location || 'Unknown location',
+        departure_time: ride.departure_time || new Date().toISOString(),
+        seats_needed: ride.seats_needed || 1,
+        ride_details: ride.ride_details || null,
+        driver: driverObj,
+        // Handle optional fields that might be causing the error
+        nearest_dropoff_point: ride.nearest_dropoff_point || null,
+        optimal_pickup_point: ride.optimal_pickup_point || null,
+        nearest_dropoff_info: ride.nearest_dropoff_info || null,
+        optimal_pickup_info: ride.optimal_pickup_info || null
+      };
+    } catch (e) {
+      console.error('Error mapping ride:', e);
+      // Return a safe fallback object if mapping fails
+      return createEmptyRide();
+    }
+  };
+
+  // Helper function to create an empty ride object
+  const createEmptyRide = () => ({
+    id: `temp-${Math.random().toString(36).substring(2, 9)}`,
+    status: 'PENDING',
+    ride_id: null,
+    pickup_location: 'Data unavailable',
+    dropoff_location: 'Data unavailable',
+    departure_time: new Date().toISOString(),
+    seats_needed: 1,
+    driver: {
+      id: null,
+      first_name: '',
+      last_name: '',
+      full_name: 'Driver information unavailable',
+      email: null,
+      phone_number: null,
+      vehicle_make: null,
+      vehicle_model: null,
+      vehicle_color: null,
+      vehicle_year: null,
+      license_plate: null
+    }
+  });
 
   // Add this function to help explore available API endpoints
   const exploreApiEndpoints = async (token) => {
@@ -692,16 +780,50 @@ const RiderAcceptedRides = () => {
         flexDirection: 'column',
         padding: '20px'
       }}>
-        <Alert severity="error" sx={{ marginBottom: 2, width: '100%' }}>
+        <Alert 
+          severity="error" 
+          sx={{ marginBottom: 2, width: '100%' }}
+          action={
+            <Button
+              color="inherit"
+              size="small"
+              disabled={isRetrying}
+              onClick={() => {
+                setIsRetrying(true);
+                fetchAcceptedRides()
+                  .finally(() => setIsRetrying(false));
+              }}
+            >
+              {isRetrying ? 'Retrying...' : 'Retry'}
+            </Button>
+          }
+        >
           {error}
         </Alert>
-        <Button
-          variant="contained"
-          onClick={fetchAcceptedRides}
-          startIcon={<Refresh />}
-        >
-          Try Again
-        </Button>
+        
+        {acceptedRides.length > 0 && (
+          <Box sx={{ width: '100%', mt: 2 }}>
+            <Typography variant="subtitle1" sx={{ mb: 2, fontWeight: 'bold' }}>
+              Showing limited information based on available data:
+            </Typography>
+            <List sx={{ paddingBottom: '20px' }}>
+              {acceptedRides.map(ride => (
+                <ListItem 
+                  key={ride.id.toString()} 
+                  button 
+                  onClick={() => handleRideClick(ride)}
+                  sx={{ 
+                    padding: 0, 
+                    marginBottom: '10px',
+                    display: 'block'
+                  }}
+                >
+                  {renderRideItem({ item: ride })}
+                </ListItem>
+              ))}
+            </List>
+          </Box>
+        )}
       </Box>
     );
   }

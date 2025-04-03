@@ -1650,6 +1650,9 @@ class RideRequestViewSet(viewsets.ModelViewSet):
         Get all accepted ride requests for the current user (both as rider and driver)
         """
         try:
+            # Log detailed information for debugging
+            logger.info(f"Fetching accepted rides for user: {request.user.username} (ID: {request.user.id})")
+            
             # Use select_related to fetch related ride and driver data in a single query
             ride_requests = RideRequest.objects.filter(
                 Q(rider=request.user) | Q(ride__driver=request.user),
@@ -1659,13 +1662,50 @@ class RideRequestViewSet(viewsets.ModelViewSet):
                 'ride__driver',
                 'rider'
             ).order_by('-departure_time')
-
-            serializer = RideRequestSerializer(ride_requests, many=True, context={'request': request})
-            return Response(serializer.data)
+            
+            logger.info(f"Found {ride_requests.count()} accepted rides")
+            
+            # Instead of serializing all at once, serialize one-by-one to identify problem records
+            results = []
+            for ride_request in ride_requests:
+                try:
+                    logger.info(f"Processing ride request ID: {ride_request.id}")
+                    # Log diagnostic info about the ride request
+                    logger.info(f"  Status: {ride_request.status}")
+                    logger.info(f"  Pickup: {ride_request.pickup_location}")
+                    logger.info(f"  Dropoff: {ride_request.dropoff_location}")
+                    logger.info(f"  optimal_pickup_point: {type(ride_request.optimal_pickup_point)}")
+                    logger.info(f"  nearest_dropoff_point: {type(ride_request.nearest_dropoff_point)}")
+                    
+                    # Serialize each ride request individually
+                    serializer = RideRequestSerializer(ride_request, context={'request': request})
+                    results.append(serializer.data)
+                    logger.info(f"Successfully serialized ride request ID: {ride_request.id}")
+                except Exception as e:
+                    logger.error(f"Error serializing ride request ID {ride_request.id}: {str(e)}")
+                    # Log the full exception traceback for debugging
+                    import traceback
+                    logger.error(f"Traceback: {traceback.format_exc()}")
+                    
+                    # Instead of failing, add a simplified error object for this ride
+                    results.append({
+                        'id': ride_request.id,
+                        'error': str(e),
+                        'status': ride_request.status,
+                        'ride_id': ride_request.ride_id,
+                        'pickup_location': ride_request.pickup_location,
+                        'dropoff_location': ride_request.dropoff_location,
+                        'departure_time': ride_request.departure_time,
+                        'seats_needed': ride_request.seats_needed
+                    })
+            
+            return Response(results)
         except Exception as e:
             logger.error(f"Error fetching accepted rides: {str(e)}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
             return Response(
-                {"error": "Failed to fetch accepted rides"},
+                {"error": "Failed to fetch accepted rides", "detail": str(e)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 

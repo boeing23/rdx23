@@ -261,27 +261,74 @@ class RideRequestSerializer(serializers.ModelSerializer):
                 return None
                 
             # Try to parse if it's a string
+            dropoff_data = None
             if isinstance(obj.nearest_dropoff_point, str):
                 try:
                     dropoff_data = json.loads(obj.nearest_dropoff_point)
                 except json.JSONDecodeError:
                     logger.warning(f"Could not decode nearest_dropoff_point JSON for ride request {obj.id}")
-                    return None
+                    # Try to see if it's a tuple of coordinates as string
+                    import re
+                    coords = re.findall(r"[-+]?\d+\.\d+", obj.nearest_dropoff_point)
+                    if len(coords) >= 2:
+                        try:
+                            lat, lng = float(coords[0]), float(coords[1])
+                            dropoff_data = {'latitude': lat, 'longitude': lng}
+                        except (ValueError, IndexError):
+                            pass
             else:
                 dropoff_data = obj.nearest_dropoff_point
                 
             # Handle case where dropoff_data is None
             if not dropoff_data:
                 return None
+            
+            # Handle tuple or list format
+            if isinstance(dropoff_data, (list, tuple)) and len(dropoff_data) >= 2:
+                try:
+                    return {
+                        'address': 'Location coordinates',
+                        'latitude': float(dropoff_data[0]),
+                        'longitude': float(dropoff_data[1]),
+                        'distance_from_rider': None
+                    }
+                except (ValueError, TypeError):
+                    pass
                 
+            # Handle dictionary format
+            if isinstance(dropoff_data, dict):
+                result = {
+                    'address': dropoff_data.get('address', 'Unknown location'),
+                    'latitude': None,
+                    'longitude': None,
+                    'distance_from_rider': dropoff_data.get('distance_from_rider')
+                }
+                
+                # Try to extract coordinates from various possible formats
+                if 'latitude' in dropoff_data and 'longitude' in dropoff_data:
+                    result['latitude'] = dropoff_data.get('latitude')
+                    result['longitude'] = dropoff_data.get('longitude')
+                elif 'lat' in dropoff_data and 'lng' in dropoff_data:
+                    result['latitude'] = dropoff_data.get('lat')
+                    result['longitude'] = dropoff_data.get('lng')
+                elif 'coordinates' in dropoff_data:
+                    coords = dropoff_data.get('coordinates')
+                    if isinstance(coords, (list, tuple)) and len(coords) >= 2:
+                        result['latitude'] = coords[0]
+                        result['longitude'] = coords[1]
+                    
+                return result
+                
+            # Default minimal response if we can't interpret the data
             return {
-                'address': dropoff_data.get('address', 'Unknown location'),
-                'latitude': dropoff_data.get('latitude'),
-                'longitude': dropoff_data.get('longitude'),
-                'distance_from_rider': dropoff_data.get('distance_from_rider')
+                'address': 'Data format not recognized',
+                'latitude': None,
+                'longitude': None,
+                'distance_from_rider': None
             }
         except Exception as e:
-            logger.error(f"Error extracting nearest dropoff info: {str(e)}")
+            logger.error(f"Error extracting nearest dropoff info for ride {obj.id}: {str(e)}")
+            # Return None instead of failing
             return None
     
     def get_optimal_pickup_info(self, obj):
@@ -293,27 +340,74 @@ class RideRequestSerializer(serializers.ModelSerializer):
                 return None
                 
             # Try to parse if it's a string
+            pickup_data = None
             if isinstance(obj.optimal_pickup_point, str):
                 try:
                     pickup_data = json.loads(obj.optimal_pickup_point)
                 except json.JSONDecodeError:
                     logger.warning(f"Could not decode optimal_pickup_point JSON for ride request {obj.id}")
-                    return None
+                    # Try to see if it's a tuple of coordinates as string
+                    import re
+                    coords = re.findall(r"[-+]?\d+\.\d+", obj.optimal_pickup_point)
+                    if len(coords) >= 2:
+                        try:
+                            lat, lng = float(coords[0]), float(coords[1])
+                            pickup_data = {'latitude': lat, 'longitude': lng}
+                        except (ValueError, IndexError):
+                            pass
             else:
                 pickup_data = obj.optimal_pickup_point
                 
             # Handle case where pickup_data is None
             if not pickup_data:
                 return None
+            
+            # Handle tuple or list format
+            if isinstance(pickup_data, (list, tuple)) and len(pickup_data) >= 2:
+                try:
+                    return {
+                        'address': 'Location coordinates',
+                        'latitude': float(pickup_data[0]),
+                        'longitude': float(pickup_data[1]),
+                        'distance_from_rider': None
+                    }
+                except (ValueError, TypeError):
+                    pass
                 
+            # Handle dictionary format
+            if isinstance(pickup_data, dict):
+                result = {
+                    'address': pickup_data.get('address', 'Unknown location'),
+                    'latitude': None,
+                    'longitude': None,
+                    'distance_from_rider': pickup_data.get('distance_from_rider')
+                }
+                
+                # Try to extract coordinates from various possible formats
+                if 'latitude' in pickup_data and 'longitude' in pickup_data:
+                    result['latitude'] = pickup_data.get('latitude')
+                    result['longitude'] = pickup_data.get('longitude')
+                elif 'lat' in pickup_data and 'lng' in pickup_data:
+                    result['latitude'] = pickup_data.get('lat')
+                    result['longitude'] = pickup_data.get('lng')
+                elif 'coordinates' in pickup_data:
+                    coords = pickup_data.get('coordinates')
+                    if isinstance(coords, (list, tuple)) and len(coords) >= 2:
+                        result['latitude'] = coords[0]
+                        result['longitude'] = coords[1]
+                    
+                return result
+                
+            # Default minimal response if we can't interpret the data
             return {
-                'address': pickup_data.get('address', 'Unknown location'),
-                'latitude': pickup_data.get('latitude'),
-                'longitude': pickup_data.get('longitude'),
-                'distance_from_rider': pickup_data.get('distance_from_rider')
+                'address': 'Data format not recognized',
+                'latitude': None,
+                'longitude': None,
+                'distance_from_rider': None
             }
         except Exception as e:
-            logger.error(f"Error extracting optimal pickup info: {str(e)}")
+            logger.error(f"Error extracting optimal pickup info for ride {obj.id}: {str(e)}")
+            # Return None instead of failing
             return None
 
     def get_driver_details(self, obj):
