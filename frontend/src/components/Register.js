@@ -128,8 +128,11 @@ function Register() {
         // Store token and user type
         localStorage.setItem('token', data.token);
         localStorage.setItem('userType', JSON.stringify(data.user_type));
+        localStorage.setItem('userId', data.user_id);
         console.log('Registration successful. User type:', data.user_type);
         console.log('Stored user type in localStorage:', localStorage.getItem('userType'));
+        // Dispatch custom event to notify the Navbar of login
+        window.dispatchEvent(new Event('auth-change'));
         // Navigate based on user type
         if (data.user_type === 'DRIVER') {
           navigate('/offer');

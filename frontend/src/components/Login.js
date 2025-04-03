@@ -30,110 +30,44 @@ function Login() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError('');
     setLoading(true);
+    setError('');
 
     try {
-      // First check if the backend is accessible
-      console.log('Checking backend health...');
-      const healthCheck = await fetch(`${API_BASE_URL}/api/health/`);
-      if (!healthCheck.ok) {
-        throw new Error('Backend service is not accessible');
-      }
-      console.log('Backend health check passed');
-
-      console.log('Attempting login...');
-      const response = await fetch(`${API_BASE_URL}/api/users/login/`, {
+      const response = await fetch(`${API_BASE_URL}/api/token/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Accept': 'application/json'
         },
-        body: JSON.stringify(formData)
+        body: JSON.stringify({
+          email: formData.username,
+          password: formData.password,
+        }),
       });
 
-      console.log('Login response status:', response.status);
       const data = await response.json();
 
-      if (response.ok) {
-        console.log('Login successful, storing token and user data');
-        // Make sure token doesn't have any quotes or extra whitespace
-        const cleanToken = data.token.trim().replace(/^["'](.*)["']$/, '$1');
-        console.log('Cleaned token:', cleanToken.substring(0, 10) + '...');
-        
-        // Always store strings, never objects
-        localStorage.setItem('token', cleanToken);
-        
-        // IMPORTANT: Always store simple strings, never objects or JSON strings
-        const userTypeString = data.user_type ? String(data.user_type) : 'rider';
-        localStorage.setItem('userType', userTypeString);
-        
-        console.log('Token and user data stored successfully');
-        console.log('Token length:', cleanToken.length);
-        console.log('Token format check:', cleanToken.startsWith('ey') ? 'Valid JWT format' : 'Invalid JWT format');
-        console.log('User type (stored as plain string):', userTypeString);
-
-        // Verify storage
-        const storedToken = localStorage.getItem('token');
-        const storedUserType = localStorage.getItem('userType');
-        console.log('Verification - Stored token exists:', !!storedToken);
-        console.log('Verification - Stored token length:', storedToken ? storedToken.length : 0);
-        console.log('Verification - Stored token format check:', storedToken ? (storedToken.startsWith('ey') ? 'Valid JWT format' : 'Invalid JWT format') : 'No token');
-        console.log('Verification - Stored user type:', storedUserType);
-
-        // Try basic fetch without token to test CORS
-        try {
-          console.log('Testing basic fetch...');
-          const basicResponse = await fetch(`${API_BASE_URL}/api/health/`);
-          console.log('Basic fetch response status:', basicResponse.status);
-        } catch (error) {
-          console.error('Basic fetch error:', error);
-        }
-
-        // Test the token with a simple API call
-        try {
-          console.log('Testing token with health check...');
-          // Don't use 'credentials: include' for the test
-          console.log('Request headers:', {
-            'Authorization': `Bearer ${storedToken}`,
-            'Accept': 'application/json'
-          });
-          
-          const testResponse = await fetch(`${API_BASE_URL}/api/health/`, {
-            headers: {
-              'Authorization': `Bearer ${storedToken}`,
-              'Accept': 'application/json'
-            }
-            // Removing credentials to test
-            // credentials: 'include'
-          });
-          
-          console.log('Health check response status:', testResponse.status);
-          console.log('Health check response headers:', Object.fromEntries(testResponse.headers.entries()));
-          
-          if (!testResponse.ok) {
-            throw new Error(`Token verification failed with status ${testResponse.status}`);
-          }
-          
-          console.log('Token verification successful');
-        } catch (error) {
-          console.error('Token verification failed:', error);
-          console.error('Will continue anyway to test if token works for other endpoints');
-        }
-
-        // Redirect based on user type
-        if (data.user_type === 'driver') {
-          navigate('/driver-dashboard');
-        } else {
-          navigate('/rider-dashboard');
-        }
-      } else {
-        console.error('Login failed:', data);
-        setError(data.message || 'Login failed. Please check your credentials.');
+      if (!response.ok) {
+        throw new Error(data.detail || 'Invalid credentials');
       }
+
+      localStorage.setItem('token', data.access);
+      localStorage.setItem('userId', data.user_id);
+      localStorage.setItem('userType', data.user_type);
+
+      // Dispatch custom event to notify the Navbar of login
+      window.dispatchEvent(new Event('auth-change'));
+
+      console.log('Login successful:', {
+        token: data.access,
+        userId: data.user_id,
+        userType: data.user_type
+      });
+
+      navigate('/');
     } catch (err) {
       console.error('Login error:', err);
-      setError(err.message || 'An error occurred during login. Please try again.');
+      setError(err.message || 'Failed to login. Please try again.');
     } finally {
       setLoading(false);
     }

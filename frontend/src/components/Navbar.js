@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { 
   AppBar, 
   Toolbar, 
@@ -22,26 +22,49 @@ function Navbar() {
   const [mobileAnchorEl, setMobileAnchorEl] = useState(null);
   const [profileAnchorEl, setProfileAnchorEl] = useState(null);
   const navigate = useNavigate();
+  const location = useLocation();
 
+  // Check auth status whenever location changes or component mounts
   useEffect(() => {
-    const initializeAuth = () => {
-      const token = localStorage.getItem('token');
-      const type = localStorage.getItem('userType');
-      
-      console.log('Navbar initialization:', {
-        hasToken: !!token,
-        rawUserType: type,
-        isAuthenticated: !!token
-      });
-      
-      setIsAuthenticated(!!token);
-      if (type) {
-        console.log('Using user type as plain string:', type);
-        setUserType(type);
-      }
+    checkAuthStatus();
+  }, [location.pathname]);
+
+  // Function to check authentication status
+  const checkAuthStatus = () => {
+    const token = localStorage.getItem('token');
+    const type = localStorage.getItem('userType');
+    
+    console.log('Navbar auth check:', {
+      hasToken: !!token,
+      userType: type,
+      path: location.pathname
+    });
+    
+    setIsAuthenticated(!!token);
+    setUserType(type || null);
+  };
+
+  // Add an event listener for storage changes
+  useEffect(() => {
+    // This will detect if localStorage changes in another tab/window
+    const handleStorageChange = () => {
+      checkAuthStatus();
     };
 
-    initializeAuth();
+    // Listen for custom auth change events
+    const handleAuthChange = () => {
+      console.log('Auth change event detected');
+      checkAuthStatus();
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('auth-change', handleAuthChange);
+    
+    // Clean up the event listeners
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('auth-change', handleAuthChange);
+    };
   }, []);
 
   const handleMobileMenu = (event) => {
@@ -63,10 +86,14 @@ function Navbar() {
   const handleLogout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('userType');
+    localStorage.removeItem('userId');
     setIsAuthenticated(false);
     setUserType(null);
     navigate('/login');
   };
+
+  // For debugging
+  console.log('Navbar render state:', { isAuthenticated, userType });
 
   const renderMobileMenu = () => (
     <Menu
