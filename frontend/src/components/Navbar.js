@@ -1,13 +1,26 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { AppBar, Toolbar, Typography, Button, IconButton, Menu, MenuItem, Box, Divider } from '@mui/material';
+import { 
+  AppBar, 
+  Toolbar, 
+  Typography, 
+  Button, 
+  IconButton, 
+  Menu, 
+  MenuItem, 
+  Box, 
+  Divider,
+  Avatar
+} from '@mui/material';
 import MenuIcon from '@mui/icons-material/Menu';
+import AccountCircle from '@mui/icons-material/AccountCircle';
 import NotificationList from './NotificationList';
 
 function Navbar() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [userType, setUserType] = useState(null);
-  const [anchorEl, setAnchorEl] = useState(null);
+  const [mobileAnchorEl, setMobileAnchorEl] = useState(null);
+  const [profileAnchorEl, setProfileAnchorEl] = useState(null);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -23,7 +36,6 @@ function Navbar() {
       
       setIsAuthenticated(!!token);
       if (type) {
-        // NEVER parse as JSON - always treat as a plain string
         console.log('Using user type as plain string:', type);
         setUserType(type);
       }
@@ -32,12 +44,20 @@ function Navbar() {
     initializeAuth();
   }, []);
 
-  const handleMenu = (event) => {
-    setAnchorEl(event.currentTarget);
+  const handleMobileMenu = (event) => {
+    setMobileAnchorEl(event.currentTarget);
   };
 
-  const handleClose = () => {
-    setAnchorEl(null);
+  const handleProfileMenu = (event) => {
+    setProfileAnchorEl(event.currentTarget);
+  };
+
+  const handleMobileClose = () => {
+    setMobileAnchorEl(null);
+  };
+
+  const handleProfileClose = () => {
+    setProfileAnchorEl(null);
   };
 
   const handleLogout = () => {
@@ -50,9 +70,9 @@ function Navbar() {
 
   const renderMobileMenu = () => (
     <Menu
-      anchorEl={anchorEl}
-      open={Boolean(anchorEl)}
-      onClose={handleClose}
+      anchorEl={mobileAnchorEl}
+      open={Boolean(mobileAnchorEl)}
+      onClose={handleMobileClose}
       PaperProps={{
         sx: {
           mt: 1.5,
@@ -62,47 +82,62 @@ function Navbar() {
     >
       {isAuthenticated ? (
         <>
-          {userType === 'DRIVER' ? (
-            <MenuItem component={Link} to="/offer" onClick={handleClose}>
-              Offer Ride
-            </MenuItem>
-          ) : (
-            <MenuItem component={Link} to="/request-ride" onClick={handleClose}>
-              Request a Ride
-            </MenuItem>
-          )}
-          <MenuItem component={Link} to="/rides" onClick={handleClose}>
-            Rides
-          </MenuItem>
-          <MenuItem component={Link} to="/accepted-rides" onClick={handleClose}>
+          <MenuItem component={Link} to="/accepted-rides" onClick={handleMobileClose}>
             My Trips
           </MenuItem>
-          <MenuItem component={Link} to="/notifications" onClick={handleClose}>
+          <MenuItem component={Link} to="/rides" onClick={handleMobileClose}>
+            Rides
+          </MenuItem>
+          <MenuItem component={Link} to="/request-ride" onClick={handleMobileClose}>
+            Request a Ride
+          </MenuItem>
+          <MenuItem component={Link} to="/notifications" onClick={handleMobileClose}>
             Notifications
           </MenuItem>
           <Divider />
-          <Typography sx={{ px: 2, py: 1, fontWeight: 'bold' }}>
+          <MenuItem onClick={handleProfileMenu}>
             Profile
-          </Typography>
-          {userType === 'DRIVER' && (
-            <MenuItem component={Link} to="/update-driver-profile" onClick={handleClose}>
-              Update Profile
-            </MenuItem>
-          )}
-          <MenuItem onClick={() => { handleLogout(); handleClose(); }}>
+          </MenuItem>
+          <MenuItem onClick={() => { handleLogout(); handleMobileClose(); }}>
             Logout
           </MenuItem>
         </>
       ) : (
         <>
-          <MenuItem component={Link} to="/login" onClick={handleClose}>
+          <MenuItem component={Link} to="/login" onClick={handleMobileClose}>
             Login
           </MenuItem>
-          <MenuItem component={Link} to="/register" onClick={handleClose}>
+          <MenuItem component={Link} to="/register" onClick={handleMobileClose}>
             Register
           </MenuItem>
         </>
       )}
+    </Menu>
+  );
+
+  const renderProfileMenu = () => (
+    <Menu
+      id="profile-menu"
+      anchorEl={profileAnchorEl}
+      open={Boolean(profileAnchorEl)}
+      onClose={handleProfileClose}
+      anchorOrigin={{
+        vertical: 'bottom',
+        horizontal: 'right',
+      }}
+      transformOrigin={{
+        vertical: 'top',
+        horizontal: 'right',
+      }}
+    >
+      {userType === 'DRIVER' && (
+        <MenuItem component={Link} to="/update-driver-profile" onClick={handleProfileClose}>
+          Update Profile
+        </MenuItem>
+      )}
+      <MenuItem onClick={() => { handleLogout(); handleProfileClose(); }}>
+        Logout
+      </MenuItem>
     </Menu>
   );
 
@@ -116,74 +151,54 @@ function Navbar() {
           sx={{ 
             flexGrow: 1, 
             textDecoration: 'none', 
-            color: 'white' 
+            color: 'white',
+            fontWeight: 'bold'
           }}
         >
           ChalBe
         </Typography>
 
         {/* Desktop Menu */}
-        <Box sx={{ display: { xs: 'none', sm: 'flex' }, alignItems: 'center' }}>
+        <Box sx={{ 
+          display: { xs: 'none', md: 'flex' }, 
+          alignItems: 'center',
+          gap: 2
+        }}>
           {isAuthenticated ? (
             <>
-              {userType === 'DRIVER' ? (
-                <Button color="inherit" component={Link} to="/offer">
-                  Offer Ride
-                </Button>
-              ) : (
-                <Button color="inherit" component={Link} to="/request-ride">
-                  Request a Ride
-                </Button>
-              )}
+              <Button
+                color="inherit"
+                component={Link}
+                to="/accepted-rides"
+              >
+                My Trips
+              </Button>
               <Button
                 color="inherit"
                 component={Link}
                 to="/rides"
-                sx={{ mr: 2 }}
               >
                 Rides
               </Button>
               <Button
                 color="inherit"
                 component={Link}
-                to="/accepted-rides"
-                sx={{ mr: 2 }}
+                to="/request-ride"
               >
-                My Trips
+                Request a Ride
               </Button>
               <NotificationList />
-              <Button 
-                color="inherit" 
-                onClick={handleMenu}
+              <IconButton
+                size="large"
+                edge="end"
                 aria-label="account of current user"
                 aria-controls="profile-menu"
                 aria-haspopup="true"
+                onClick={handleProfileMenu}
+                color="inherit"
               >
-                Profile
-              </Button>
-              <Menu
-                id="profile-menu"
-                anchorEl={anchorEl}
-                open={Boolean(anchorEl)}
-                onClose={handleClose}
-                anchorOrigin={{
-                  vertical: 'bottom',
-                  horizontal: 'right',
-                }}
-                transformOrigin={{
-                  vertical: 'top',
-                  horizontal: 'right',
-                }}
-              >
-                {userType === 'DRIVER' && (
-                  <MenuItem component={Link} to="/update-driver-profile" onClick={handleClose}>
-                    Update Profile
-                  </MenuItem>
-                )}
-                <MenuItem onClick={() => { handleLogout(); handleClose(); }}>
-                  Logout
-                </MenuItem>
-              </Menu>
+                <AccountCircle />
+              </IconButton>
             </>
           ) : (
             <>
@@ -202,13 +217,16 @@ function Navbar() {
           edge="end"
           color="inherit"
           aria-label="menu"
-          onClick={handleMenu}
-          sx={{ display: { sm: 'none' } }}
+          onClick={handleMobileMenu}
+          sx={{ display: { md: 'none' } }}
         >
           <MenuIcon />
         </IconButton>
+
+        {/* Menus */}
+        {renderMobileMenu()}
+        {renderProfileMenu()}
       </Toolbar>
-      {renderMobileMenu()}
     </AppBar>
   );
 }
