@@ -61,6 +61,57 @@ function NotificationList() {
     return isAvailable;
   };
 
+  // Add a fallback function that uses a simpler endpoint
+  const fetchNotificationsFromAlternateEndpoint = async () => {
+    try {
+      console.log('Attempting to fetch notifications from alternate endpoint');
+      const token = localStorage.getItem('token');
+      
+      if (!token) {
+        console.error('No token available for alternate endpoint request');
+        return null;
+      }
+      
+      // Clean token to ensure proper format
+      const cleanToken = token.trim().replace(/^["'](.*)["']$/, '$1').replace(/^Bearer\s+/i, '');
+      
+      // Try a different endpoint path that might not have the schema issue
+      // First try the user notifications endpoint
+      try {
+        const response = await axios.get(`${API_BASE_URL}/api/users/notifications/`, {
+          headers: { 
+            'Authorization': `Bearer ${cleanToken}`,
+            'Content-Type': 'application/json' 
+          }
+        });
+        
+        console.log('Retrieved notifications from alternate endpoint:', response.data);
+        return response.data;
+      } catch (userEndpointError) {
+        console.warn('User notifications endpoint failed:', userEndpointError.message);
+        
+        // Try a generic notifications endpoint as second fallback
+        try {
+          const response = await axios.get(`${API_BASE_URL}/api/notifications/`, {
+            headers: { 
+              'Authorization': `Bearer ${cleanToken}`,
+              'Content-Type': 'application/json' 
+            }
+          });
+          
+          console.log('Retrieved notifications from generic endpoint:', response.data);
+          return response.data;
+        } catch (genericEndpointError) {
+          console.warn('Generic notifications endpoint failed:', genericEndpointError.message);
+          return null;
+        }
+      }
+    } catch (error) {
+      console.error('Error in alternate endpoint fetch:', error);
+      return null;
+    }
+  };
+
   // Fetch all notifications for the logged-in user
   const fetchNotifications = async () => {
     try {
@@ -69,57 +120,120 @@ function NotificationList() {
       // Clean token to ensure proper format
       const cleanToken = token ? token.trim().replace(/^["'](.*)["']$/, '$1').replace(/^Bearer\s+/i, '') : '';
       
-      const response = await axios.get(`${API_BASE_URL}/api/rides/notifications/`, {
-        headers: { 
-          'Authorization': `Bearer ${cleanToken}`,
-          'Content-Type': 'application/json' 
-        }
-      });
-      console.log('Notifications received:', response.data);
+      console.log('Fetching notifications from:', `${API_BASE_URL}/api/rides/notifications/`);
       
-      // Filter out any notifications with incomplete data to prevent rendering errors
-      const filteredNotifications = response.data.filter(notification => {
-        if (!notification || !notification.id) return false;
+      try {
+        const response = await axios.get(`${API_BASE_URL}/api/rides/notifications/`, {
+          headers: { 
+            'Authorization': `Bearer ${cleanToken}`,
+            'Content-Type': 'application/json' 
+          }
+        });
+        console.log('Notifications received:', response.data);
         
-        // Skip notifications with incomplete required fields based on type
-        if (notification.notification_type === 'RIDE_MATCH' && 
-            (!notification.ride_offer || 
-             !notification.sender || 
-             (!notification.ride_request && !notification.ride_request_id && 
-              !(notification.ride_details && notification.ride_details.request_id)))) {
-          console.warn('Skipping incomplete RIDE_MATCH notification:', notification.id);
-          return false;
-        }
+        // Filter out any notifications with incomplete data to prevent rendering errors
+        const filteredNotifications = response.data.filter(notification => {
+          if (!notification || !notification.id) return false;
+          
+          // Skip notifications with incomplete required fields based on type
+          if (notification.notification_type === 'RIDE_MATCH' && 
+              (!notification.ride_offer || 
+               !notification.sender || 
+               (!notification.ride_request && !notification.ride_request_id && 
+                !(notification.ride_details && notification.ride_details.request_id)))) {
+            console.warn('Skipping incomplete RIDE_MATCH notification:', notification.id);
+            return false;
+          }
+          
+          return true;
+        });
         
-        return true;
-      });
-      
-      setNotifications(filteredNotifications);
-      const count = filteredNotifications.filter(n => !n.is_read).length;
-      setUnreadCount(count);
-      syncUnreadCount(count);
-      setError(null);
-      setServerAvailable(true);
-    } catch (error) {
-      console.error('Error fetching notifications:', error);
-      if (error.response) {
-        // Database schema errors often appear as 500 errors
-        if (error.response.status === 500) {
-          console.warn('Possible database schema issue - using empty notifications array');
-          setNotifications([]);
-          setUnreadCount(0);
-          syncUnreadCount(0);
-        } else if (error.response.status === 401) {
-          setError('Your session has expired. Please log in again.');
-          localStorage.removeItem('token');
+        setNotifications(filteredNotifications);
+        const count = filteredNotifications.filter(n => !n.is_read).length;
+        setUnreadCount(count);
+        syncUnreadCount(count);
+        setError(null);
+        setServerAvailable(true);
+      } catch (error) {
+        console.error('Error fetching notifications:', error);
+        
+        // Enhanced error logging
+        if (error.response) {
+          console.error('Error response status:', error.response.status);
+          console.error('Error response headers:', error.response.headers);
+          
+          // Log the detailed error data
+          if (error.response.data) {
+            console.error('Error response data:', error.response.data);
+            
+            // For non-JSON responses, try to get the text
+            if (typeof error.response.data === 'string') {
+              console.error('Error response text:', error.response.data);
+              
+              // Check for specific database schema errors in the text
+              if (error.response.data.includes('ProgrammingError') && 
+                  error.response.data.includes('column') && 
+                  error.response.data.includes('does not exist')) {
+                console.error('Database schema error detected in raw response');
+                // Detailed error message for debugging
+                console.error('Full error text:', error.response.data);
+              }
+            }
+          }
+          
+          // Database schema errors often appear as 500 errors
+          if (error.response.status === 500) {
+            console.warn('Possible database schema issue - trying alternate endpoints');
+            
+            // Try alternate endpoints
+            const alternateNotifications = await fetchNotificationsFromAlternateEndpoint();
+            
+            if (alternateNotifications) {
+              console.log('Successfully retrieved notifications from alternate endpoint');
+              setNotifications(alternateNotifications);
+              const count = alternateNotifications.filter(n => !n.is_read).length;
+              setUnreadCount(count);
+              syncUnreadCount(count);
+              setError(null);
+              setServerAvailable(true);
+              return; // Exit early if we got notifications
+            }
+            
+            // If alternate endpoint failed, fall back to empty array
+            console.warn('All endpoints failed - using empty notifications array');
+            setNotifications([]);
+            setUnreadCount(0);
+            syncUnreadCount(0);
+            
+            // Set a more informative error message
+            setError('Notifications temporarily unavailable due to a server update. Please try again later.');
+          } else if (error.response.status === 401) {
+            setError('Your session has expired. Please log in again.');
+            localStorage.removeItem('token');
+          } else {
+            setError(`Error: ${error.response.status} - ${error.response.data?.detail || 'Failed to fetch notifications'}`);
+          }
+          setServerAvailable(error.response.status !== 500);
+        } else if (error.request) {
+          // The request was made but no response was received
+          console.error('No response received:', error.request);
+          setError('No response from the server. Please check your connection.');
+          setServerAvailable(false);
         } else {
-          setError(`Error: ${error.response.status} - ${error.response.data?.detail || 'Failed to fetch notifications'}`);
+          // Something happened in setting up the request
+          console.error('Error setting up request:', error.message);
+          setError('Error connecting to the server. Please try again later.');
+          setServerAvailable(false);
         }
-        setServerAvailable(error.response.status !== 500);
-      } else {
-        setError('Error connecting to the server. Please try again later.');
-        setServerAvailable(false);
       }
+    } catch (outerError) {
+      // Catch any errors not caught by the inner try-catch
+      console.error('Outer error in fetchNotifications:', outerError);
+      setError('An unexpected error occurred. Please try again later.');
+      setServerAvailable(false);
+      setNotifications([]);
+      setUnreadCount(0);
+      syncUnreadCount(0);
     } finally {
       setLoading(false);
     }
