@@ -19,6 +19,8 @@ from django.contrib import admin
 from django.urls import path, include
 from django.http import JsonResponse, HttpResponse
 import logging
+# Import the status check view
+from railway_status import status_check
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +32,8 @@ def api_root(request):
             "message": "Welcome to the Carpool API",
             "endpoints": {
                 "users": "/api/users/",
-                "rides": "/api/rides/"
+                "rides": "/api/rides/",
+                "status": "/railway-status/"
             }
         }, status=200)
     except Exception as e:
@@ -43,4 +46,6 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/users/', include('users.urls')),
     path('api/rides/', include('rides.urls')),
+    # Add the railway status endpoint
+    path('railway-status/', status_check, name='railway_status'),
 ]
