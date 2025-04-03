@@ -1753,18 +1753,39 @@ class RideRequestViewSet(viewsets.ModelViewSet):
                     # Create a simplified version that excludes problematic fields
                     simplified_data = []
                     for req in ride_requests:
-                        ride = req.ride
-                        simplified_data.append({
-                            'id': req.id,
-                            'status': req.status,
-                            'ride_id': ride.id if ride else None,
-                            'pickup_location': req.pickup_location,
-                            'dropoff_location': req.dropoff_location,
-                            'departure_time': req.departure_time.isoformat() if req.departure_time else None,
-                            'seats_needed': req.seats_needed,
-                            'rider_name': f"{req.rider.first_name} {req.rider.last_name}" if req.rider else "Unknown",
-                            'driver_name': f"{ride.driver.first_name} {ride.driver.last_name}" if ride and ride.driver else "Unknown"
-                        })
+                        try:
+                            ride = req.ride
+                            driver = ride.driver if ride else None
+                            
+                            # Construct simplified data with more complete driver information
+                            ride_data = {
+                                'id': req.id,
+                                'status': req.status,
+                                'ride_id': ride.id if ride else None,
+                                'pickup_location': req.pickup_location,
+                                'dropoff_location': req.dropoff_location,
+                                'departure_time': req.departure_time.isoformat() if req.departure_time else None,
+                                'seats_needed': req.seats_needed,
+                                'rider_name': f"{req.rider.first_name} {req.rider.last_name}" if req.rider else "Unknown"
+                            }
+                            
+                            # Add driver information if available
+                            if driver:
+                                ride_data.update({
+                                    'driver_name': f"{driver.first_name} {driver.last_name}",
+                                    'driver_email': driver.email,
+                                    'driver_phone': getattr(driver, 'phone_number', None),
+                                    'vehicle_make': getattr(driver, 'vehicle_make', None),
+                                    'vehicle_model': getattr(driver, 'vehicle_model', None),
+                                    'vehicle_color': getattr(driver, 'vehicle_color', None),
+                                    'vehicle_year': getattr(driver, 'vehicle_year', None),
+                                    'license_plate': getattr(driver, 'license_plate', None)
+                                })
+                            
+                            simplified_data.append(ride_data)
+                        except Exception as inner_error:
+                            logger.error(f"Error creating simplified data for ride request {req.id}: {str(inner_error)}")
+                    
                     return Response(simplified_data)
                 except Exception as fallback_error:
                     logger.error(f"Fallback serialization also failed: {str(fallback_error)}")
