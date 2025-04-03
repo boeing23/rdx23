@@ -256,8 +256,8 @@ def calculate_route_overlap(driver_start, driver_end, rider_pickup, rider_dropof
         if is_shared_start_point:
             # For shared starting points, we're more lenient about drop-off distance
             # since it might be a case where driver can extend their trip
-            MAX_PICKUP_DIST = 1.0  # km (about 10 city blocks)
-            MAX_DROPOFF_DIST = 4.0  # km (more lenient for extending the route)
+            MAX_PICKUP_DIST = 1.5  # km (increased from 1.0)
+            MAX_DROPOFF_DIST = 5.0  # km (increased from 4.0)
             
             # Calculate if driver's route can be reasonably extended to accommodate rider
             # by checking if rider's destination is in the general direction of the driver's route
@@ -283,15 +283,16 @@ def calculate_route_overlap(driver_start, driver_end, rider_pickup, rider_dropof
                 cosine_sim = (driver_dir_norm[0] * rider_dir_norm[0] + driver_dir_norm[1] * rider_dir_norm[1])
                 logger.info(f"Direction similarity (cosine): {cosine_sim:.4f}")
                 
-                # If the directions are similar enough (cos > 0.7, or angle < ~45 degrees)
-                if cosine_sim > 0.7:
+                # If the directions are similar enough (cos > 0.6, or angle < ~55 degrees)
+                # Lower the cosine threshold from 0.7 to 0.6 to be more inclusive
+                if cosine_sim > 0.6:
                     logger.info("Rider's destination is in a similar direction as driver's route - route extension possible")
                     # Give a bonus to the drop-off score
-                    MAX_DROPOFF_DIST = 5.0  # Even more lenient
+                    MAX_DROPOFF_DIST = 6.0  # Even more lenient (increased from 5.0)
                     
                     # For cases where the driver's route is shorter than the rider's,
                     # consider a potential extension of the driver's route
-                    if direct_driver_distance < rider_distance and direct_distance_to_rider_dest <= 5.0:
+                    if direct_driver_distance < rider_distance and direct_distance_to_rider_dest <= 6.0:  # Increased from 5.0
                         logger.info("Rider's route is longer but driver could potentially extend their route")
                         
                         # Improve the dropoff distance calculation
@@ -304,8 +305,9 @@ def calculate_route_overlap(driver_start, driver_end, rider_pickup, rider_dropof
                         distance_to_dest = extension_dropoff_distance
         else:
             # Regular case - standard thresholds for typical ride-sharing
-            MAX_PICKUP_DIST = 1.0  # km (about 10 city blocks)
-            MAX_DROPOFF_DIST = 2.0  # km (about 20 city blocks)
+            # Increased thresholds to be more inclusive
+            MAX_PICKUP_DIST = 1.5  # km (increased from 1.0)
+            MAX_DROPOFF_DIST = 3.0  # km (increased from 2.0)
             
         # Calculate proximity scores (0-100)
         pickup_score = max(0, 100 - (pickup_distance * 100 / MAX_PICKUP_DIST))
@@ -353,11 +355,12 @@ def calculate_route_overlap(driver_start, driver_end, rider_pickup, rider_dropof
                 0.1 * detour_score       # Minimize detour
             )
         else:
+            # Adjusted weights to prioritize pickup and dropoff proximity
             overlap_percentage = (
-                0.3 * direction_score +  # Direction alignment
-                0.3 * pickup_score +     # Pickup proximity
-                0.3 * dropoff_score +    # Dropoff proximity
-                0.1 * detour_score       # Minimize detour
+                0.25 * direction_score +  # Direction alignment (reduced from 0.3)
+                0.35 * pickup_score +     # Pickup proximity (increased from 0.3)
+                0.30 * dropoff_score +    # Dropoff proximity (unchanged)
+                0.10 * detour_score       # Minimize detour (unchanged)
             )
         
         # Ensure overlap_percentage is between 0 and 100
@@ -368,6 +371,13 @@ def calculate_route_overlap(driver_start, driver_end, rider_pickup, rider_dropof
                    f"Dropoff={dropoff_score:.2f}%, " +
                    f"Detour={detour_score:.2f}%")
         logger.info(f"Final overlap score: {overlap_percentage:.2f}%")
+        
+        # Boost the overlap percentage for cases with significant overlap (40% or more)
+        # This helps rides with decent overlap to more easily meet the threshold
+        if overlap_percentage >= 40.0:
+            overlap_percentage = overlap_percentage * 1.1  # 10% boost
+            overlap_percentage = min(100, overlap_percentage)  # Cap at 100%
+            logger.info(f"Applied boost to overlap > 40%: New score = {overlap_percentage:.2f}%")
         
         # Convert optimal_dropoff and optimal_pickup back to (lng, lat) format for storage
         nearest_dropoff_point = None
@@ -612,10 +622,11 @@ def calculate_matching_score(overlap_percentage, time_diff, available_seats, sea
     logger.info(f"Matching score components - Overlap: {overlap_score:.2f}, Time: {time_score:.2f}, Seats: {seat_score:.2f}")
     
     # Weighted scoring with route overlap as the most important factor
+    # Increased weight for route overlap to prioritize geographic matching
     matching_score = (
-        0.6 * overlap_score +  # Route overlap is most important
-        0.3 * time_score +     # Time proximity is second most important
-        0.1 * seat_score       # Seat efficiency is least important
+        0.65 * overlap_score +  # Route overlap is most important (increased from 0.6)
+        0.25 * time_score +     # Time proximity is second most important (decreased from 0.3)
+        0.10 * seat_score       # Seat efficiency is least important (unchanged)
     )
     
     # Round to 2 decimal places for readability
@@ -1001,8 +1012,8 @@ class RideViewSet(viewsets.ModelViewSet):
                 )
                 logger.info(f"Pending request {pending_request.id} matching score: {matching_score:.2f}")
                 
-                # Use consistent threshold with find_suitable_rides (35%)
-                MIN_OVERLAP_THRESHOLD = 35.0
+                # Lower the threshold for ride matching - make it more inclusive
+                MIN_OVERLAP_THRESHOLD = 25.0  # Reduced from 35.0
                 
                 # If there's a good match, add to matching riders
                 if overlap_percentage >= MIN_OVERLAP_THRESHOLD:
