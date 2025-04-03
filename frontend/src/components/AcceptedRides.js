@@ -45,7 +45,8 @@ const AcceptedRides = () => {
       console.log('User type:', currentUserType);
       console.log('User ID:', userId);
       
-      const response = await fetch(`${API_BASE_URL}/api/rides/requests/accepted/`, {
+      // Use the correct endpoint with detailed information
+      const response = await fetch(`${API_BASE_URL}/api/rides/requests/accepted/?include_details=true`, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
@@ -58,8 +59,41 @@ const AcceptedRides = () => {
       const data = await response.json();
       console.log('Fetched accepted rides:', data);
       
+      // Fetch additional driver information if needed
+      const ridesWithDetails = await Promise.all(data.map(async (ride) => {
+        // If this request already has driver_details, use them
+        if (ride.driver_details && Object.keys(ride.driver_details).length > 0) {
+          console.log(`Ride ${ride.id} already has driver details:`, ride.driver_details);
+          return ride;
+        }
+
+        // Otherwise, fetch the driver details
+        if (ride.driver_id || (ride.ride && ride.ride.driver)) {
+          const driverId = ride.driver_id || (ride.ride && ride.ride.driver);
+          console.log(`Fetching details for driver ${driverId}`);
+          
+          try {
+            const driverResponse = await fetch(`${API_BASE_URL}/api/users/drivers/${driverId}/`, {
+              headers: {
+                'Authorization': `Bearer ${token}`,
+              },
+            });
+            
+            if (driverResponse.ok) {
+              const driverData = await driverResponse.json();
+              console.log(`Driver details for ${driverId}:`, driverData);
+              return { ...ride, driver_details: driverData };
+            }
+          } catch (err) {
+            console.error(`Error fetching driver ${driverId} details:`, err);
+          }
+        }
+        
+        return ride;
+      }));
+      
       // Log detailed information about each ride
-      data.forEach((ride, index) => {
+      ridesWithDetails.forEach((ride, index) => {
         console.log(`Ride ${index + 1}:`, {
           id: ride.id,
           status: ride.status,
@@ -68,12 +102,13 @@ const AcceptedRides = () => {
           pickup: ride.pickup_location,
           dropoff: ride.dropoff_location,
           departure: ride.departure_time,
-          seats: ride.seats_needed
+          seats: ride.seats_needed,
+          driver_details: ride.driver_details
         });
       });
       
       // Sort rides by departure time (most recent first)
-      const sortedRides = data.sort((a, b) => 
+      const sortedRides = ridesWithDetails.sort((a, b) => 
         new Date(b.departure_time) - new Date(a.departure_time)
       );
       
@@ -184,8 +219,15 @@ const AcceptedRides = () => {
   }
 
   const renderRideCard = (ride) => {
-    const driverInfo = ride.driver_details || {};
+    // Extract driver details from the ride object
+    const driverInfo = ride.driver_details || 
+                      (ride.ride && ride.ride.driver_details) || {};
+    
+    // Get ride data from either the ride object or the ride.ride object
+    const rideData = ride.ride || ride;
+    
     const isDriver = userType === 'DRIVER';
+    console.log('Rendering ride card with data:', { ride, driverInfo, isDriver });
 
     // Helper function to get full name
     const getFullName = (user) => {
@@ -195,6 +237,26 @@ const AcceptedRides = () => {
       return `${firstName} ${lastName}`.trim() || 'N/A';
     };
 
+    // Format date for better display
+    const formatDateTime = (dateTimeStr) => {
+      try {
+        const date = new Date(dateTimeStr);
+        return {
+          date: date.toLocaleDateString(),
+          time: date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})
+        };
+      } catch (e) {
+        return { date: 'Invalid date', time: 'Invalid time' };
+      }
+    };
+    
+    // Get formatted date/time
+    const dateTime = formatDateTime(rideData.departure_time || ride.departure_time);
+    
+    // Determine locations
+    const startLocation = rideData.start_location || ride.pickup_location || 'N/A';
+    const endLocation = rideData.end_location || ride.dropoff_location || 'N/A';
+
     return (
       <Card sx={{ mb: 3 }}>
         <CardContent>
@@ -203,24 +265,28 @@ const AcceptedRides = () => {
               <Typography variant="h6" gutterBottom>Ride Details</Typography>
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
                 <Typography>
-                  <strong>From:</strong> {ride.start_location}
+                  <LocationOn color="primary" sx={{ mr: 1, verticalAlign: 'text-bottom' }} />
+                  <strong>From:</strong> {startLocation}
                 </Typography>
                 <Typography>
-                  <strong>To:</strong> {ride.end_location}
+                  <LocationOn color="primary" sx={{ mr: 1, verticalAlign: 'text-bottom' }} />
+                  <strong>To:</strong> {endLocation}
                 </Typography>
                 <Typography>
-                  <strong>Date:</strong> {new Date(ride.departure_time).toLocaleDateString()}
+                  <Event color="primary" sx={{ mr: 1, verticalAlign: 'text-bottom' }} />
+                  <strong>Date:</strong> {dateTime.date}
                 </Typography>
                 <Typography>
-                  <strong>Time:</strong> {new Date(ride.departure_time).toLocaleTimeString()}
+                  <Schedule color="primary" sx={{ mr: 1, verticalAlign: 'text-bottom' }} />
+                  <strong>Time:</strong> {dateTime.time}
                 </Typography>
                 <Typography>
-                  <strong>Status:</strong> {ride.status}
+                  <strong>Status:</strong> {getStatusChip(ride.status)}
                 </Typography>
               </Box>
             </Box>
 
-            {!isDriver ? (
+            {!isDriver && (
               <Box>
                 <Typography variant="subtitle1" gutterBottom>Driver Details</Typography>
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
@@ -242,39 +308,34 @@ const AcceptedRides = () => {
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                     <DirectionsCar sx={{ color: 'primary.main' }} />
                     <Typography>
-                      {driverInfo.vehicle_year} {driverInfo.vehicle_make} {driverInfo.vehicle_model} 
+                      {driverInfo.vehicle_make || 'N/A'} {driverInfo.vehicle_model || ''}
                       {driverInfo.vehicle_color ? ` (${driverInfo.vehicle_color})` : ''}
                     </Typography>
                   </Box>
                 </Box>
               </Box>
-            ) : (
-              <Box>
-                <Typography variant="subtitle1" gutterBottom>Rider Details</Typography>
-                {ride.requests?.map((request) => (
-                  <Box key={request.id} sx={{ mb: 2 }}>
-                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                      <Typography>
-                        <strong>Name:</strong> {getFullName(request.rider_details)}
-                      </Typography>
-                      <Typography>
-                        <strong>Email:</strong> {request.rider_details.email}
-                      </Typography>
-                      <Typography>
-                        <strong>Phone:</strong> {request.rider_details.phone_number}
-                      </Typography>
-                      <Typography>
-                        <strong>Pickup:</strong> {request.pickup_location}
-                      </Typography>
-                      <Typography>
-                        <strong>Dropoff:</strong> {request.dropoff_location}
-                      </Typography>
-                      <Typography>
-                        <strong>Seats:</strong> {request.seats_needed}
-                      </Typography>
-                    </Box>
-                  </Box>
-                ))}
+            )}
+            
+            {/* Ride Actions */}
+            {ride.status === 'ACCEPTED' && (
+              <Box sx={{ mt: 2, display: 'flex', justifyContent: 'flex-end' }}>
+                <Button 
+                  variant="outlined" 
+                  color="error" 
+                  onClick={() => handleCancelRide(ride.id)}
+                  sx={{ mr: 1 }}
+                >
+                  Cancel Ride
+                </Button>
+                {isDriver && (
+                  <Button 
+                    variant="contained" 
+                    color="success" 
+                    onClick={() => handleCompleteRide(ride.id)}
+                  >
+                    Mark as Completed
+                  </Button>
+                )}
               </Box>
             )}
           </Box>

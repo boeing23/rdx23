@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { AppBar, Toolbar, Typography, Button, IconButton, Menu, MenuItem, Box } from '@mui/material';
+import { AppBar, Toolbar, Typography, Button, IconButton, Menu, MenuItem, Box, Divider } from '@mui/material';
 import MenuIcon from '@mui/icons-material/Menu';
 import NotificationList from './NotificationList';
 
@@ -66,11 +66,11 @@ function Navbar() {
             <MenuItem component={Link} to="/offer" onClick={handleClose}>
               Offer Ride
             </MenuItem>
-          ) : userType === 'RIDER' ? (
+          ) : (
             <MenuItem component={Link} to="/request-ride" onClick={handleClose}>
-              Find Rides
+              Request a Ride
             </MenuItem>
-          ) : null}
+          )}
           <MenuItem component={Link} to="/rides" onClick={handleClose}>
             Rides
           </MenuItem>
@@ -80,6 +80,15 @@ function Navbar() {
           <MenuItem component={Link} to="/notifications" onClick={handleClose}>
             Notifications
           </MenuItem>
+          <Divider />
+          <Typography sx={{ px: 2, py: 1, fontWeight: 'bold' }}>
+            Profile
+          </Typography>
+          {userType === 'DRIVER' && (
+            <MenuItem component={Link} to="/update-driver-profile" onClick={handleClose}>
+              Update Profile
+            </MenuItem>
+          )}
           <MenuItem onClick={() => { handleLogout(); handleClose(); }}>
             Logout
           </MenuItem>
@@ -121,11 +130,11 @@ function Navbar() {
                 <Button color="inherit" component={Link} to="/offer">
                   Offer Ride
                 </Button>
-              ) : userType === 'RIDER' ? (
+              ) : (
                 <Button color="inherit" component={Link} to="/request-ride">
-                  Find Rides
+                  Request a Ride
                 </Button>
-              ) : null}
+              )}
               <Button
                 color="inherit"
                 component={Link}
@@ -143,9 +152,38 @@ function Navbar() {
                 My Trips
               </Button>
               <NotificationList />
-              <Button color="inherit" onClick={handleLogout}>
-                Logout
+              <Button 
+                color="inherit" 
+                onClick={handleMenu}
+                aria-label="account of current user"
+                aria-controls="profile-menu"
+                aria-haspopup="true"
+              >
+                Profile
               </Button>
+              <Menu
+                id="profile-menu"
+                anchorEl={anchorEl}
+                open={Boolean(anchorEl)}
+                onClose={handleClose}
+                anchorOrigin={{
+                  vertical: 'bottom',
+                  horizontal: 'right',
+                }}
+                transformOrigin={{
+                  vertical: 'top',
+                  horizontal: 'right',
+                }}
+              >
+                {userType === 'DRIVER' && (
+                  <MenuItem component={Link} to="/update-driver-profile" onClick={handleClose}>
+                    Update Profile
+                  </MenuItem>
+                )}
+                <MenuItem onClick={() => { handleLogout(); handleClose(); }}>
+                  Logout
+                </MenuItem>
+              </Menu>
             </>
           ) : (
             <>
