@@ -74,12 +74,12 @@ const RiderAcceptedRides = () => {
           // Create mapped object with all available driver info from API
           return {
             id: ride.id,
-            status: ride.status,
+            status: ride.status || 'PENDING',
             ride_id: ride.ride_id,
-            pickup_location: ride.pickup_location,
-            dropoff_location: ride.dropoff_location,
+            pickup_location: ride.pickup_location || 'Unknown location',
+            dropoff_location: ride.dropoff_location || 'Unknown location',
             departure_time: ride.departure_time,
-            seats_needed: ride.seats_needed,
+            seats_needed: ride.seats_needed || 1,
             ride_details: null, // Not available in this format
             driver: {
               id: ride.driver_id || null,
@@ -98,24 +98,78 @@ const RiderAcceptedRides = () => {
         });
       } else {
         console.log('Response appears to be in standard format');
-        mappedRides = response.data.map(ride => {
-          console.log('Processing ride in standard format:', ride);
-          
-          // Check if ride_details and driver are populated
-          const hasRideDetails = ride.ride_details && typeof ride.ride_details === 'object';
-          const hasDriverInRideDetails = hasRideDetails && ride.ride_details.driver;
-          
-          // Get driver info from the most appropriate location
-          const driver = hasDriverInRideDetails ? ride.ride_details.driver : 
-                        (ride.driver ? ride.driver : null);
-          
-          console.log('Driver info available:', driver ? 'Yes' : 'No');
-          
-          return {
-            ...ride,
-            driver: driver
-          };
-        });
+        // Create a safe mapping function to handle potentially missing fields
+        const safeMapRide = ride => {
+          try {
+            console.log('Processing ride in standard format:', ride);
+            
+            // Check if ride_details and driver are populated
+            const hasRideDetails = ride.ride_details && typeof ride.ride_details === 'object';
+            const hasDriverInRideDetails = hasRideDetails && ride.ride_details.driver;
+            
+            // Get driver info from the most appropriate location
+            const driver = hasDriverInRideDetails ? ride.ride_details.driver : 
+                          (ride.driver ? ride.driver : 
+                          (ride.driver_details ? ride.driver_details : null));
+            
+            console.log('Driver info available:', driver ? 'Yes' : 'No');
+            
+            // Create a safe driver object with fallbacks for all fields
+            const safeDriver = driver || {};
+            const driverObj = {
+              id: safeDriver.id || null,
+              first_name: safeDriver.first_name || '',
+              last_name: safeDriver.last_name || '',
+              full_name: safeDriver.full_name || 
+                        `${safeDriver.first_name || ''} ${safeDriver.last_name || ''}`.trim() || 
+                        'Unknown Driver',
+              email: safeDriver.email || null,
+              phone_number: safeDriver.phone_number || null,
+              vehicle_make: safeDriver.vehicle_make || null,
+              vehicle_model: safeDriver.vehicle_model || null,
+              vehicle_color: safeDriver.vehicle_color || null,
+              vehicle_year: safeDriver.vehicle_year || null,
+              license_plate: safeDriver.license_plate || null
+            };
+            
+            return {
+              id: ride.id,
+              status: ride.status || 'PENDING',
+              ride_id: ride.ride ? ride.ride.id : ride.ride_id,
+              pickup_location: ride.pickup_location || 'Unknown location',
+              dropoff_location: ride.dropoff_location || 'Unknown location',
+              departure_time: ride.departure_time,
+              seats_needed: ride.seats_needed || 1,
+              ride_details: ride.ride_details,
+              driver: driverObj,
+              // Handle optional fields that might be causing the error
+              nearest_dropoff_point: ride.nearest_dropoff_point || null,
+              optimal_pickup_point: ride.optimal_pickup_point || null,
+              nearest_dropoff_info: ride.nearest_dropoff_info || null,
+              optimal_pickup_info: ride.optimal_pickup_info || null
+            };
+          } catch (e) {
+            console.error('Error mapping ride:', e);
+            // Return a safe fallback object if mapping fails
+            return {
+              id: ride.id || Math.random().toString(),
+              status: 'PENDING',
+              ride_id: ride.ride_id || ride.id,
+              pickup_location: 'Data unavailable',
+              dropoff_location: 'Data unavailable',
+              departure_time: ride.departure_time || new Date(),
+              seats_needed: 1,
+              driver: {
+                full_name: 'Driver information unavailable'
+              }
+            };
+          }
+        };
+        
+        // Safely map all rides
+        mappedRides = Array.isArray(response.data) ? 
+                      response.data.map(safeMapRide) : 
+                      [safeMapRide(response.data)];
       }
       
       console.log(`Processed ${mappedRides.length} rides`);
