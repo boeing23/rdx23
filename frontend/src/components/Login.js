@@ -34,6 +34,8 @@ function Login() {
     setError('');
 
     try {
+      console.log('Login attempt with:', { email: formData.username, password: '***' });
+      
       const response = await fetch(`${API_BASE_URL}/api/token/`, {
         method: 'POST',
         headers: {
@@ -45,26 +47,43 @@ function Login() {
         }),
       });
 
+      // Log raw response for debugging
+      console.log('Login response status:', response.status);
+      
       const data = await response.json();
+      console.log('Login response data:', Object.keys(data));
 
       if (!response.ok) {
         throw new Error(data.detail || 'Invalid credentials');
       }
 
+      // Clear any existing auth data
+      localStorage.removeItem('token');
+      localStorage.removeItem('userType');
+      localStorage.removeItem('userId');
+      
+      // Store new auth data
       localStorage.setItem('token', data.access);
       localStorage.setItem('userId', data.user_id);
       localStorage.setItem('userType', data.user_type);
 
-      // Dispatch custom event to notify the Navbar of login
-      window.dispatchEvent(new Event('auth-change'));
-
-      console.log('Login successful:', {
-        token: data.access,
-        userId: data.user_id,
-        userType: data.user_type
+      // Verify storage
+      console.log('Stored values:', {
+        token: localStorage.getItem('token')?.substring(0, 10) + '...',
+        userId: localStorage.getItem('userId'),
+        userType: localStorage.getItem('userType')
       });
 
-      navigate('/');
+      // Dispatch custom event to notify the Navbar of login
+      console.log('Dispatching auth-change event');
+      window.dispatchEvent(new Event('auth-change'));
+
+      console.log('Login successful, redirecting to home page');
+      
+      // Short delay before redirecting to allow event to be processed
+      setTimeout(() => {
+        navigate('/');
+      }, 100);
     } catch (err) {
       console.error('Login error:', err);
       setError(err.message || 'Failed to login. Please try again.');

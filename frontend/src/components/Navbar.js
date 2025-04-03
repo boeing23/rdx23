@@ -24,30 +24,62 @@ function Navbar() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // Check auth status whenever location changes or component mounts
+  // Check auth status on component mount
   useEffect(() => {
+    console.log('Navbar - Initial auth check on mount');
     checkAuthStatus();
-  }, [location.pathname]);
+    
+    // Force a re-check every time the component renders
+    const interval = setInterval(() => {
+      checkAuthStatus();
+    }, 5000); // Check every 5 seconds
+
+    return () => clearInterval(interval);
+  }, []);
 
   // Function to check authentication status
   const checkAuthStatus = () => {
     const token = localStorage.getItem('token');
     const type = localStorage.getItem('userType');
     
+    // Log for debugging
     console.log('Navbar auth check:', {
       hasToken: !!token,
+      tokenLength: token ? token.length : 0,
       userType: type,
       path: location.pathname
     });
     
-    setIsAuthenticated(!!token);
-    setUserType(type || null);
+    // Set authentication state based on token presence
+    const isAuth = !!token;
+    if (isAuth !== isAuthenticated) {
+      console.log('Updating authentication state:', isAuth);
+      setIsAuthenticated(isAuth);
+    }
+    
+    // Parse userType if it's stringified
+    let parsedType = type;
+    if (type && (type.startsWith('"') || type.includes('{'))) {
+      try {
+        parsedType = JSON.parse(type);
+        console.log('Parsed userType from JSON:', parsedType);
+      } catch (e) {
+        console.error('Failed to parse userType:', e);
+      }
+    }
+    
+    // Update userType if changed
+    if (parsedType !== userType) {
+      console.log('Updating userType:', parsedType);
+      setUserType(parsedType);
+    }
   };
 
-  // Add an event listener for storage changes
+  // Add an event listener for storage changes and auth events
   useEffect(() => {
     // This will detect if localStorage changes in another tab/window
     const handleStorageChange = () => {
+      console.log('Storage change detected');
       checkAuthStatus();
     };
 
@@ -66,6 +98,12 @@ function Navbar() {
       window.removeEventListener('auth-change', handleAuthChange);
     };
   }, []);
+
+  // Also recheck auth status when location changes
+  useEffect(() => {
+    console.log('Location changed to:', location.pathname);
+    checkAuthStatus();
+  }, [location.pathname]);
 
   const handleMobileMenu = (event) => {
     setMobileAnchorEl(event.currentTarget);

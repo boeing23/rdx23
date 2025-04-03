@@ -125,20 +125,42 @@ function Register() {
       console.log('Registration response:', data);
 
       if (response.ok) {
-        // Store token and user type
+        // Clear any existing auth data
+        localStorage.removeItem('token');
+        localStorage.removeItem('userType');
+        localStorage.removeItem('userId');
+        
+        // Store token and user type as plain string (not stringified)
         localStorage.setItem('token', data.token);
-        localStorage.setItem('userType', JSON.stringify(data.user_type));
+        localStorage.setItem('userType', data.user_type); // Store as plain string
         localStorage.setItem('userId', data.user_id);
-        console.log('Registration successful. User type:', data.user_type);
-        console.log('Stored user type in localStorage:', localStorage.getItem('userType'));
+        
+        console.log('Registration successful. Stored values:', {
+          token: data.token.substring(0, 10) + '...',
+          userType: data.user_type, 
+          userId: data.user_id
+        });
+        
+        // Verify storage
+        console.log('Verification - values in localStorage:', {
+          token: localStorage.getItem('token')?.substring(0, 10) + '...',
+          userType: localStorage.getItem('userType'),
+          userId: localStorage.getItem('userId')
+        });
+        
         // Dispatch custom event to notify the Navbar of login
+        console.log('Dispatching auth-change event');
         window.dispatchEvent(new Event('auth-change'));
-        // Navigate based on user type
-        if (data.user_type === 'DRIVER') {
-          navigate('/offer');
-        } else {
-          navigate('/rides');
-        }
+        
+        // Short delay to ensure event is processed
+        setTimeout(() => {
+          // Navigate based on user type
+          if (data.user_type === 'DRIVER') {
+            navigate('/offer');
+          } else {
+            navigate('/rides');
+          }
+        }, 100);
       } else {
         setError(data.detail || 'Registration failed');
       }
