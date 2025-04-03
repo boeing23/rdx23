@@ -22,7 +22,7 @@ import {
   DialogActions,
   CircularProgress
 } from '@mui/material';
-import { Schedule, LocationOn, Person, Phone, Email, Event, AccessTime, Cancel, Refresh } from '@mui/icons-material';
+import { Schedule, LocationOn, Person, Phone, Email, Event, AccessTime, Cancel, Refresh, DirectionsCar, DriveEta } from '@mui/icons-material';
 import { API_BASE_URL } from '../config';
 import { format } from 'date-fns';
 
@@ -184,6 +184,16 @@ const RiderAcceptedRides = () => {
   };
 
   const handleRideClick = (ride) => {
+    // Log the ride structure to understand what we're working with
+    console.log('Selected ride details:', ride);
+    console.log('Ride structure:', {
+      hasRideDetails: !!ride.ride_details,
+      hasDriver: !!(ride.ride_details?.driver),
+      driverInfo: ride.ride_details?.driver,
+      hasRideProperty: !!ride.ride,
+      rideDriverInfo: ride.ride?.driver
+    });
+    
     setSelectedRide(ride);
   };
 
@@ -239,6 +249,10 @@ const RiderAcceptedRides = () => {
 
   const getEmail = (user) => {
     return user?.email || 'Not provided';
+  };
+
+  const getDriverInfo = (ride) => {
+    return ride?.ride_details?.driver || null;
   };
 
   const formatDate = (dateString) => {
@@ -381,7 +395,7 @@ const RiderAcceptedRides = () => {
                       </Avatar>
                     </ListItemIcon>
                     <ListItemText
-                      primary={getFullName(ride.ride?.driver)}
+                      primary={getFullName(getDriverInfo(ride))}
                       secondary={
                         <Box>
                           <Typography variant="body2" color="text.secondary">
@@ -428,16 +442,37 @@ const RiderAcceptedRides = () => {
                       </Typography>
                       <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
                         <Person sx={{ mr: 1 }} />
-                        <Typography>{getFullName(selectedRide.ride?.driver)}</Typography>
+                        <Typography>{getFullName(getDriverInfo(selectedRide))}</Typography>
                       </Box>
                       <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
                         <Phone sx={{ mr: 1 }} />
-                        <Typography>{getPhoneNumber(selectedRide.ride?.driver)}</Typography>
+                        <Typography>{getPhoneNumber(getDriverInfo(selectedRide))}</Typography>
                       </Box>
                       <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
                         <Email sx={{ mr: 1 }} />
-                        <Typography>{getEmail(selectedRide.ride?.driver)}</Typography>
+                        <Typography>{getEmail(getDriverInfo(selectedRide))}</Typography>
                       </Box>
+                      
+                      {getDriverInfo(selectedRide) && (
+                        <>
+                          <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                            <DirectionsCar sx={{ mr: 1 }} />
+                            <Typography>
+                              Vehicle: {
+                                [
+                                  getDriverInfo(selectedRide).vehicle_make,
+                                  getDriverInfo(selectedRide).vehicle_model,
+                                  getDriverInfo(selectedRide).vehicle_color && `(${getDriverInfo(selectedRide).vehicle_color})`
+                                ].filter(Boolean).join(' ') || 'Not provided'
+                              }
+                            </Typography>
+                          </Box>
+                          <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                            <DriveEta sx={{ mr: 1 }} />
+                            <Typography>License Plate: {getDriverInfo(selectedRide).license_plate || 'Not provided'}</Typography>
+                          </Box>
+                        </>
+                      )}
                     </Grid>
 
                     <Grid item xs={12}>
