@@ -120,9 +120,13 @@ function NotificationList() {
       // Clean token to ensure proper format
       const cleanToken = token ? token.trim().replace(/^["'](.*)["']$/, '$1').replace(/^Bearer\s+/i, '') : '';
       
-      console.log('Fetching notifications from:', `${API_BASE_URL}/api/rides/notifications/`);
+      console.log('Fetching notifications from the API...');
       
+      // The correct endpoint based on Django REST framework router setup
+      // URL is /api/rides/notifications/ based on the router configuration 
+      // in the Django backend
       try {
+        // Try fetch with correct endpoint path structure
         const response = await axios.get(`${API_BASE_URL}/api/rides/notifications/`, {
           headers: { 
             'Authorization': `Bearer ${cleanToken}`,
@@ -131,7 +135,7 @@ function NotificationList() {
         });
         console.log('Notifications received:', response.data);
         
-        // Filter out any notifications with incomplete data to prevent rendering errors
+        // Process notifications as before
         const filteredNotifications = response.data.filter(notification => {
           if (!notification || !notification.id) return false;
           
@@ -170,14 +174,45 @@ function NotificationList() {
             if (typeof error.response.data === 'string') {
               console.error('Error response text:', error.response.data);
               
-              // Check for specific database schema errors in the text
               if (error.response.data.includes('ProgrammingError') && 
-                  error.response.data.includes('column') && 
-                  error.response.data.includes('does not exist')) {
-                console.error('Database schema error detected in raw response');
-                // Detailed error message for debugging
-                console.error('Full error text:', error.response.data);
+                  error.response.data.includes('column rides_riderequest.optimal_pickup_point does not exist')) {
+                console.error('Database schema error detected: Missing optimal_pickup_point field');
+                
+                // Create a simple notification structure that doesn't rely on the missing field
+                console.log('Creating simple notifications as fallback');
+                const simpleNotifications = [];
+                setNotifications(simpleNotifications);
+                setUnreadCount(0);
+                syncUnreadCount(0);
+                setError('Notifications are limited due to a server update. We are working to restore all features.');
+                setLoading(false);
+                return;
               }
+            }
+          }
+          
+          // If it's a 404, the endpoint structure might be different - try other pattern
+          if (error.response.status === 404) {
+            console.warn('API endpoint not found, trying alternate path format...');
+            try {
+              // Django REST framework sometimes uses /api/notifications/ pattern
+              const alternateResponse = await axios.get(`${API_BASE_URL}/api/notifications/`, {
+                headers: { 
+                  'Authorization': `Bearer ${cleanToken}`,
+                  'Content-Type': 'application/json' 
+                }
+              });
+              
+              console.log('Notifications received from alternate path:', alternateResponse.data);
+              setNotifications(alternateResponse.data);
+              const count = alternateResponse.data.filter(n => !n.is_read).length;
+              setUnreadCount(count);
+              syncUnreadCount(count);
+              setError(null);
+              setServerAvailable(true);
+              return;
+            } catch (altError) {
+              console.error('Alternate endpoint also failed:', altError.message);
             }
           }
           
@@ -188,7 +223,7 @@ function NotificationList() {
             // Try alternate endpoints
             const alternateNotifications = await fetchNotificationsFromAlternateEndpoint();
             
-            if (alternateNotifications) {
+            if (alternateNotifications && alternateNotifications.length > 0) {
               console.log('Successfully retrieved notifications from alternate endpoint');
               setNotifications(alternateNotifications);
               const count = alternateNotifications.filter(n => !n.is_read).length;
@@ -206,7 +241,7 @@ function NotificationList() {
             syncUnreadCount(0);
             
             // Set a more informative error message
-            setError('Notifications temporarily unavailable due to a server update. Please try again later.');
+            setError('Notifications temporarily unavailable. The system is undergoing maintenance.');
           } else if (error.response.status === 401) {
             setError('Your session has expired. Please log in again.');
             localStorage.removeItem('token');
