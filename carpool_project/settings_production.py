@@ -70,18 +70,10 @@ SERVER_EMAIL = EMAIL_HOST_USER
 CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOW_CREDENTIALS = True
 
-# Add our custom middleware to the beginning of the middleware list
-MIDDLEWARE.insert(0, 'carpool_project.cors_middleware.CorsMiddleware')
-
-# Make sure corsheaders middleware is near the beginning of the middleware list
+# Make sure corsheaders middleware is at the beginning of the middleware list
 if 'corsheaders.middleware.CorsMiddleware' in MIDDLEWARE:
     MIDDLEWARE.remove('corsheaders.middleware.CorsMiddleware')
-MIDDLEWARE.insert(1, 'corsheaders.middleware.CorsMiddleware')
-
-# Print middleware order for debugging
-print("Middleware order:", file=sys.stderr)
-for i, middleware in enumerate(MIDDLEWARE):
-    print(f"{i}: {middleware}", file=sys.stderr)
+MIDDLEWARE.insert(0, 'corsheaders.middleware.CorsMiddleware')
 
 # Explicit CORS allowed origins
 CORS_ALLOWED_ORIGINS = [

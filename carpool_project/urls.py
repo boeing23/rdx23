@@ -38,13 +38,8 @@ def api_root(request):
         logger.error(f"Error in root endpoint: {str(e)}")
         return HttpResponse("OK", status=200)
 
-def healthcheck(request):
-    # Simple health check that always returns OK
-    return HttpResponse("OK", status=200)
-
 urlpatterns = [
     path('', api_root, name='api-root'),
-    path('health/', healthcheck, name='healthcheck'),
     path('admin/', admin.site.urls),
     path('api/users/', include('users.urls')),
     path('api/rides/', include('rides.urls')),
