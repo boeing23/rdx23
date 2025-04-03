@@ -21,7 +21,6 @@ from .services import send_ride_match_notification, send_ride_accepted_notificat
 import math
 import random
 import pytz
-from dateutil import parser
 
 logger = logging.getLogger(__name__)
 
@@ -560,34 +559,14 @@ def generate_route(start, end, num_points=20):
             )
         
         if is_driver_test:
-            logger.info("Detected test case for driver route (Pheasant Run to Lane Stadium)")
-            # Use the test data provided for the driver
-            driver_route_data = [[-80.419099, 37.248763], [-80.419048, 37.248747], [-80.418897, 37.248742], [-80.418805, 37.248775], [-80.418134, 37.249163], [-80.418028, 37.249188], [-80.417413, 37.249256], [-80.417302, 37.249284], [-80.417172, 37.249025], [-80.417102, 37.248978], [-80.416977, 37.248943], [-80.416993, 37.248767], [-80.417036, 37.248579], [-80.417104, 37.248422], [-80.417337, 37.248144], [-80.417471, 37.247969], [-80.417523, 37.247853], [-80.41756, 37.247716], [-80.417566, 37.247592], [-80.417533, 37.247139], [-80.417507, 37.2469], [-80.416705, 37.246942], [-80.416354, 37.246916], [-80.416112, 37.246866], [-80.415864, 37.246777], [-80.415655, 37.246677], [-80.414874, 37.246326], [-80.415013, 37.246133], [-80.415216, 37.245846], [-80.415684, 37.245219], [-80.416202, 37.244489], [-80.416289, 37.244367], [-80.416443, 37.244152], [-80.416482, 37.244098], [-80.416651, 37.243862], [-80.416781, 37.243681], [-80.417024, 37.24334], [-80.417059, 37.243292], [-80.418461, 37.241332], [-80.418886, 37.240737], [-80.419255, 37.240225], [-80.419469, 37.239906], [-80.419891, 37.239234], [-80.420305, 37.238476], [-80.420338, 37.238412], [-80.420468, 37.238161], [-80.420503, 37.238089], [-80.420832, 37.237445], [-80.420717, 37.237303], [-80.420466, 37.237004], [-80.420304, 37.236816], [-80.420085, 37.23656], [-80.420025, 37.236489], [-80.419844, 37.236278], [-80.419139, 37.235465], [-80.418892, 37.235241], [-80.4168, 37.233701], [-80.415599, 37.232812], [-80.414846, 37.232119], [-80.414507, 37.231845], [-80.414338, 37.231718], [-80.414231, 37.231632], [-80.41411, 37.231528], [-80.413881, 37.23133], [-80.413448, 37.230923], [-80.413877, 37.230609], [-80.413588, 37.230335], [-80.413466, 37.230215], [-80.413374, 37.230125], [-80.413126, 37.229891], [-80.412755, 37.22955], [-80.412367, 37.229179], [-80.412517, 37.229079], [-80.412693, 37.228963], [-80.413201, 37.228628], [-80.413379, 37.228505], [-80.413978, 37.228094], [-80.413465, 37.227644], [-80.413198, 37.227431], [-80.414127, 37.22682], [-80.414803, 37.226375], [-80.415093, 37.226176], [-80.415266, 37.226057], [-80.415718, 37.225747], [-80.416268, 37.225369], [-80.416901, 37.22493], [-80.41724, 37.224696], [-80.41778, 37.224319], [-80.418073, 37.224115], [-80.418209, 37.224019], [-80.418531, 37.223794], [-80.41863, 37.223725], [-80.418672, 37.223696], [-80.418824, 37.223589], [-80.418921, 37.223522], [-80.419045, 37.223436], [-80.419348, 37.223225], [-80.419561, 37.223076], [-80.420225, 37.222613], [-80.420058, 37.222447], [-80.419875, 37.222246], [-80.419671, 37.221914], [-80.419567, 37.221642], [-80.419516, 37.221333], [-80.419546, 37.220903], [-80.418049, 37.220944]]
-            
-            logger.info(f"Using hard-coded test data for driver route with {len(driver_route_data)} points")
-            if num_points < len(driver_route_data):
-                # Sample down to requested number of points
-                step = len(driver_route_data) // num_points
-                sampled_route = [driver_route_data[i] for i in range(0, len(driver_route_data), step)]
-                if driver_route_data[-1] not in sampled_route:
-                    sampled_route.append(driver_route_data[-1])
-                return sampled_route
-            return driver_route_data
+            logger.info("Test route for Pheasant Run to Lane Stadium requested, but test data removed for production")
+            # Test data has been removed for production deployment
+            logger.info("Will proceed with standard route generation")
         
         if is_rider_test:
-            logger.info("Detected test case for rider route (Janie Lane to Lane Stadium)")
-            # Use the test data provided for the rider
-            rider_route_data = [[-80.41594, 37.25104], [-80.41572, 37.251116], [-80.415834, 37.25074], [-80.416123, 37.250088], [-80.416405, 37.249681], [-80.416799, 37.249224], [-80.416929, 37.249035], [-80.416977, 37.248943], [-80.416993, 37.248767], [-80.417036, 37.248579], [-80.417104, 37.248422], [-80.417337, 37.248144], [-80.417471, 37.247969], [-80.417523, 37.247853], [-80.41756, 37.247716], [-80.417566, 37.247592], [-80.417533, 37.247139], [-80.417507, 37.2469], [-80.416705, 37.246942], [-80.416354, 37.246916], [-80.416112, 37.246866], [-80.415864, 37.246777], [-80.415655, 37.246677], [-80.414874, 37.246326], [-80.415013, 37.246133], [-80.415216, 37.245846], [-80.415684, 37.245219], [-80.416202, 37.244489], [-80.416289, 37.244367], [-80.416443, 37.244152], [-80.416482, 37.244098], [-80.416651, 37.243862], [-80.416781, 37.243681], [-80.417024, 37.24334], [-80.417059, 37.243292], [-80.418461, 37.241332], [-80.418886, 37.240737], [-80.419255, 37.240225], [-80.419469, 37.239906], [-80.419891, 37.239234], [-80.420305, 37.238476], [-80.420338, 37.238412], [-80.420468, 37.238161], [-80.420503, 37.238089], [-80.420832, 37.237445], [-80.420717, 37.237303], [-80.420466, 37.237004], [-80.420304, 37.236816], [-80.420085, 37.23656], [-80.420025, 37.236489], [-80.419844, 37.236278], [-80.419139, 37.235465], [-80.418892, 37.235241], [-80.4168, 37.233701], [-80.415599, 37.232812], [-80.414846, 37.232119], [-80.414507, 37.231845], [-80.414338, 37.231718], [-80.414231, 37.231632], [-80.41411, 37.231528], [-80.413881, 37.23133], [-80.413448, 37.230923], [-80.413877, 37.230609], [-80.413588, 37.230335], [-80.413466, 37.230215], [-80.413374, 37.230125], [-80.413126, 37.229891], [-80.412755, 37.22955], [-80.412367, 37.229179], [-80.412517, 37.229079], [-80.412693, 37.228963], [-80.413201, 37.228628], [-80.413379, 37.228505], [-80.413978, 37.228094], [-80.413465, 37.227644], [-80.413198, 37.227431], [-80.414127, 37.22682], [-80.414803, 37.226375], [-80.415093, 37.226176], [-80.415266, 37.226057], [-80.415718, 37.225747], [-80.416268, 37.225369], [-80.416901, 37.22493], [-80.41724, 37.224696], [-80.41778, 37.224319], [-80.418073, 37.224115], [-80.418209, 37.224019], [-80.418531, 37.223794], [-80.41863, 37.223725], [-80.418672, 37.223696], [-80.418824, 37.223589], [-80.418921, 37.223522], [-80.419045, 37.223436], [-80.419348, 37.223225], [-80.419561, 37.223076], [-80.420225, 37.222613], [-80.420058, 37.222447], [-80.419875, 37.222246], [-80.419671, 37.221914], [-80.419567, 37.221642], [-80.419516, 37.221333], [-80.419546, 37.220903], [-80.418049, 37.220944]]
-            
-            logger.info(f"Using hard-coded test data for rider route with {len(rider_route_data)} points")
-            if num_points < len(rider_route_data):
-                # Sample down to requested number of points
-                step = len(rider_route_data) // num_points
-                sampled_route = [rider_route_data[i] for i in range(0, len(rider_route_data), step)]
-                if rider_route_data[-1] not in sampled_route:
-                    sampled_route.append(rider_route_data[-1])
-                return sampled_route
-            return rider_route_data
+            logger.info("Test route for Janie Lane to Lane Stadium requested, but test data removed for production")
+            # Test data has been removed for production deployment
+            logger.info("Will proceed with standard route generation")
             
         # Validate coordinate format (lng should be -180 to 180, lat should be -90 to 90)
         for coords in [start, end]:
@@ -717,68 +696,11 @@ def generate_route(start, end, num_points=20):
                     time.sleep(retry_delay)
                     continue
         
-        # If failed to get route data, parse the JSON data from the example routes
-        # This is only for testing with the specific example route data
-        try:
-            # Check if start and end match our test case for Pheasant Run to Lane Stadium
-            pheasant_run_coords = [-80.4189968, 37.2489617]
-            lane_stadium_coords = [-80.41800385907507, 37.21989015]
-            janie_lane_coords = [-80.41594021829319, 37.2510400809438]
-            
-            is_driver_test = (
-                abs(start[0] - pheasant_run_coords[0]) < 0.001 and
-                abs(start[1] - pheasant_run_coords[1]) < 0.001 and
-                abs(end[0] - lane_stadium_coords[0]) < 0.001 and
-                abs(end[1] - lane_stadium_coords[1]) < 0.001
-            )
-            
-            is_rider_test = (
-                abs(start[0] - janie_lane_coords[0]) < 0.001 and
-                abs(start[1] - janie_lane_coords[1]) < 0.001 and
-                abs(end[0] - lane_stadium_coords[0]) < 0.001 and
-                abs(end[1] - lane_stadium_coords[1]) < 0.001
-            )
-            
-            if is_driver_test:
-                logger.info("Detected test case for driver route (Pheasant Run to Lane Stadium)")
-                # Use the test data provided for the driver
-                import json
-                driver_route_data = {
-                    "coordinates": [[-80.419099, 37.248763], [-80.419048, 37.248747], [-80.418897, 37.248742], [-80.418805, 37.248775], [-80.418134, 37.249163], [-80.418028, 37.249188], [-80.417413, 37.249256], [-80.417302, 37.249284], [-80.417172, 37.249025], [-80.417102, 37.248978], [-80.416977, 37.248943], [-80.416993, 37.248767], [-80.417036, 37.248579], [-80.417104, 37.248422], [-80.417337, 37.248144], [-80.417471, 37.247969], [-80.417523, 37.247853], [-80.41756, 37.247716], [-80.417566, 37.247592], [-80.417533, 37.247139], [-80.417507, 37.2469], [-80.416705, 37.246942], [-80.416354, 37.246916], [-80.416112, 37.246866], [-80.415864, 37.246777], [-80.415655, 37.246677], [-80.414874, 37.246326], [-80.415013, 37.246133], [-80.415216, 37.245846], [-80.415684, 37.245219], [-80.416202, 37.244489], [-80.416289, 37.244367], [-80.416443, 37.244152], [-80.416482, 37.244098], [-80.416651, 37.243862], [-80.416781, 37.243681], [-80.417024, 37.24334], [-80.417059, 37.243292], [-80.418461, 37.241332], [-80.418886, 37.240737], [-80.419255, 37.240225], [-80.419469, 37.239906], [-80.419891, 37.239234], [-80.420305, 37.238476], [-80.420338, 37.238412], [-80.420468, 37.238161], [-80.420503, 37.238089], [-80.420832, 37.237445], [-80.420717, 37.237303], [-80.420466, 37.237004], [-80.420304, 37.236816], [-80.420085, 37.23656], [-80.420025, 37.236489], [-80.419844, 37.236278], [-80.419139, 37.235465], [-80.418892, 37.235241], [-80.4168, 37.233701], [-80.415599, 37.232812], [-80.414846, 37.232119], [-80.414507, 37.231845], [-80.414338, 37.231718], [-80.414231, 37.231632], [-80.41411, 37.231528], [-80.413881, 37.23133], [-80.413448, 37.230923], [-80.413877, 37.230609], [-80.413588, 37.230335], [-80.413466, 37.230215], [-80.413374, 37.230125], [-80.413126, 37.229891], [-80.412755, 37.22955], [-80.412367, 37.229179], [-80.412517, 37.229079], [-80.412693, 37.228963], [-80.413201, 37.228628], [-80.413379, 37.228505], [-80.413978, 37.228094], [-80.413465, 37.227644], [-80.413198, 37.227431], [-80.414127, 37.22682], [-80.414803, 37.226375], [-80.415093, 37.226176], [-80.415266, 37.226057], [-80.415718, 37.225747], [-80.416268, 37.225369], [-80.416901, 37.22493], [-80.41724, 37.224696], [-80.41778, 37.224319], [-80.418073, 37.224115], [-80.418209, 37.224019], [-80.418531, 37.223794], [-80.41863, 37.223725], [-80.418672, 37.223696], [-80.418824, 37.223589], [-80.418921, 37.223522], [-80.419045, 37.223436], [-80.419348, 37.223225], [-80.419561, 37.223076], [-80.420225, 37.222613], [-80.420058, 37.222447], [-80.419875, 37.222246], [-80.419671, 37.221914], [-80.419567, 37.221642], [-80.419516, 37.221333], [-80.419546, 37.220903], [-80.418049, 37.220944]]
-                }
-                logger.info(f"Using hard-coded test data for driver route with {len(driver_route_data['coordinates'])} points")
-                if num_points < len(driver_route_data['coordinates']):
-                    # Sample down to requested number of points
-                    step = len(driver_route_data['coordinates']) // num_points
-                    sampled_route = [driver_route_data['coordinates'][i] for i in range(0, len(driver_route_data['coordinates']), step)]
-                    if driver_route_data['coordinates'][-1] not in sampled_route:
-                        sampled_route.append(driver_route_data['coordinates'][-1])
-                    return sampled_route
-                return driver_route_data['coordinates']
-            
-            if is_rider_test:
-                logger.info("Detected test case for rider route (Janie Lane to Lane Stadium)")
-                # Use the test data provided for the rider
-                rider_route_data = {
-                    "coordinates": [[-80.41594, 37.25104], [-80.41572, 37.251116], [-80.415834, 37.25074], [-80.416123, 37.250088], [-80.416405, 37.249681], [-80.416799, 37.249224], [-80.416929, 37.249035], [-80.416977, 37.248943], [-80.416993, 37.248767], [-80.417036, 37.248579], [-80.417104, 37.248422], [-80.417337, 37.248144], [-80.417471, 37.247969], [-80.417523, 37.247853], [-80.41756, 37.247716], [-80.417566, 37.247592], [-80.417533, 37.247139], [-80.417507, 37.2469], [-80.416705, 37.246942], [-80.416354, 37.246916], [-80.416112, 37.246866], [-80.415864, 37.246777], [-80.415655, 37.246677], [-80.414874, 37.246326], [-80.415013, 37.246133], [-80.415216, 37.245846], [-80.415684, 37.245219], [-80.416202, 37.244489], [-80.416289, 37.244367], [-80.416443, 37.244152], [-80.416482, 37.244098], [-80.416651, 37.243862], [-80.416781, 37.243681], [-80.417024, 37.24334], [-80.417059, 37.243292], [-80.418461, 37.241332], [-80.418886, 37.240737], [-80.419255, 37.240225], [-80.419469, 37.239906], [-80.419891, 37.239234], [-80.420305, 37.238476], [-80.420338, 37.238412], [-80.420468, 37.238161], [-80.420503, 37.238089], [-80.420832, 37.237445], [-80.420717, 37.237303], [-80.420466, 37.237004], [-80.420304, 37.236816], [-80.420085, 37.23656], [-80.420025, 37.236489], [-80.419844, 37.236278], [-80.419139, 37.235465], [-80.418892, 37.235241], [-80.4168, 37.233701], [-80.415599, 37.232812], [-80.414846, 37.232119], [-80.414507, 37.231845], [-80.414338, 37.231718], [-80.414231, 37.231632], [-80.41411, 37.231528], [-80.413881, 37.23133], [-80.413448, 37.230923], [-80.413877, 37.230609], [-80.413588, 37.230335], [-80.413466, 37.230215], [-80.413374, 37.230125], [-80.413126, 37.229891], [-80.412755, 37.22955], [-80.412367, 37.229179], [-80.412517, 37.229079], [-80.412693, 37.228963], [-80.413201, 37.228628], [-80.413379, 37.228505], [-80.413978, 37.228094], [-80.413465, 37.227644], [-80.413198, 37.227431], [-80.414127, 37.22682], [-80.414803, 37.226375], [-80.415093, 37.226176], [-80.415266, 37.226057], [-80.415718, 37.225747], [-80.416268, 37.225369], [-80.416901, 37.22493], [-80.41724, 37.224696], [-80.41778, 37.224319], [-80.418073, 37.224115], [-80.418209, 37.224019], [-80.418531, 37.223794], [-80.41863, 37.223725], [-80.418672, 37.223696], [-80.418824, 37.223589], [-80.418921, 37.223522], [-80.419045, 37.223436], [-80.419348, 37.223225], [-80.419561, 37.223076], [-80.420225, 37.222613], [-80.420058, 37.222447], [-80.419875, 37.222246], [-80.419671, 37.221914], [-80.419567, 37.221642], [-80.419516, 37.221333], [-80.419546, 37.220903], [-80.418049, 37.220944]]
-                }
-                logger.info(f"Using hard-coded test data for rider route with {len(rider_route_data['coordinates'])} points")
-                if num_points < len(rider_route_data['coordinates']):
-                    # Sample down to requested number of points
-                    step = len(rider_route_data['coordinates']) // num_points
-                    sampled_route = [rider_route_data['coordinates'][i] for i in range(0, len(rider_route_data['coordinates']), step)]
-                    if rider_route_data['coordinates'][-1] not in sampled_route:
-                        sampled_route.append(rider_route_data['coordinates'][-1])
-                    return sampled_route
-                return rider_route_data['coordinates']
-        except Exception as e:
-            logger.error(f"Error using test route data: {str(e)}")
-                
-        # If both API approaches fail and test data doesn't match, fall back to the enhanced straight line method
-        # But log a clear warning that this is sub-optimal
-        logger.warning("OpenRouteService APIs failed or not applicable, using straight line fallback method")
+        # If failed to get route data, we'll use a fallback method
+        # This is only needed in environments where the OpenRouteService API is not available
+        logger.warning("OpenRouteService APIs failed or not accessible, using straight line fallback method")
         logger.warning("IMPORTANT: Using straight line approximation which may not reflect actual roads")
-        
+                
     except Exception as e:
         logger.error(f"Error in route generation: {str(e)}")
         logger.exception("Full exception details:")
@@ -817,325 +739,325 @@ def generate_route(start, end, num_points=20):
     logger.info(f"Generated fallback route with {len(route)} points")
     return route
 
-def get_address_from_coordinates(longitude, latitude):
-    """Get address from coordinates using reverse geocoding"""
-    try:
-        response = requests.get(
-            "https://nominatim.openstreetmap.org/reverse",
-            params={
-                'format': 'json',
-                'lat': latitude,
-                'lon': longitude
-            },
-            headers={'User-Agent': 'ChalBeyy/1.0'}
-        )
-        if response.status_code == 200:
-            data = response.json()
-            return data.get('display_name', 'Unknown location')
-        return 'Unknown location'
-    except Exception as e:
-        logger.error(f"Error reverse geocoding: {str(e)}")
-        return 'Unknown location'
+    def get_address_from_coordinates(self, longitude, latitude):
+        """Get address from coordinates using reverse geocoding"""
+        try:
+            response = requests.get(
+                "https://nominatim.openstreetmap.org/reverse",
+                params={
+                    'format': 'json',
+                    'lat': latitude,
+                    'lon': longitude
+                },
+                headers={'User-Agent': 'ChalBeyy/1.0'}
+            )
+            if response.status_code == 200:
+                data = response.json()
+                return data.get('display_name', 'Unknown location')
+            return 'Unknown location'
+        except Exception as e:
+            logger.error(f"Error reverse geocoding: {str(e)}")
+            return 'Unknown location'
 
-def calculate_matching_score(overlap_percentage, time_diff, available_seats, seats_needed):
-    """
-    Calculate a matching score between driver and rider based on route overlap, time difference, and seat availability.
-    
-    Parameters:
-    overlap_percentage (float): Percentage of route overlap between driver and rider
-    time_diff (int): Absolute time difference in minutes between driver and rider departure times
-    available_seats (int): Number of available seats in the driver's vehicle
-    seats_needed (int): Number of seats requested by the rider
-    
-    Returns:
-    float: A matching score between 0 and 100, higher is better
-    """
-    try:
-        logger.info(f"Calculating matching score with: overlap={overlap_percentage:.2f}%, time_diff={time_diff} mins, " +
-                   f"seats_available={available_seats}, seats_needed={seats_needed}")
+    def calculate_matching_score(self, overlap_percentage, time_diff, available_seats, seats_needed):
+        """
+        Calculate a matching score between driver and rider based on route overlap, time difference, and seat availability.
         
-        # Constants for weighting factors
-        OVERLAP_WEIGHT = 0.6  # Route overlap is the most important factor
-        TIME_WEIGHT = 0.3     # Time difference is second most important
-        SEAT_WEIGHT = 0.1     # Seat availability is least important but still matters
+        Parameters:
+        overlap_percentage (float): Percentage of route overlap between driver and rider
+        time_diff (int): Absolute time difference in minutes between driver and rider departure times
+        available_seats (int): Number of available seats in the driver's vehicle
+        seats_needed (int): Number of seats requested by the rider
         
-        # Calculate overlap score (0-100)
-        # We directly use the overlap percentage which is already on a 0-100 scale
-        overlap_score = overlap_percentage
-        
-        # Calculate time score (0-100)
-        # Time difference of 0 minutes = 100 score
-        # Time difference of 30+ minutes = 0 score
-        # Linear scale in between
-        MAX_TIME_DIFF = 30  # minutes
-        time_score = max(0, 100 - (time_diff * 100 / MAX_TIME_DIFF))
-        
-        # Calculate seat score (0-100)
-        # If rider's seat needs can be met, score is 100
-        # Otherwise, score is 0
-        seat_score = 100 if available_seats >= seats_needed else 0
-        
-        # Calculate weighted score
-        weighted_score = (
-            OVERLAP_WEIGHT * overlap_score +
-            TIME_WEIGHT * time_score +
-            SEAT_WEIGHT * seat_score
-        )
-        
-        # Ensure score is between 0 and 100
-        final_score = max(0, min(100, weighted_score))
-        
-        # Apply bonuses for perfect matches
-        # Perfect time match (within 5 minutes)
-        if time_diff <= 5:
-            final_score += 5
-            logger.info("Bonus: Near-perfect time match (+5 points)")
+        Returns:
+        float: A matching score between 0 and 100, higher is better
+        """
+        try:
+            logger.info(f"Calculating matching score with: overlap={overlap_percentage:.2f}%, time_diff={time_diff} mins, " +
+                       f"seats_available={available_seats}, seats_needed={seats_needed}")
             
-        # Very high route overlap (over 70%)
-        if overlap_percentage >= 70:
-            final_score += 5
-            logger.info("Bonus: Excellent route overlap (+5 points)")
+            # Constants for weighting factors
+            OVERLAP_WEIGHT = 0.6  # Route overlap is the most important factor
+            TIME_WEIGHT = 0.3     # Time difference is second most important
+            SEAT_WEIGHT = 0.1     # Seat availability is least important but still matters
             
-        # Cap the final score at 100
-        final_score = min(100, final_score)
-        
-        logger.info(f"Scoring components: Overlap={overlap_score:.2f}, Time={time_score:.2f}, Seat={seat_score:.2f}")
-        logger.info(f"Final matching score: {final_score:.2f}")
-        
-        return final_score
-        
-    except Exception as e:
-        logger.error(f"Error calculating matching score: {str(e)}")
-        logger.exception("Full exception details:")
-        return 0.0
+            # Calculate overlap score (0-100)
+            # We directly use the overlap percentage which is already on a 0-100 scale
+            overlap_score = overlap_percentage
+            
+            # Calculate time score (0-100)
+            # Time difference of 0 minutes = 100 score
+            # Time difference of 30+ minutes = 0 score
+            # Linear scale in between
+            MAX_TIME_DIFF = 30  # minutes
+            time_score = max(0, 100 - (time_diff * 100 / MAX_TIME_DIFF))
+            
+            # Calculate seat score (0-100)
+            # If rider's seat needs can be met, score is 100
+            # Otherwise, score is 0
+            seat_score = 100 if available_seats >= seats_needed else 0
+            
+            # Calculate weighted score
+            weighted_score = (
+                OVERLAP_WEIGHT * overlap_score +
+                TIME_WEIGHT * time_score +
+                SEAT_WEIGHT * seat_score
+            )
+            
+            # Ensure score is between 0 and 100
+            final_score = max(0, min(100, weighted_score))
+            
+            # Apply bonuses for perfect matches
+            # Perfect time match (within 5 minutes)
+            if time_diff <= 5:
+                final_score += 5
+                logger.info("Bonus: Near-perfect time match (+5 points)")
+                
+            # Very high route overlap (over 70%)
+            if overlap_percentage >= 70:
+                final_score += 5
+                logger.info("Bonus: Excellent route overlap (+5 points)")
+                
+            # Cap the final score at 100
+            final_score = min(100, final_score)
+            
+            logger.info(f"Scoring components: Overlap={overlap_score:.2f}, Time={time_score:.2f}, Seat={seat_score:.2f}")
+            logger.info(f"Final matching score: {final_score:.2f}")
+            
+            return final_score
+            
+        except Exception as e:
+            logger.error(f"Error calculating matching score: {str(e)}")
+            logger.exception("Full exception details:")
+            return 0.0
 
-def find_suitable_rides(rides, ride_request_data):
-    """
-    Find suitable rides for a ride request based on route overlap, time proximity, and seat availability.
-    
-    Parameters:
-    rides (QuerySet): Available rides to search through
-    ride_request_data (dict): Data from the ride request
-    
-    Returns:
-    list: List of suitable rides with matching details
-    """
-    try:
-        # Extract necessary data from ride request
-        rider_pickup = ride_request_data.get('pickup_location_coordinates')
-        rider_dropoff = ride_request_data.get('dropoff_location_coordinates')
-        rider_departure_time = ride_request_data.get('departure_time')
-        seats_needed = ride_request_data.get('seats', 1)
+    def find_suitable_rides(self, rides, ride_request_data):
+        """
+        Find suitable rides for a ride request based on route overlap, time proximity, and seat availability.
         
-        logger.info(f"Finding suitable rides for request from {ride_request_data.get('pickup_location')} " +
-                    f"to {ride_request_data.get('dropoff_location')}")
-        logger.info(f"Rider coordinates: Pickup {rider_pickup}, Dropoff {rider_dropoff}")
+        Parameters:
+        rides (QuerySet): Available rides to search through
+        ride_request_data (dict): Data from the ride request
         
-        # Validate rider coordinates
-        if not rider_pickup or not rider_dropoff:
-            logger.error("Missing rider coordinates in find_suitable_rides")
-            return []
+        Returns:
+        list: List of suitable rides with matching details
+        """
+        try:
+            # Extract necessary data from ride request
+            rider_pickup = ride_request_data.get('pickup_location_coordinates')
+            rider_dropoff = ride_request_data.get('dropoff_location_coordinates')
+            rider_departure_time = ride_request_data.get('departure_time')
+            seats_needed = ride_request_data.get('seats', 1)
             
-        # Convert rider_departure_time to datetime if it's a string
-        if isinstance(rider_departure_time, str):
-            try:
-                rider_departure_time = datetime.fromisoformat(rider_departure_time.replace('Z', '+00:00'))
-            except ValueError:
-                logger.error(f"Invalid departure time format: {rider_departure_time}")
+            logger.info(f"Finding suitable rides for request from {ride_request_data.get('pickup_location')} " +
+                        f"to {ride_request_data.get('dropoff_location')}")
+            logger.info(f"Rider coordinates: Pickup {rider_pickup}, Dropoff {rider_dropoff}")
+            
+            # Validate rider coordinates
+            if not rider_pickup or not rider_dropoff:
+                logger.error("Missing rider coordinates in find_suitable_rides")
                 return []
-        
-        # Use lower overlap threshold for better inclusivity
-        MIN_OVERLAP_THRESHOLD = 35.0  # Reduced from 50.0 to catch more potential matches
-        MIN_MATCHING_SCORE = 60.0     # Adjusted as well to balance against lower overlap threshold
-        
-        suitable_rides = []
-        
-        for ride in rides:
-            # Skip rides with insufficient available seats
-            if ride.available_seats < seats_needed:
-                logger.debug(f"Skipping ride {ride.id}: insufficient seats ({ride.available_seats} available, {seats_needed} needed)")
-                continue
-            
-            # Get driver's coordinates
-            driver_start = ride.start_location_coordinates
-            driver_end = ride.end_location_coordinates
-            
-            # Validate driver coordinates
-            if not driver_start or not driver_end:
-                logger.warning(f"Skipping ride {ride.id}: missing coordinates")
-                continue
                 
-            # Calculate route overlap
-            overlap_percentage, nearest_dropoff, optimal_pickup = calculate_route_overlap(
-                driver_start, driver_end, rider_pickup, rider_dropoff
-            )
+            # Convert rider_departure_time to datetime if it's a string
+            if isinstance(rider_departure_time, str):
+                try:
+                    rider_departure_time = datetime.fromisoformat(rider_departure_time.replace('Z', '+00:00'))
+                except ValueError:
+                    logger.error(f"Invalid departure time format: {rider_departure_time}")
+                    return []
             
-            # If overlap is below threshold, skip this ride
-            if overlap_percentage < MIN_OVERLAP_THRESHOLD:
-                logger.debug(f"Skipping ride {ride.id}: low overlap ({overlap_percentage:.2f}%)")
-                continue
+            # Use lower overlap threshold for better inclusivity
+            MIN_OVERLAP_THRESHOLD = 35.0  # Reduced from 50.0 to catch more potential matches
+            MIN_MATCHING_SCORE = 60.0     # Adjusted as well to balance against lower overlap threshold
+            
+            suitable_rides = []
+            
+            for ride in rides:
+                # Skip rides with insufficient available seats
+                if ride.available_seats < seats_needed:
+                    logger.debug(f"Skipping ride {ride.id}: insufficient seats ({ride.available_seats} available, {seats_needed} needed)")
+                    continue
                 
-            # Calculate time difference in minutes
-            time_diff = abs((ride.departure_time - rider_departure_time).total_seconds() / 60)
-            
-            # Calculate matching score
-            matching_score = calculate_matching_score(
-                overlap_percentage, time_diff, ride.available_seats, seats_needed
-            )
-            
-            # If matching score is below threshold, skip this ride
-            if matching_score < MIN_MATCHING_SCORE:
-                logger.debug(f"Skipping ride {ride.id}: low matching score ({matching_score:.2f})")
-                continue
+                # Get driver's coordinates
+                driver_start = ride.start_location_coordinates
+                driver_end = ride.end_location_coordinates
                 
-            # This ride is suitable, add it to results
-            suitable_ride = {
-                'ride': ride,
-                'overlap_percentage': overlap_percentage,
-                'matching_score': matching_score,
-                'time_diff_minutes': time_diff,
-                'nearest_dropoff_point': nearest_dropoff,
-                'optimal_pickup_point': optimal_pickup
-            }
+                # Validate driver coordinates
+                if not driver_start or not driver_end:
+                    logger.warning(f"Skipping ride {ride.id}: missing coordinates")
+                    continue
+                    
+                # Calculate route overlap
+                overlap_percentage, nearest_dropoff, optimal_pickup = self.calculate_route_overlap(
+                    driver_start, driver_end, rider_pickup, rider_dropoff
+                )
+                
+                # If overlap is below threshold, skip this ride
+                if overlap_percentage < MIN_OVERLAP_THRESHOLD:
+                    logger.debug(f"Skipping ride {ride.id}: low overlap ({overlap_percentage:.2f}%)")
+                    continue
+                    
+                # Calculate time difference in minutes
+                time_diff = abs((ride.departure_time - rider_departure_time).total_seconds() / 60)
+                
+                # Calculate matching score
+                matching_score = self.calculate_matching_score(
+                    overlap_percentage, time_diff, ride.available_seats, seats_needed
+                )
+                
+                # If matching score is below threshold, skip this ride
+                if matching_score < MIN_MATCHING_SCORE:
+                    logger.debug(f"Skipping ride {ride.id}: low matching score ({matching_score:.2f})")
+                    continue
+                    
+                # This ride is suitable, add it to results
+                suitable_ride = {
+                    'ride': ride,
+                    'overlap_percentage': overlap_percentage,
+                    'matching_score': matching_score,
+                    'time_diff_minutes': time_diff,
+                    'nearest_dropoff_point': nearest_dropoff,
+                    'optimal_pickup_point': optimal_pickup
+                }
+                
+                suitable_rides.append(suitable_ride)
+                logger.info(f"Found suitable ride {ride.id} with overlap {overlap_percentage:.2f}% " +
+                            f"and matching score {matching_score:.2f}")
             
-            suitable_rides.append(suitable_ride)
-            logger.info(f"Found suitable ride {ride.id} with overlap {overlap_percentage:.2f}% " +
-                        f"and matching score {matching_score:.2f}")
-        
-        # Sort suitable rides by matching score (highest first)
-        suitable_rides.sort(key=lambda r: r['matching_score'], reverse=True)
-        
-        return suitable_rides
-        
-    except Exception as e:
-        logger.error(f"Error finding suitable rides: {str(e)}")
-        logger.exception("Full exception details:")
-        return []
+            # Sort suitable rides by matching score (highest first)
+            suitable_rides.sort(key=lambda r: r['matching_score'], reverse=True)
+            
+            return suitable_rides
+            
+        except Exception as e:
+            logger.error(f"Error finding suitable rides: {str(e)}")
+            logger.exception("Full exception details:")
+            return []
 
-def calculate_distance(point1, point2):
-    """
-    Calculate the distance between two points in meters.
-    
-    Parameters:
-    point1 (tuple): First point coordinates (longitude, latitude)
-    point2 (tuple): Second point coordinates (longitude, latitude)
-    
-    Returns:
-    float: Distance in meters
-    """
-    # Convert to radians
-    lon1, lat1 = map(math.radians, point1)
-    lon2, lat2 = map(math.radians, point2)
-    
-    # Haversine formula
-    dlon = lon2 - lon1
-    dlat = lat2 - lat1
-    a = math.sin(dlat/2)**2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon/2)**2
-    c = 2 * math.asin(math.sqrt(a))
-    r = 6371000  # Radius of earth in meters
-    return c * r
+    def calculate_distance(self, point1, point2):
+        """
+        Calculate the distance between two points in meters.
+        
+        Parameters:
+        point1 (tuple): First point coordinates (longitude, latitude)
+        point2 (tuple): Second point coordinates (longitude, latitude)
+        
+        Returns:
+        float: Distance in meters
+        """
+        # Convert to radians
+        lon1, lat1 = map(math.radians, point1)
+        lon2, lat2 = map(math.radians, point2)
+        
+        # Haversine formula
+        dlon = lon2 - lon1
+        dlat = lat2 - lat1
+        a = math.sin(dlat/2)**2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon/2)**2
+        c = 2 * math.asin(math.sqrt(a))
+        r = 6371000  # Radius of earth in meters
+        return c * r
 
 # Create your views here.
 
-class IsDriverOrReadOnly(permissions.BasePermission):
-    def has_object_permission(self, request, view, obj):
-        if request.method in permissions.SAFE_METHODS:
-            return True
-        return obj.driver == request.user
+    class IsDriverOrReadOnly(permissions.BasePermission):
+        def has_object_permission(self, request, view, obj):
+            if request.method in permissions.SAFE_METHODS:
+                return True
+            return obj.driver == request.user
 
-    def has_permission(self, request, view):
-        if request.method in permissions.SAFE_METHODS:
-            return True
-        return request.user.user_type == 'DRIVER'
+        def has_permission(self, request, view):
+            if request.method in permissions.SAFE_METHODS:
+                return True
+            return request.user.user_type == 'DRIVER'
 
-class IsRiderOrDriver(permissions.BasePermission):
-    def has_permission(self, request, view):
-        logger.info(f"Checking permission for user: {request.user.username}")
-        logger.info(f"User type: {request.user.user_type}")
-        logger.info(f"Request method: {request.method}")
-        logger.info(f"User authenticated: {request.user.is_authenticated}")
-        
-        if not request.user.is_authenticated:
-            logger.warning(f"User {request.user.username} is not authenticated")
-            return False
+    class IsRiderOrDriver(permissions.BasePermission):
+        def has_permission(self, request, view):
+            logger.info(f"Checking permission for user: {request.user.username}")
+            logger.info(f"User type: {request.user.user_type}")
+            logger.info(f"Request method: {request.method}")
+            logger.info(f"User authenticated: {request.user.is_authenticated}")
             
-        # For POST requests, only allow riders
-        if request.method == 'POST':
-            is_rider = request.user.user_type == 'RIDER'
-            logger.info(f"POST request - User is rider: {is_rider}")
-            return is_rider
+            if not request.user.is_authenticated:
+                logger.warning(f"User {request.user.username} is not authenticated")
+                return False
+                
+            # For POST requests, only allow riders
+            if request.method == 'POST':
+                is_rider = request.user.user_type == 'RIDER'
+                logger.info(f"POST request - User is rider: {is_rider}")
+                return is_rider
+                
+            # For other methods, allow both riders and drivers
+            is_allowed = request.user.user_type in ['RIDER', 'DRIVER']
+            logger.info(f"Non-POST request - User type allowed: {is_allowed}")
+            return is_allowed
+
+    class RideViewSet(viewsets.ModelViewSet):
+        serializer_class = RideSerializer
+        permission_classes = [permissions.IsAuthenticated]
+
+        def get_queryset(self):
+            user = self.request.user
+            if hasattr(user, 'user_type') and user.user_type == 'driver':
+                return Ride.objects.filter(driver=user)
+            else:
+                return Ride.objects.filter(status='SCHEDULED').exclude(driver=user)
+                
+        serializer_class = NotificationSerializer
+        permission_classes = [permissions.IsAuthenticated]
+
+        def get_queryset(self):
+            # Log authentication details
+            logger.info(f"Notification request from user: {self.request.user.username}")
+            logger.info(f"User authenticated: {self.request.user.is_authenticated}")
+            logger.info(f"Request headers: {dict(self.request.headers)}")
+            logger.info(f"Auth header: {self.request.headers.get('Authorization', 'Not found')}")
             
-        # For other methods, allow both riders and drivers
-        is_allowed = request.user.user_type in ['RIDER', 'DRIVER']
-        logger.info(f"Non-POST request - User type allowed: {is_allowed}")
-        return is_allowed
-
-class RideViewSet(viewsets.ModelViewSet):
-    serializer_class = RideSerializer
-    permission_classes = [permissions.IsAuthenticated]
-
-    def get_queryset(self):
-        user = self.request.user
-        if hasattr(user, 'user_type') and user.user_type == 'driver':
-            return Ride.objects.filter(driver=user)
-        else:
-            return Ride.objects.filter(status='SCHEDULED').exclude(driver=user)
+            # Log notification retrieval for debugging
+            notifications = Notification.objects.filter(recipient=self.request.user).order_by('-created_at')
+            logger.info(f"Retrieved {notifications.count()} notifications for user {self.request.user.username}")
             
-    serializer_class = NotificationSerializer
-    permission_classes = [permissions.IsAuthenticated]
+            # Log RIDE_MATCH notifications for debugging
+            ride_match_count = notifications.filter(notification_type='RIDE_MATCH').count()
+            logger.info(f"User {self.request.user.username} has {ride_match_count} RIDE_MATCH notifications")
+            
+            if ride_match_count > 0:
+                sample = notifications.filter(notification_type='RIDE_MATCH').first()
+                logger.info(f"Sample RIDE_MATCH notification: id={sample.id}, ride_request={sample.ride_request_id if sample.ride_request else 'None'}")
+            
+            return notifications
 
-    def get_queryset(self):
-        # Log authentication details
-        logger.info(f"Notification request from user: {self.request.user.username}")
-        logger.info(f"User authenticated: {self.request.user.is_authenticated}")
-        logger.info(f"Request headers: {dict(self.request.headers)}")
-        logger.info(f"Auth header: {self.request.headers.get('Authorization', 'Not found')}")
-        
-        # Log notification retrieval for debugging
-        notifications = Notification.objects.filter(recipient=self.request.user).order_by('-created_at')
-        logger.info(f"Retrieved {notifications.count()} notifications for user {self.request.user.username}")
-        
-        # Log RIDE_MATCH notifications for debugging
-        ride_match_count = notifications.filter(notification_type='RIDE_MATCH').count()
-        logger.info(f"User {self.request.user.username} has {ride_match_count} RIDE_MATCH notifications")
-        
-        if ride_match_count > 0:
-            sample = notifications.filter(notification_type='RIDE_MATCH').first()
-            logger.info(f"Sample RIDE_MATCH notification: id={sample.id}, ride_request={sample.ride_request_id if sample.ride_request else 'None'}")
-        
-        return notifications
+        @action(detail=True, methods=['post'])
+        def mark_as_read(self, request, pk=None):
+            notification = self.get_object()
+            notification.is_read = True
+            notification.save()
+            return Response({'status': 'notification marked as read'})
 
-    @action(detail=True, methods=['post'])
-    def mark_as_read(self, request, pk=None):
-        notification = self.get_object()
-        notification.is_read = True
-        notification.save()
-        return Response({'status': 'notification marked as read'})
+        @action(detail=False, methods=['post'])
+        def mark_all_as_read(self, request):
+            self.get_queryset().update(is_read=True)
+            return Response({'status': 'all notifications marked as read'})
 
-    @action(detail=False, methods=['post'])
-    def mark_all_as_read(self, request):
-        self.get_queryset().update(is_read=True)
-        return Response({'status': 'all notifications marked as read'})
-
-def mark_past_rides_complete():
-    """
-    Automatically mark rides as complete if their departure time has passed.
-    """
-    current_time = timezone.now()
-    past_rides = RideRequest.objects.filter(
-        status='ACCEPTED',
-        departure_time__lt=current_time
-    )
-    
-    for ride_request in past_rides:
-        ride_request.status = 'COMPLETED'
-        ride_request.save()
-        
-        # Create notification for the rider
-        Notification.objects.create(
-            recipient=ride_request.rider,
-            message=f"Your ride to {ride_request.ride.end_location} has been automatically marked as completed",
-            ride=ride_request.ride,
-            ride_request=ride_request,
-            notification_type='RIDE_COMPLETED'
+    def mark_past_rides_complete(self):
+        """
+        Automatically mark rides as complete if their departure time has passed.
+        """
+        current_time = timezone.now()
+        past_rides = RideRequest.objects.filter(
+            status='ACCEPTED',
+            departure_time__lt=current_time
         )
+        
+        for ride_request in past_rides:
+            ride_request.status = 'COMPLETED'
+            ride_request.save()
+            
+            # Create notification for the rider
+            Notification.objects.create(
+                recipient=ride_request.rider,
+                message=f"Your ride to {ride_request.ride.end_location} has been automatically marked as completed",
+                ride=ride_request.ride,
+                ride_request=ride_request,
+                notification_type='RIDE_COMPLETED'
+            )
