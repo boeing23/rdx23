@@ -13,7 +13,7 @@ class UserSerializer(serializers.ModelSerializer):
         model = User
         fields = [
             'id', 'username', 'email', 'first_name', 'last_name', 
-            'phone_number', 'user_type', 'profile_image', 
+            'phone_number', 'user_type',
             'vehicle_make', 'vehicle_model', 'vehicle_color', 
             'vehicle_year', 'license_plate', 'max_passengers',
             'password', 'password2'  # Added password and password2 fields
