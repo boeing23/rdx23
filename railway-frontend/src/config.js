@@ -10,7 +10,7 @@ export const getAuthHeader = () => {
   const token = localStorage.getItem('token');
   if (!token) return {};
   
-  // Important: Use 'Bearer' prefix for JWT authentication
+  // Use Bearer prefix for JWT authentication
   return {
     'Authorization': `Bearer ${token}`
   };
