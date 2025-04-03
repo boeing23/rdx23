@@ -5,6 +5,24 @@ export const FALLBACK_API_URL = 'https://rdx23-production.up.railway.app'; // Sa
 // Add constants for health check endpoints
 export const API_HEALTH_CHECK_URL = `${API_BASE_URL}/api/rides/`;
 
+// Token handling functions
+export const getAuthHeader = () => {
+  const token = localStorage.getItem('token');
+  if (!token) return {};
+  
+  // Important: Use 'Token' prefix for Django TokenAuthentication
+  return {
+    'Authorization': `Token ${token}`
+  };
+};
+
+export const getAuthHeadersWithContentType = () => {
+  return {
+    ...getAuthHeader(),
+    'Content-Type': 'application/json'
+  };
+};
+
 // Function to check if API is reachable
 export const checkApiConnection = async () => {
   try {

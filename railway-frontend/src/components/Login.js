@@ -1,128 +1,83 @@
 import React, { useState } from 'react';
+import { TextField, Button, Typography, Box, Paper, Container, Alert } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
-import { Button, Box, Container } from '@mui/material';
-import Typography from '@mui/material/Typography';
-import TextField from '@mui/material/TextField';
-import Alert from '@mui/material/Alert';
-import { API_BASE_URL } from '../config';
+import { useAuth } from '../contexts/AuthContext';
 
-function Login() {
-  const [formData, setFormData] = useState({
-    username: '',
-    password: ''
-  });
+const Login = () => {
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
-
-  const handleChange = (e) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value
-    });
-  };
+  const { login } = useAuth();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    
+    if (!username || !password) {
+      setError('Please enter both username and password.');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+    
     try {
-      console.log('Attempting login with:', { username: formData.username });
+      console.log('Attempting login with username:', username);
+      const result = await login(username, password);
       
-      const requestBody = JSON.stringify(formData);
-      console.log('Request body:', requestBody);
-      
-      // First check if the backend is accessible
-      try {
-        const healthCheck = await fetch(`${API_BASE_URL}/`);
-        console.log('Backend health check status:', healthCheck.status);
-        if (!healthCheck.ok) {
-          throw new Error(`Health check failed with status ${healthCheck.status}`);
-        }
-        const healthData = await healthCheck.json();
-        console.log('Backend health check response:', healthData);
-      } catch (err) {
-        console.error('Backend server is not accessible:', err);
-        setError('Cannot connect to server. Please make sure the backend server is running.');
-        return;
-      }
-
-      const response = await fetch(`${API_BASE_URL}/api/users/login/`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        },
-        body: requestBody
-      });
-
-      console.log('Login response status:', response.status);
-      console.log('Response headers:', Object.fromEntries(response.headers.entries()));
-      
-      let data;
-      try {
-        data = await response.json();
-        console.log('Login response data:', data);
-      } catch (jsonError) {
-        console.error('Error parsing JSON response:', jsonError);
-        setError('Invalid response from server. Please try again.');
-        return;
-      }
-
-      if (response.ok) {
-        console.log('Login successful, storing data in localStorage');
-        
-        // Check if we have all required data
-        if (!data.token || !data.user_type || !data.user || !data.user.id) {
-          console.error('Missing required data in login response:', data);
-          setError('Invalid response from server. Please try again.');
-          return;
-        }
-
-        // Store the data
-        localStorage.setItem('token', data.token);
-        localStorage.setItem('userType', JSON.stringify(data.user_type));
-        localStorage.setItem('userId', data.user.id);
-        
-        console.log('Data stored in localStorage:', {
-          token: !!localStorage.getItem('token'),
-          userType: localStorage.getItem('userType'),
-          userId: localStorage.getItem('userId')
-        });
-
-        // Navigate to home page
-        navigate('/');
-        window.location.reload(); // Reload to update the UI state
+      if (result.success) {
+        console.log('Login successful');
+        navigate('/dashboard');
       } else {
-        console.error('Login failed:', data);
-        // Provide more user-friendly error messages
-        if (data.detail && data.detail.includes('Invalid credentials')) {
-          setError('Invalid username or password. If you don\'t have an account, please register first.');
-        } else {
-          setError(data.detail || 'Login failed. Please check your credentials.');
-        }
+        console.error('Login failed:', result.error);
+        setError(result.error);
       }
     } catch (err) {
       console.error('Login error:', err);
-      console.error('Error details:', err.message);
-      if (err.message.includes('Failed to fetch')) {
-        setError('Cannot connect to server. Please make sure the backend server is running.');
+      
+      // Handle different error scenarios
+      if (err.response) {
+        // The request was made and the server responded with an error status
+        console.error('Server response:', err.response.status, err.response.data);
+        
+        if (err.response.status === 401) {
+          setError('Invalid username or password. Please try again.');
+        } else if (err.response.status === 500) {
+          setError('Server error. Please try again later.');
+        } else {
+          setError(`Error: ${err.response.data?.detail || 'Something went wrong'}`);
+        }
+      } else if (err.request) {
+        // The request was made but no response was received
+        console.error('Request made but no response:', err.request);
+        setError('No response from server. Please check your connection.');
       } else {
-        setError('Network error. Please try again.');
+        // Something happened in setting up the request
+        console.error('Error setting up request:', err.message);
+        setError('Error setting up request. Please try again.');
       }
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <Container maxWidth="sm">
-      <Box sx={{ mt: 8, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-        <Typography component="h1" variant="h5">
-          Sign In
+    <Container maxWidth="sm" sx={{ mt: 8 }}>
+      <Paper elevation={3} sx={{ p: 4, borderRadius: 2 }}>
+        <Typography variant="h4" align="center" gutterBottom>
+          Login
         </Typography>
+        
         {error && (
-          <Alert severity="error" sx={{ mt: 2, width: '100%' }}>
+          <Alert severity="error" sx={{ mb: 3 }}>
             {error}
           </Alert>
         )}
-        <Box component="form" onSubmit={handleSubmit} sx={{ mt: 1, width: '100%' }}>
+        
+        <Box component="form" onSubmit={handleSubmit} noValidate>
           <TextField
+            variant="outlined"
             margin="normal"
             required
             fullWidth
@@ -131,10 +86,11 @@ function Login() {
             name="username"
             autoComplete="username"
             autoFocus
-            value={formData.username}
-            onChange={handleChange}
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
           />
           <TextField
+            variant="outlined"
             margin="normal"
             required
             fullWidth
@@ -143,21 +99,37 @@ function Login() {
             type="password"
             id="password"
             autoComplete="current-password"
-            value={formData.password}
-            onChange={handleChange}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
           />
           <Button
             type="submit"
             fullWidth
             variant="contained"
-            sx={{ mt: 3, mb: 2 }}
+            color="primary"
+            sx={{ mt: 3, mb: 2, py: 1.5 }}
+            disabled={loading}
           >
-            Sign In
+            {loading ? 'Logging in...' : 'Login'}
           </Button>
+          
+          <Box sx={{ mt: 2, textAlign: 'center' }}>
+            <Typography variant="body2">
+              Don't have an account?{' '}
+              <Button 
+                variant="text" 
+                color="primary" 
+                onClick={() => navigate('/register')}
+                sx={{ p: 0, textTransform: 'none', fontSize: 'inherit' }}
+              >
+                Sign up here
+              </Button>
+            </Typography>
+          </Box>
         </Box>
-      </Box>
+      </Paper>
     </Container>
   );
-}
+};
 
 export default Login; 

@@ -80,20 +80,41 @@ export const AuthProvider = ({ children }) => {
         password
       });
 
-      const { token, user } = response.data;
+      const token = response.data.token || response.data.access;
       
       // Save token to local storage
       localStorage.setItem('token', token);
       
-      // Update auth state
-      setAuthState({
-        token,
-        user,
-        isAuthenticated: true,
-        isLoading: false
-      });
-      
-      return { success: true, user };
+      try {
+        // Get user info with the new token
+        const userResponse = await axios.get(`${API_BASE_URL}/api/users/me/`, {
+          headers: {
+            Authorization: `Token ${token}`
+          }
+        });
+        
+        // Update auth state with user data
+        setAuthState({
+          token,
+          user: userResponse.data,
+          isAuthenticated: true,
+          isLoading: false
+        });
+        
+        return { success: true, user: userResponse.data };
+      } catch (userError) {
+        console.error('Error fetching user data after login:', userError);
+        
+        // Still consider login successful even if we couldn't fetch user data
+        setAuthState({
+          token,
+          user: null,
+          isAuthenticated: true,
+          isLoading: false
+        });
+        
+        return { success: true };
+      }
     } catch (error) {
       console.error('Login error:', error);
       return { 
