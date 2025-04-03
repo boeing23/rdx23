@@ -489,6 +489,12 @@ function NotificationList() {
           notification.ride_request.nearest_dropoff_info.address :
           // Then fall back to direct fields if available
           (notification.dropoff_location || ride?.end_location || 'Near destination');
+          
+      // Get optimal pickup point if available
+      const optimalPickupInfo = 
+        (notification.ride_request && notification.ride_request.optimal_pickup_info) ?
+          notification.ride_request.optimal_pickup_info.address :
+          (notification.pickup_location || ride?.start_location || 'Standard pickup location');
       
       return (
         <Box sx={{ mt: 2, p: 2, bgcolor: 'background.paper', borderRadius: 1, boxShadow: 1 }}>
@@ -529,6 +535,7 @@ function NotificationList() {
             From: {ride ? ride.start_location : 'Not specified'}<br />
             To: {ride ? ride.end_location : 'Not specified'}<br />
             <span>Rider Dropoff: {dropoffInfo}<br /></span>
+            <span style={{ fontWeight: 'bold', color: '#861F41' }}>Optimal Pickup: {optimalPickupInfo}<br /></span>
             Departure: {ride ? formatDateTime(ride.departure_time) : 'Not specified'}
           </Typography>
         </Box>

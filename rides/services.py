@@ -3,8 +3,117 @@ from django.template.loader import render_to_string
 from django.conf import settings
 import logging
 import os
+import json
+import math
+from geopy.distance import geodesic
 
 logger = logging.getLogger(__name__)
+
+def calculate_optimal_pickup_point(ride, ride_request):
+    """
+    Calculate the optimal pickup point between the driver's route and rider's location.
+    
+    Args:
+        ride: The Ride object with driver's route information
+        ride_request: The RideRequest object with rider's pickup location
+        
+    Returns:
+        A dict containing the optimal pickup point coordinates and metadata
+    """
+    logger.info(f"Calculating optimal pickup point for ride {ride.id} and request {ride_request.id}")
+    
+    try:
+        # Get route coordinates
+        driver_start = (ride.start_latitude, ride.start_longitude)
+        driver_end = (ride.end_latitude, ride.end_longitude)
+        rider_pickup = (ride_request.pickup_latitude, ride_request.pickup_longitude)
+        
+        logger.info(f"Driver start: {driver_start}, Driver end: {driver_end}, Rider pickup: {rider_pickup}")
+        
+        # If ride has route geometry, use that for more precise calculation
+        if hasattr(ride, 'route_geometry') and ride.route_geometry:
+            try:
+                # Try to extract route points from geometry
+                if isinstance(ride.route_geometry, str):
+                    geometry = json.loads(ride.route_geometry)
+                else:
+                    geometry = ride.route_geometry
+                
+                # Check if we have a valid LineString format
+                if 'coordinates' in geometry:
+                    route_points = geometry['coordinates']
+                    
+                    # Find the point on the route closest to the rider's pickup
+                    closest_point = None
+                    min_distance = float('inf')
+                    
+                    for point in route_points:
+                        # Route points are [lng, lat], but we need [lat, lng] for distance calculation
+                        route_point = (point[1], point[0])
+                        distance = geodesic(route_point, rider_pickup).kilometers
+                        
+                        if distance < min_distance:
+                            min_distance = distance
+                            closest_point = route_point
+                    
+                    if closest_point:
+                        # Get address for this point
+                        try:
+                            from geopy.geocoders import Nominatim
+                            geolocator = Nominatim(user_agent="chalbeyy_app")
+                            location = geolocator.reverse(closest_point)
+                            address = location.address if location else "Optimal pickup point"
+                        except Exception as e:
+                            logger.error(f"Error getting address for optimal pickup: {str(e)}")
+                            address = "Optimal pickup point"
+                        
+                        return {
+                            'coordinates': {
+                                'latitude': closest_point[0],
+                                'longitude': closest_point[1]
+                            },
+                            'address': address,
+                            'distance_from_rider_km': min_distance
+                        }
+            except Exception as e:
+                logger.error(f"Error processing route geometry: {str(e)}")
+                # Fall back to simple calculation below
+        
+        # Simple algorithm: Choose the closer of start or end points to rider
+        dist_to_start = geodesic(driver_start, rider_pickup).kilometers
+        dist_to_end = geodesic(driver_end, rider_pickup).kilometers
+        
+        logger.info(f"Distance to start: {dist_to_start}km, Distance to end: {dist_to_end}km")
+        
+        # If start is closer, use that as pickup; otherwise use end
+        if dist_to_start <= dist_to_end:
+            closest_point = driver_start
+            point_name = ride.start_location
+            distance = dist_to_start
+        else:
+            closest_point = driver_end
+            point_name = ride.end_location
+            distance = dist_to_end
+        
+        return {
+            'coordinates': {
+                'latitude': closest_point[0],
+                'longitude': closest_point[1]
+            },
+            'address': point_name or "Suggested pickup location",
+            'distance_from_rider_km': distance
+        }
+        
+    except Exception as e:
+        logger.error(f"Error calculating optimal pickup point: {str(e)}")
+        return {
+            'coordinates': {
+                'latitude': ride_request.pickup_latitude,
+                'longitude': ride_request.pickup_longitude
+            },
+            'address': ride_request.pickup_location,
+            'error': str(e)
+        }
 
 def send_ride_notification_email(recipient_email, subject, message, html_message=None):
     """
