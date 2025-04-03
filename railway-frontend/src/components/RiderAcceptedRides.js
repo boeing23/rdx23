@@ -197,8 +197,50 @@ const RiderAcceptedRides = () => {
     }
   };
 
+  // Add this function to help explore available API endpoints
+  const exploreApiEndpoints = async (token) => {
+    if (!token) return;
+    
+    const cleanToken = token.trim().replace(/^["'](.*)["']$/, '$1').replace(/^Bearer\s+/i, '');
+    const headers = {
+      'Authorization': `Bearer ${cleanToken}`,
+      'Content-Type': 'application/json'
+    };
+    
+    try {
+      // Check the API root
+      console.log('Exploring API endpoints...');
+      const rootResponse = await fetch(`${API_BASE_URL}/api/`, { headers });
+      if (rootResponse.ok) {
+        const rootData = await rootResponse.json();
+        console.log('API root endpoints:', rootData);
+      }
+      
+      // Check users endpoint
+      const usersResponse = await fetch(`${API_BASE_URL}/api/users/`, { headers });
+      if (usersResponse.ok) {
+        const usersData = await usersResponse.json();
+        console.log('Users API response:', usersData);
+        
+        // If we have user objects, check the first one's structure
+        if (Array.isArray(usersData) && usersData.length > 0) {
+          console.log('Example user object structure:', Object.keys(usersData[0]));
+        }
+      }
+    } catch (error) {
+      console.error('Error exploring API:', error);
+    }
+  };
+
+  // Add this to the useEffect to explore API on component mount
   useEffect(() => {
     fetchAcceptedRides();
+    
+    // Also explore available API endpoints for debugging
+    const token = localStorage.getItem('token');
+    if (token) {
+      exploreApiEndpoints(token);
+    }
   }, []);
 
   const handleRetry = () => {
@@ -221,7 +263,94 @@ const RiderAcceptedRides = () => {
     
     setSelectedRide(ride);
     
-    // If ride_details exists but driver info is missing or incomplete, fetch detailed data
+    // Get the driver info
+    const driverInfo = getDriverInfo(ride);
+    console.log('Driver info from getDriverInfo:', driverInfo);
+    
+    // Check if we need to fetch complete driver details
+    const needsDriverDetails = driverInfo && 
+      (driverInfo.id || driverInfo.username) && 
+      (!driverInfo.vehicle_make || !driverInfo.vehicle_model || !driverInfo.phone_number);
+    
+    if (needsDriverDetails) {
+      try {
+        // Show loading indicator
+        setLoading(true);
+        
+        // Get the token
+        const token = localStorage.getItem('token');
+        if (!token) {
+          console.error('No token available for detailed fetch');
+          return;
+        }
+        
+        // Clean the token
+        const cleanToken = token.trim().replace(/^["'](.*)["']$/, '$1').replace(/^Bearer\s+/i, '');
+        
+        // Get driver user ID
+        const driverId = driverInfo.id || driverInfo.username;
+        console.log(`Fetching detailed driver data for user ${driverId}`);
+        
+        // Fetch user details from the users API endpoint
+        const response = await fetch(`${API_BASE_URL}/api/users/${driverId}/`, {
+          headers: {
+            'Authorization': `Bearer ${cleanToken}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (!response.ok) {
+          throw new Error(`Failed to fetch driver details: ${response.status}`);
+        }
+        
+        const driverUserData = await response.json();
+        console.log('Detailed driver user data:', driverUserData);
+        
+        // Create updated driver info with complete profile
+        const completeDriverInfo = {
+          ...driverInfo,
+          // Add or update these fields from user data
+          first_name: driverUserData.first_name || driverInfo.first_name,
+          last_name: driverUserData.last_name || driverInfo.last_name,
+          email: driverUserData.email || driverInfo.email,
+          phone_number: driverUserData.phone_number || driverInfo.phone_number,
+          vehicle_make: driverUserData.vehicle_make || driverInfo.vehicle_make,
+          vehicle_model: driverUserData.vehicle_model || driverInfo.vehicle_model,
+          vehicle_color: driverUserData.vehicle_color || driverInfo.vehicle_color,
+          vehicle_year: driverUserData.vehicle_year || driverInfo.vehicle_year,
+          license_plate: driverUserData.license_plate || driverInfo.license_plate
+        };
+        
+        console.log('Complete driver info:', completeDriverInfo);
+        
+        // Update selected ride with the complete driver information
+        const updatedRide = { ...ride };
+        
+        // Update the driver info in the appropriate place
+        if (updatedRide.ride_details?.driver) {
+          updatedRide.ride_details.driver = completeDriverInfo;
+        } else if (updatedRide.ride?.driver) {
+          updatedRide.ride.driver = completeDriverInfo;
+        } else if (updatedRide.ride_details) {
+          updatedRide.ride_details.driver = completeDriverInfo;
+        } else {
+          // Create ride_details if it doesn't exist
+          updatedRide.ride_details = {
+            ...(updatedRide.ride_details || {}),
+            driver: completeDriverInfo
+          };
+        }
+        
+        console.log('Updated ride with complete driver info:', updatedRide);
+        setSelectedRide(updatedRide);
+      } catch (error) {
+        console.error('Error fetching detailed driver data:', error);
+      } finally {
+        setLoading(false);
+      }
+    }
+    
+    // If ride_details exists but driver info is missing or incomplete, also try fetching detailed ride data
     if (ride.ride_details && ride.ride_details.id && 
         (!ride.ride_details.driver || !ride.ride_details.driver.first_name)) {
       try {
@@ -353,6 +482,24 @@ const RiderAcceptedRides = () => {
     
     // Add explicit logging when we fail to find driver info
     console.warn('No driver info found for ride:', ride);
+    
+    // As a last resort, if we have driver name but no other details,
+    // create a placeholder driver object with the name and default values
+    // for a better user experience
+    if (ride && ride.driver_name) {
+      const nameParts = ride.driver_name.split(' ');
+      return {
+        first_name: nameParts[0] || '',
+        last_name: nameParts.slice(1).join(' ') || '',
+        email: 'Contact through ChalBeyy app',
+        phone_number: 'Contact through ChalBeyy app',
+        vehicle_make: 'Vehicle details available at pickup',
+        vehicle_model: '',
+        vehicle_color: '',
+        license_plate: 'Available at pickup'
+      };
+    }
+    
     return null;
   };
 
@@ -559,18 +706,37 @@ const RiderAcceptedRides = () => {
                           <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
                             <DirectionsCar sx={{ mr: 1 }} />
                             <Typography>
-                              Vehicle: {
-                                [
-                                  getDriverInfo(selectedRide).vehicle_make,
-                                  getDriverInfo(selectedRide).vehicle_model,
-                                  getDriverInfo(selectedRide).vehicle_color && `(${getDriverInfo(selectedRide).vehicle_color})`
-                                ].filter(Boolean).join(' ') || 'Not provided'
-                              }
+                              Vehicle: {(() => {
+                                const driver = getDriverInfo(selectedRide);
+                                // Try different vehicle field variations
+                                const make = driver.vehicle_make || driver.make;
+                                const model = driver.vehicle_model || driver.model;
+                                const color = driver.vehicle_color || driver.color;
+                                const year = driver.vehicle_year || driver.year;
+                                
+                                // Create vehicle description with available information
+                                const parts = [];
+                                if (year) parts.push(year);
+                                if (make) parts.push(make);
+                                if (model) parts.push(model);
+                                
+                                let vehicleText = parts.join(' ');
+                                if (color && vehicleText) {
+                                  vehicleText += ` (${color})`;
+                                }
+                                
+                                return vehicleText || 'Not provided';
+                              })()}
                             </Typography>
                           </Box>
                           <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
                             <DriveEta sx={{ mr: 1 }} />
-                            <Typography>License Plate: {getDriverInfo(selectedRide).license_plate || 'Not provided'}</Typography>
+                            <Typography>
+                              License Plate: {(() => {
+                                const driver = getDriverInfo(selectedRide);
+                                return driver.license_plate || driver.licensePlate || driver.plate || 'Not provided';
+                              })()}
+                            </Typography>
                           </Box>
                         </>
                       )}
@@ -597,6 +763,32 @@ const RiderAcceptedRides = () => {
                         <Typography>Seats: {selectedRide.seats_needed}</Typography>
                       </Box>
                     </Grid>
+
+                    {getDriverInfo(selectedRide) && (
+                      <Grid item xs={12}>
+                        <Box mt={2}>
+                          <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                            {getPhoneNumber(getDriverInfo(selectedRide)) === 'Not provided' && 
+                             getEmail(getDriverInfo(selectedRide)) === 'Not provided' ? 
+                              'Contact Options:' : ''}
+                          </Typography>
+                          
+                          {getPhoneNumber(getDriverInfo(selectedRide)) === 'Not provided' && 
+                           getEmail(getDriverInfo(selectedRide)) === 'Not provided' && (
+                            <Button 
+                              variant="outlined" 
+                              color="primary" 
+                              size="small"
+                              startIcon={<Email />}
+                              onClick={() => window.open('mailto:support@chalbeyy.com?subject=Contact%20Driver', '_blank')}
+                              sx={{ mr: 1, mb: 1 }}
+                            >
+                              Contact Support
+                            </Button>
+                          )}
+                        </Box>
+                      </Grid>
+                    )}
                   </Grid>
                 </CardContent>
               </Card>
