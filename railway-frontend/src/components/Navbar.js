@@ -71,6 +71,42 @@ function Navbar() {
     };
   }, []);
 
+  // Improve userType handling for consistency
+  useEffect(() => {
+    // Determine actual user type combining authState and localStorage
+    let effectiveUserType = userType;
+    
+    // If no user type from authState, try to get from localStorage as backup
+    if (!effectiveUserType) {
+      try {
+        const storedType = localStorage.getItem('userType');
+        if (storedType) {
+          if (storedType === "[object Object]") {
+            console.warn("Found invalid userType in localStorage");
+            effectiveUserType = "RIDER"; // Default fallback
+          } else {
+            try {
+              effectiveUserType = JSON.parse(storedType);
+            } catch (e) {
+              console.warn("Error parsing userType from localStorage:", e);
+              effectiveUserType = storedType;
+            }
+          }
+        }
+      } catch (e) {
+        console.error('Error processing localStorage userType:', e);
+      }
+    }
+    
+    console.log('Navbar determined user type:', effectiveUserType);
+    
+    // This is a good place to fix incorrect localStorage values if needed
+    if (isAuthenticated && userType && localStorage.getItem('userType') !== JSON.stringify(userType)) {
+      console.log('Fixing inconsistent userType in localStorage');
+      localStorage.setItem('userType', JSON.stringify(userType));
+    }
+  }, [isAuthenticated, userType]);
+
   const handleMobileMenuOpen = (event) => {
     setMobileMenuAnchorEl(event.currentTarget);
   };

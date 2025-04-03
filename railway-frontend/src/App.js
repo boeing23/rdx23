@@ -150,10 +150,22 @@ function AppContent() {
   
   try {
     if (userTypeString) {
-      userType = JSON.parse(userTypeString);
+      // Check if userType is already an object that was stringified incorrectly
+      if (userTypeString === "[object Object]") {
+        console.warn("Found invalid userType format in localStorage");
+        userType = "RIDER"; // Default fallback
+      } else {
+        // Try to parse, but handle errors gracefully
+        try {
+          userType = JSON.parse(userTypeString);
+        } catch (e) {
+          console.warn("Error parsing userType:", e);
+          userType = userTypeString; // Just use the string value
+        }
+      }
     }
   } catch (e) {
-    console.error('Error parsing user type:', e);
+    console.error('Error processing user type:', e);
     userType = userTypeString;
   }
   

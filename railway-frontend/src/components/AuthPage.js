@@ -184,8 +184,11 @@ const AuthPage = () => {
         console.log('Login successful');
         
         // Navigate based on user type (using the user data from the result)
-        const userType = result.user?.user_type || 'RIDER';
-        navigate(userType === 'DRIVER' ? '/offer' : '/rides');
+        const userType = result.userType || result.user?.user_type || 'RIDER';
+        console.log('Redirecting based on user type:', userType);
+        
+        // Force page reload to ensure clean state
+        window.location.href = userType === 'DRIVER' ? '/offer' : '/rides';
       } else {
         console.error('Login failed:', result.error);
         setError(result.error);

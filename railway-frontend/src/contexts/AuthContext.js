@@ -97,6 +97,17 @@ export const AuthProvider = ({ children }) => {
       // Save token to local storage
       localStorage.setItem('token', token);
       
+      // Save user type if available
+      if (response.data.user_type) {
+        // Ensure userType is stored as a string, not an object
+        if (typeof response.data.user_type === 'string') {
+          localStorage.setItem('userType', JSON.stringify(response.data.user_type));
+        } else {
+          // If it's already an object or something else, stringify the value directly
+          localStorage.setItem('userType', JSON.stringify(String(response.data.user_type)));
+        }
+      }
+      
       try {
         // Get user info with the new token
         const userResponse = await axios.get(`${API_BASE_URL}/api/users/me/`, {
@@ -104,6 +115,15 @@ export const AuthProvider = ({ children }) => {
             Authorization: `Token ${token}`
           }
         });
+        
+        // Also save user type from the user info if available
+        if (userResponse.data && userResponse.data.user_type) {
+          if (typeof userResponse.data.user_type === 'string') {
+            localStorage.setItem('userType', JSON.stringify(userResponse.data.user_type));
+          } else {
+            localStorage.setItem('userType', JSON.stringify(String(userResponse.data.user_type)));
+          }
+        }
         
         // Update auth state with user data
         setAuthState({
@@ -113,7 +133,15 @@ export const AuthProvider = ({ children }) => {
           isLoading: false
         });
         
-        return { success: true, user: userResponse.data };
+        // Store userType for routing purposes
+        const effectiveUserType = userResponse.data?.user_type || response.data?.user_type || 'RIDER';
+        console.log('Login successful, user type:', effectiveUserType);
+        
+        return { 
+          success: true, 
+          user: userResponse.data,
+          userType: effectiveUserType
+        };
       } catch (userError) {
         console.error('Error fetching user data after login:', userError);
         
@@ -154,13 +182,23 @@ export const AuthProvider = ({ children }) => {
 
   // Logout function
   const logout = () => {
+    console.log('Logging out, clearing localStorage and authState');
+    
+    // Clear all auth-related items from localStorage
     localStorage.removeItem('token');
+    localStorage.removeItem('userType');
+    localStorage.removeItem('userId');
+    
+    // Reset auth state
     setAuthState({
       token: null,
       user: null,
       isAuthenticated: false,
       isLoading: false
     });
+    
+    // Force a page reload to ensure clean state
+    window.location.href = '/login';
   };
 
   // Register function
