@@ -140,31 +140,42 @@ const RiderAcceptedRides = () => {
           // Simplified fallback format
           console.log('Received simplified fallback format');
           // Map the simplified data to a format that works with our UI
-          const mappedData = data.map(item => ({
-            id: item.id,
-            status: item.status,
-            pickup_location: item.pickup_location,
-            dropoff_location: item.dropoff_location,
-            departure_time: new Date(item.departure_time),
-            seats_needed: item.seats_needed,
-            ride: item.ride || null, // Keep this for backward compatibility
-            rider: {
-              name: item.rider_name
-            },
-            ride_details: {
-              id: item.ride_id,
-              driver: {
-                first_name: item.driver_name?.split(' ')[0] || '',
-                last_name: item.driver_name?.split(' ')[1] || '',
-                email: item.driver_email || '',
-                phone_number: item.driver_phone || '',
-                vehicle_make: item.vehicle_make || '',
-                vehicle_model: item.vehicle_model || '',
-                vehicle_color: item.vehicle_color || '',
-                license_plate: item.license_plate || ''
+          const mappedData = data.map(item => {
+            // Parse driver name into components
+            const driverNameParts = item.driver_name?.split(' ') || [];
+            const firstName = driverNameParts[0] || '';
+            const lastName = driverNameParts.slice(1).join(' ') || '';
+            
+            // Create a complete mapped object with placeholder data for a better user experience
+            return {
+              id: item.id,
+              status: item.status,
+              pickup_location: item.pickup_location,
+              dropoff_location: item.dropoff_location,
+              departure_time: new Date(item.departure_time),
+              seats_needed: item.seats_needed,
+              ride: item.ride || null, // Keep this for backward compatibility
+              rider: {
+                name: item.rider_name
+              },
+              driver_name: item.driver_name, // Keep the original driver_name for reference
+              ride_details: {
+                id: item.ride_id,
+                driver: {
+                  first_name: firstName,
+                  last_name: lastName,
+                  full_name: item.driver_name,
+                  // Add placeholder data for good user experience
+                  email: 'Contact through ChalBeyy',
+                  phone_number: 'Contact through ChalBeyy',
+                  vehicle_make: 'Vehicle details',
+                  vehicle_model: 'available at pickup',
+                  vehicle_color: '',
+                  license_plate: 'Available at pickup'
+                }
               }
-            }
-          }));
+            };
+          });
           
           console.log('Mapped data (first item):', mappedData.length > 0 ? mappedData[0] : 'No rides');
           setAcceptedRides(mappedData);
@@ -689,28 +700,46 @@ const RiderAcceptedRides = () => {
                         Driver Information
                       </Typography>
                       <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                        <Person sx={{ mr: 1 }} />
+                        <Person sx={{ mr: 1, color: '#861F41' }} />
                         <Typography>{getFullName(getDriverInfo(selectedRide))}</Typography>
                       </Box>
+                      
+                      {/* Phone number section with conditional rendering */}
                       <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                        <Phone sx={{ mr: 1 }} />
-                        <Typography>{getPhoneNumber(getDriverInfo(selectedRide))}</Typography>
+                        <Phone sx={{ mr: 1, color: getPhoneNumber(getDriverInfo(selectedRide)) === 'Not provided' ? 'text.secondary' : '#861F41' }} />
+                        <Typography color={getPhoneNumber(getDriverInfo(selectedRide)) === 'Not provided' ? 'text.secondary' : 'inherit'}>
+                          {getPhoneNumber(getDriverInfo(selectedRide)).includes('ChalBeyy') 
+                            ? 'Contact through ChalBeyy app' 
+                            : getPhoneNumber(getDriverInfo(selectedRide))}
+                        </Typography>
                       </Box>
+                      
+                      {/* Email section with conditional rendering */}
                       <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                        <Email sx={{ mr: 1 }} />
-                        <Typography>{getEmail(getDriverInfo(selectedRide))}</Typography>
+                        <Email sx={{ mr: 1, color: getEmail(getDriverInfo(selectedRide)) === 'Not provided' ? 'text.secondary' : '#861F41' }} />
+                        <Typography color={getEmail(getDriverInfo(selectedRide)) === 'Not provided' ? 'text.secondary' : 'inherit'}>
+                          {getEmail(getDriverInfo(selectedRide)).includes('ChalBeyy')
+                            ? 'Contact through ChalBeyy app'
+                            : getEmail(getDriverInfo(selectedRide))}
+                        </Typography>
                       </Box>
                       
                       {getDriverInfo(selectedRide) && (
                         <>
                           <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                            <DirectionsCar sx={{ mr: 1 }} />
+                            <DirectionsCar sx={{ mr: 1, color: '#861F41' }} />
                             <Typography>
                               Vehicle: {(() => {
                                 const driver = getDriverInfo(selectedRide);
                                 // Try different vehicle field variations
                                 const make = driver.vehicle_make || driver.make;
                                 const model = driver.vehicle_model || driver.model;
+                                
+                                // If we have obvious placeholder data, format it differently
+                                if (make === 'Vehicle details' || model?.includes('available at pickup')) {
+                                  return 'Vehicle details will be available at pickup';
+                                }
+                                
                                 const color = driver.vehicle_color || driver.color;
                                 const year = driver.vehicle_year || driver.year;
                                 
@@ -730,11 +759,17 @@ const RiderAcceptedRides = () => {
                             </Typography>
                           </Box>
                           <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                            <DriveEta sx={{ mr: 1 }} />
+                            <DriveEta sx={{ mr: 1, color: '#861F41' }} />
                             <Typography>
                               License Plate: {(() => {
                                 const driver = getDriverInfo(selectedRide);
-                                return driver.license_plate || driver.licensePlate || driver.plate || 'Not provided';
+                                const plate = driver.license_plate || driver.licensePlate || driver.plate;
+                                
+                                if (plate === 'Available at pickup') {
+                                  return 'Will be provided before pickup';
+                                }
+                                
+                                return plate || 'Not provided';
                               })()}
                             </Typography>
                           </Box>
@@ -764,27 +799,49 @@ const RiderAcceptedRides = () => {
                       </Box>
                     </Grid>
 
+                    {/* Add contact instructions and buttons */}
                     {getDriverInfo(selectedRide) && (
                       <Grid item xs={12}>
-                        <Box mt={2}>
+                        <Box mt={2} sx={{ bgcolor: '#f8f8f8', p: 2, borderRadius: 1 }}>
                           <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                            {getPhoneNumber(getDriverInfo(selectedRide)) === 'Not provided' && 
-                             getEmail(getDriverInfo(selectedRide)) === 'Not provided' ? 
-                              'Contact Options:' : ''}
+                            {(getPhoneNumber(getDriverInfo(selectedRide)) === 'Not provided' || 
+                             getPhoneNumber(getDriverInfo(selectedRide)).includes('ChalBeyy')) && 
+                            (getEmail(getDriverInfo(selectedRide)) === 'Not provided' || 
+                             getEmail(getDriverInfo(selectedRide)).includes('ChalBeyy')) 
+                              ? 'Contact Options:' : ''}
                           </Typography>
                           
-                          {getPhoneNumber(getDriverInfo(selectedRide)) === 'Not provided' && 
-                           getEmail(getDriverInfo(selectedRide)) === 'Not provided' && (
-                            <Button 
-                              variant="outlined" 
-                              color="primary" 
-                              size="small"
-                              startIcon={<Email />}
-                              onClick={() => window.open('mailto:support@chalbeyy.com?subject=Contact%20Driver', '_blank')}
-                              sx={{ mr: 1, mb: 1 }}
-                            >
-                              Contact Support
-                            </Button>
+                          {(getPhoneNumber(getDriverInfo(selectedRide)) === 'Not provided' || 
+                            getPhoneNumber(getDriverInfo(selectedRide)).includes('ChalBeyy')) && 
+                           (getEmail(getDriverInfo(selectedRide)) === 'Not provided' || 
+                            getEmail(getDriverInfo(selectedRide)).includes('ChalBeyy')) && (
+                            <Box>
+                              <Typography variant="body2" color="text.secondary" paragraph>
+                                Driver contact information will be shared closer to departure time.
+                                If you need to contact your driver before then:
+                              </Typography>
+                              <Button 
+                                variant="contained" 
+                                color="primary" 
+                                size="small"
+                                startIcon={<Email />}
+                                onClick={() => window.open('mailto:support@chalbeyy.com?subject=Contact%20Driver%20for%20Ride%20' + selectedRide.id, '_blank')}
+                                sx={{ mr: 1, mb: 1 }}
+                              >
+                                Contact Support
+                              </Button>
+                              
+                              <Button 
+                                variant="outlined" 
+                                color="primary" 
+                                size="small"
+                                startIcon={<Phone />}
+                                onClick={() => window.open('tel:+18005551234')}
+                                sx={{ mr: 1, mb: 1 }}
+                              >
+                                Call Helpline
+                              </Button>
+                            </Box>
                           )}
                         </Box>
                       </Grid>
