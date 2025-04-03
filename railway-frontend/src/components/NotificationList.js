@@ -106,7 +106,6 @@ function NotificationList() {
           'Content-Type': 'application/json',
           'Accept': 'application/json'
         },
-        credentials: 'include',
         signal: controller.signal
       });
       
@@ -167,8 +166,14 @@ function NotificationList() {
         setServerAvailable(false);
       }
       // Check if it's a network error
-      else if (err.name === 'TypeError' && err.message.includes('Network')) {
-        setError('Network error while fetching notifications. Please check your internet connection and try again.');
+      else if (err.name === 'TypeError' && err.message.includes('Failed to fetch')) {
+        // Could be a CORS error or network connectivity issue
+        if (window.location.origin !== new URL(API_BASE_URL).origin) {
+          // Different origins - likely CORS
+          setError('Cross-origin access prevented. This may be a configuration issue between the app and API servers. Please contact support.');
+        } else {
+          setError('Network error while fetching notifications. Please check your internet connection and try again.');
+        }
         setServerAvailable(false);
       } else {
         setError('Failed to load notifications. Please try refreshing the page.');
@@ -176,6 +181,7 @@ function NotificationList() {
       
       // Log additional debug info
       console.error('API_BASE_URL:', API_BASE_URL);
+      console.error('Frontend origin:', window.location.origin);
       console.error('Error details:', {
         name: err.name,
         message: err.message,
