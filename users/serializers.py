@@ -15,7 +15,8 @@ class UserSerializer(serializers.ModelSerializer):
             'id', 'username', 'email', 'first_name', 'last_name', 
             'phone_number', 'user_type', 'profile_image', 
             'vehicle_make', 'vehicle_model', 'vehicle_color', 
-            'vehicle_year', 'license_plate', 'max_passengers'
+            'vehicle_year', 'license_plate', 'max_passengers',
+            'password', 'password2'  # Added password and password2 fields
         ]
         extra_kwargs = {'password': {'write_only': True}}
         
