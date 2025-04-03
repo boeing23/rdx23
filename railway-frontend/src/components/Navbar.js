@@ -9,10 +9,13 @@ import SettingsIcon from '@mui/icons-material/Settings';
 import AccountCircleIcon from '@mui/icons-material/AccountCircle';
 import ExitToAppIcon from '@mui/icons-material/ExitToApp';
 import NotificationsIcon from '@mui/icons-material/Notifications';
+import { useAuth } from '../contexts/AuthContext';
 
 function Navbar() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [userType, setUserType] = useState(null);
+  const { authState, logout } = useAuth();
+  const { isAuthenticated, user } = authState;
+  const userType = user?.user_type;
+  
   const [mobileMenuAnchorEl, setMobileMenuAnchorEl] = useState(null);
   const [settingsAnchorEl, setSettingsAnchorEl] = useState(null);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -20,33 +23,22 @@ function Navbar() {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
+  // Log auth state for debugging
   useEffect(() => {
-    const initializeAuth = () => {
-      const token = localStorage.getItem('token');
-      const type = localStorage.getItem('userType');
-      
-      console.log('Navbar initialization:', {
-        hasToken: !!token,
-        rawUserType: type,
-        isAuthenticated: !!token
-      });
-      
-      setIsAuthenticated(!!token);
-      if (type) {
-        try {
-          const parsedType = JSON.parse(type);
-          console.log('Parsed user type:', parsedType);
-          setUserType(parsedType);
-        } catch (e) {
-          console.error('Error parsing user type:', e);
-          console.log('Using raw user type:', type);
-          setUserType(type);
-        }
-      }
-    };
+    console.log('Navbar auth state:', { 
+      isAuthenticated, 
+      userType,
+      user
+    });
+  }, [isAuthenticated, userType, user]);
 
-    initializeAuth();
-  }, []);
+  // For fallback/compatibility - check localStorage directly
+  useEffect(() => {
+    if (!isAuthenticated) {
+      const token = localStorage.getItem('token');
+      console.log('Navbar fallback check - token exists:', !!token);
+    }
+  }, [isAuthenticated]);
 
   // Setup sync with NotificationList component
   useEffect(() => {
@@ -87,10 +79,7 @@ function Navbar() {
   };
 
   const handleLogout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('userType');
-    setIsAuthenticated(false);
-    setUserType(null);
+    logout();
     handleSettingsMenuClose();
     handleMobileMenuClose();
     navigate('/login');

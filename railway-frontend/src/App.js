@@ -16,6 +16,7 @@ import DriverAcceptedRides from './components/DriverAcceptedRides';
 import RiderAcceptedRides from './components/RiderAcceptedRides';
 import UserProfile from './components/UserProfile';
 import AuthPage from './components/AuthPage';
+import { AuthProvider } from './contexts/AuthContext';
 import './App.css';
 
 function Home() {
@@ -138,9 +139,23 @@ function Home() {
 }
 
 // Main app content with Routes - this has access to location context
-function AppContent({ isAuthenticated, userType }) {
+function AppContent() {
   const location = useLocation();
   const isLandingPage = location.pathname === '/';
+  
+  // Check token directly for now, but we'll improve this
+  const isAuthenticated = localStorage.getItem('token');
+  const userTypeString = localStorage.getItem('userType');
+  let userType = null;
+  
+  try {
+    if (userTypeString) {
+      userType = JSON.parse(userTypeString);
+    }
+  } catch (e) {
+    console.error('Error parsing user type:', e);
+    userType = userTypeString;
+  }
   
   // Don't show navbar on landing page for non-authenticated users
   const showNavbar = isAuthenticated || !isLandingPage;
@@ -166,55 +181,9 @@ function AppContent({ isAuthenticated, userType }) {
 }
 
 function App() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [userType, setUserType] = useState(null);
-  const [isInitialized, setIsInitialized] = useState(false);
-  const [isFirstTimeUser, setIsFirstTimeUser] = useState(false);
-
-  useEffect(() => {
-    const initializeAuth = () => {
-      const token = localStorage.getItem('token');
-      const storedUserType = localStorage.getItem('userType');
-      const hasVisitedBefore = localStorage.getItem('hasVisitedBefore');
-      
-      if (!hasVisitedBefore && window.location.pathname === '/') {
-        localStorage.setItem('hasVisitedBefore', 'true');
-        setIsFirstTimeUser(true);
-      } else {
-        setIsFirstTimeUser(false);
-      }
-      
-      if (token) {
-        setIsAuthenticated(true);
-        try {
-          const parsedUserType = JSON.parse(storedUserType);
-          setUserType(parsedUserType);
-        } catch (e) {
-          console.error('Error parsing user type:', e);
-          setUserType(storedUserType);
-        }
-      }
-      setIsInitialized(true);
-    };
-
-    initializeAuth();
-  }, []);
-
-  const handleLogout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('userType');
-    setIsAuthenticated(false);
-    setUserType(null);
-    window.location.href = '/';
-  };
-
-  if (!isInitialized) {
-    return null;
-  }
-
   return (
     <Router>
-      <AppContent isAuthenticated={isAuthenticated} userType={userType} />
+      <AppContent />
     </Router>
   );
 }
