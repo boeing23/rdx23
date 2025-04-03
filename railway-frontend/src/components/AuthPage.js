@@ -4,7 +4,8 @@ import { styled } from '@mui/material/styles';
 import { useNavigate, useLocation } from 'react-router-dom';
 import DirectionsCarIcon from '@mui/icons-material/DirectionsCar';
 import PersonIcon from '@mui/icons-material/Person';
-import { API_BASE_URL } from '../config';
+import { API_BASE_URL, getAuthHeadersWithContentType } from '../config';
+import { useAuth } from '../contexts/AuthContext';
 
 const StyledContainer = styled(Container)(({ theme }) => ({
   minHeight: '100vh',
@@ -94,6 +95,7 @@ const AuthPage = () => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const location = useLocation();
+  const { login, register } = useAuth();
   
   const [isSignUp, setIsSignUp] = useState(false);
   const [userType, setUserType] = useState('RIDER');
@@ -175,35 +177,27 @@ const AuthPage = () => {
     try {
       console.log('Attempting login with:', { username: loginData.username });
       
-      const response = await fetch(`${API_BASE_URL}/api/users/login/`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(loginData)
-      });
-
-      console.log('Login response status:', response.status);
+      // Use the AuthContext login function instead of direct fetch
+      const result = await login(loginData.username, loginData.password);
       
-      const data = await response.json();
-      console.log('Login response data:', data);
-
-      if (response.ok) {
-        // Store auth data
-        localStorage.setItem('token', data.token);
-        localStorage.setItem('userType', JSON.stringify(data.user_type));
-        localStorage.setItem('userId', data.user.id);
+      if (result.success) {
+        console.log('Login successful');
         
-        // Navigate based on user type
-        const userTypeValue = data.user_type;
-        navigate(userTypeValue === 'DRIVER' ? '/offer' : '/rides');
-        window.location.reload(); // Force navbar update
+        // Navigate based on user type (using the user data from the result)
+        const userType = result.user?.user_type || 'RIDER';
+        navigate(userType === 'DRIVER' ? '/offer' : '/rides');
       } else {
-        setError(data.detail || 'Login failed. Please check your credentials.');
+        console.error('Login failed:', result.error);
+        setError(result.error);
       }
     } catch (err) {
       console.error('Login error:', err);
-      setError('Network error. Please try again.');
+      
+      if (err.response) {
+        setError(`Error ${err.response.status}: ${err.response.data?.detail || 'Login failed'}`);
+      } else {
+        setError('Network error. Please try again.');
+      }
     } finally {
       setLoading(false);
     }

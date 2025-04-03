@@ -75,12 +75,24 @@ export const AuthProvider = ({ children }) => {
   // Login function
   const login = async (username, password) => {
     try {
-      const response = await axios.post(`${API_BASE_URL}/api/token/`, {
+      // Use the correct login endpoint that your backend supports
+      const response = await axios.post(`${API_BASE_URL}/api/users/login/`, {
         username,
         password
       });
+      
+      console.log('Login response status:', response.status);
+      console.log('Login response data:', response.data);
 
       const token = response.data.token || response.data.access;
+      
+      if (!token) {
+        console.error('No token received in login response');
+        return { 
+          success: false, 
+          error: 'Invalid server response. Please try again.'
+        };
+      }
       
       // Save token to local storage
       localStorage.setItem('token', token);
@@ -117,9 +129,25 @@ export const AuthProvider = ({ children }) => {
       }
     } catch (error) {
       console.error('Login error:', error);
-      return { 
-        success: false, 
-        error: error.response?.data?.detail || 'Login failed. Please check your credentials.'
+      
+      // Provide better error information
+      if (error.response) {
+        if (error.response.status === 500) {
+          return {
+            success: false,
+            error: 'Server error. Please try again later.'
+          };
+        }
+        
+        return { 
+          success: false, 
+          error: error.response?.data?.detail || error.response?.data?.non_field_errors?.[0] || 'Login failed. Please check your credentials.'
+        };
+      }
+      
+      return {
+        success: false,
+        error: 'Network error. Please check your connection and try again.'
       };
     }
   };
