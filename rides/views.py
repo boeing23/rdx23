@@ -1680,6 +1680,23 @@ class RideRequestViewSet(viewsets.ModelViewSet):
             
             logger.info(f"Found {ride_requests.count()} ride requests for user {user.username}")
             
+            # Safe check for optimal_pickup_point
+            for req in ride_requests:
+                try:
+                    # Check if optimal_pickup_point might cause serialization issues
+                    if req.optimal_pickup_point and not isinstance(req.optimal_pickup_point, (dict, str)):
+                        logger.warning(f"Fixing invalid optimal_pickup_point format for request {req.id}")
+                        req.optimal_pickup_point = None
+                        req.save(update_fields=['optimal_pickup_point'])
+                    
+                    # Check if nearest_dropoff_point might cause serialization issues
+                    if req.nearest_dropoff_point and not isinstance(req.nearest_dropoff_point, (dict, str)):
+                        logger.warning(f"Fixing invalid nearest_dropoff_point format for request {req.id}")
+                        req.nearest_dropoff_point = None
+                        req.save(update_fields=['nearest_dropoff_point'])
+                except Exception as e:
+                    logger.error(f"Error checking request {req.id} fields: {str(e)}")
+            
             # Debug each ride request's details
             for req in ride_requests:
                 try:
@@ -1692,7 +1709,7 @@ class RideRequestViewSet(viewsets.ModelViewSet):
                         logger.info(f"  Email: {rider.email}")
                         logger.info(f"  Has phone_number: {hasattr(rider, 'phone_number')}")
                         logger.info(f"  Phone: {getattr(rider, 'phone_number', 'Missing')}")
-                        
+                    
                     # Debug driver details
                     if req.ride and req.ride.driver:
                         driver = req.ride.driver
@@ -1705,33 +1722,65 @@ class RideRequestViewSet(viewsets.ModelViewSet):
                 except Exception as e:
                     logger.error(f"Error logging request {req.id} details: {str(e)}")
             
-            # Serialize with more detailed information
-            serializer = RideRequestSerializer(ride_requests, many=True, context={'request': request})
-            
-            # Debug serialized data
-            for idx, data in enumerate(serializer.data):
-                logger.info(f"Serialized ride {idx+1}:")
+            try:
+                # Serialize with more detailed information
+                serializer = RideRequestSerializer(ride_requests, many=True, context={'request': request})
                 
-                # Log rider info
-                if 'rider' in data:
-                    rider_data = data['rider']
-                    logger.info(f"  Serialized rider: {rider_data.get('first_name', '')} {rider_data.get('last_name', '')}")
-                    logger.info(f"  Rider phone: {rider_data.get('phone_number', 'N/A')}")
+                # Debug serialized data
+                for idx, data in enumerate(serializer.data):
+                    logger.info(f"Serialized ride {idx+1}:")
+                    
+                    # Log rider info
+                    if 'rider' in data:
+                        rider_data = data['rider']
+                        logger.info(f"  Serialized rider: {rider_data.get('first_name', '')} {rider_data.get('last_name', '')}")
+                        logger.info(f"  Rider phone: {rider_data.get('phone_number', 'N/A')}")
+                    
+                    # Log driver info via ride_details
+                    if 'ride_details' in data and 'driver' in data['ride_details']:
+                        driver_data = data['ride_details']['driver']
+                        logger.info(f"  Serialized driver: {driver_data.get('first_name', '')} {driver_data.get('last_name', '')}")
+                        logger.info(f"  Driver phone: {driver_data.get('phone_number', 'N/A')}")
                 
-                # Log driver info via ride_details
-                if 'ride_details' in data and 'driver' in data['ride_details']:
-                    driver_data = data['ride_details']['driver']
-                    logger.info(f"  Serialized driver: {driver_data.get('first_name', '')} {driver_data.get('last_name', '')}")
-                    logger.info(f"  Driver phone: {driver_data.get('phone_number', 'N/A')}")
-            
-            return Response(serializer.data)
-            
+                return Response(serializer.data)
+            except Exception as e:
+                logger.error(f"Error serializing ride requests: {str(e)}")
+                logger.exception("Full serialization exception details:")
+                
+                # Try fallback approach with simpler serialization
+                try:
+                    logger.info("Attempting fallback serialization with simpler data")
+                    # Create a simplified version that excludes problematic fields
+                    simplified_data = []
+                    for req in ride_requests:
+                        ride = req.ride
+                        simplified_data.append({
+                            'id': req.id,
+                            'status': req.status,
+                            'ride_id': ride.id if ride else None,
+                            'pickup_location': req.pickup_location,
+                            'dropoff_location': req.dropoff_location,
+                            'departure_time': req.departure_time.isoformat() if req.departure_time else None,
+                            'seats_needed': req.seats_needed,
+                            'rider_name': f"{req.rider.first_name} {req.rider.last_name}" if req.rider else "Unknown",
+                            'driver_name': f"{ride.driver.first_name} {ride.driver.last_name}" if ride and ride.driver else "Unknown"
+                        })
+                    return Response(simplified_data)
+                except Exception as fallback_error:
+                    logger.error(f"Fallback serialization also failed: {str(fallback_error)}")
+                    return Response({
+                        'status': 'error',
+                        'message': 'Failed to retrieve accepted rides',
+                        'error_details': str(e)
+                    }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
         except Exception as e:
             logger.error(f"Error in accepted rides: {str(e)}")
             logger.exception("Full exception details:")
             return Response({
                 'status': 'error',
-                'message': 'Failed to retrieve accepted rides'
+                'message': 'Failed to retrieve accepted rides',
+                'error_details': str(e)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         
     @action(detail=True, methods=['post'])

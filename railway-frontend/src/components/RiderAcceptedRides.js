@@ -52,7 +52,7 @@ const RiderAcceptedRides = () => {
       // First make a test request to check server status
       try {
         console.log('Testing server connection...');
-        const pingResponse = await fetch(`${API_BASE_URL}/api/health-check/`);
+        const pingResponse = await fetch(`${API_BASE_URL}/api/rides/`);
         console.log(`Server health check status: ${pingResponse.status}`);
       } catch (pingError) {
         console.warn('Server health check failed:', pingError.message);
@@ -88,7 +88,9 @@ const RiderAcceptedRides = () => {
           try {
             const errorJson = JSON.parse(errorResponse);
             console.error('Error details:', errorJson);
-            errorDetail = errorJson.detail ? ` - ${errorJson.detail}` : '';
+            errorDetail = errorJson.detail || errorJson.message || errorJson.error_details
+              ? ` - ${errorJson.detail || errorJson.message || errorJson.error_details}`
+              : '';
           } catch (e) {
             // Not JSON, use text
             errorDetail = errorResponse ? ` - ${errorResponse.substring(0, 100)}...` : '';
@@ -108,7 +110,51 @@ const RiderAcceptedRides = () => {
       
       const data = await response.json();
       console.log('Accepted rides data:', data);
-      setAcceptedRides(data);
+      
+      // Process the data based on format
+      // The backend might return a simplified format if there were serialization issues
+      if (data.length > 0) {
+        if (data[0].hasOwnProperty('ride_details')) {
+          // Standard format
+          console.log('Received standard ride request format');
+          setAcceptedRides(data);
+          if (data.length > 0) {
+            setSelectedRide(data[0]);
+          }
+        } else if (data[0].hasOwnProperty('ride_id')) {
+          // Simplified fallback format
+          console.log('Received simplified fallback format');
+          // Map the simplified data to a format that works with our UI
+          const mappedData = data.map(item => ({
+            id: item.id,
+            status: item.status,
+            pickup_location: item.pickup_location,
+            dropoff_location: item.dropoff_location,
+            departure_time: new Date(item.departure_time),
+            seats_needed: item.seats_needed,
+            rider: {
+              name: item.rider_name
+            },
+            ride_details: {
+              id: item.ride_id,
+              driver: {
+                name: item.driver_name
+              }
+            }
+          }));
+          setAcceptedRides(mappedData);
+          if (mappedData.length > 0) {
+            setSelectedRide(mappedData[0]);
+          }
+        } else {
+          console.error('Unknown data format received:', data);
+          setError('Received unexpected data format from server');
+        }
+      } else {
+        // Empty array - no rides
+        setAcceptedRides([]);
+        setSelectedRide(null);
+      }
     } catch (error) {
       console.error('Error fetching accepted rides:', error);
       

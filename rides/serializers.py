@@ -251,60 +251,68 @@ class RideRequestSerializer(serializers.ModelSerializer):
         }
     
     def get_nearest_dropoff_info(self, obj):
-        if not obj.nearest_dropoff_point:
-            return None
-        
+        """
+        Safely extract nearest dropoff information from the nearest_dropoff_point field
+        """
         try:
-            # Directly return the JSONField data if it's already in the right format
-            if isinstance(obj.nearest_dropoff_point, dict) and 'address' in obj.nearest_dropoff_point:
-                return obj.nearest_dropoff_point
-            
-            # Parse string JSON if needed
-            import json
+            if not obj.nearest_dropoff_point:
+                return None
+                
+            # Try to parse if it's a string
             if isinstance(obj.nearest_dropoff_point, str):
-                data = json.loads(obj.nearest_dropoff_point)
-                if isinstance(data, dict) and 'address' in data:
-                    return data
-            
-            # If we don't have a properly formatted record, return basic info
+                try:
+                    dropoff_data = json.loads(obj.nearest_dropoff_point)
+                except json.JSONDecodeError:
+                    logger.warning(f"Could not decode nearest_dropoff_point JSON for ride request {obj.id}")
+                    return None
+            else:
+                dropoff_data = obj.nearest_dropoff_point
+                
+            # Handle case where dropoff_data is None
+            if not dropoff_data:
+                return None
+                
             return {
-                'coordinates': obj.nearest_dropoff_point,
-                'address': 'Near your destination'
+                'address': dropoff_data.get('address', 'Unknown location'),
+                'latitude': dropoff_data.get('latitude'),
+                'longitude': dropoff_data.get('longitude'),
+                'distance_from_rider': dropoff_data.get('distance_from_rider')
             }
         except Exception as e:
-            logger.error(f"Error parsing nearest_dropoff_point: {e}")
-            return {
-                'coordinates': None,
-                'address': 'Near your destination'
-            }
+            logger.error(f"Error extracting nearest dropoff info: {str(e)}")
+            return None
     
     def get_optimal_pickup_info(self, obj):
-        if not obj.optimal_pickup_point:
-            return None
-        
+        """
+        Safely extract optimal pickup information from the optimal_pickup_point field
+        """
         try:
-            # Directly return the JSONField data if it's already in the right format
-            if isinstance(obj.optimal_pickup_point, dict) and 'address' in obj.optimal_pickup_point:
-                return obj.optimal_pickup_point
-            
-            # Parse string JSON if needed
-            import json
+            if not obj.optimal_pickup_point:
+                return None
+                
+            # Try to parse if it's a string
             if isinstance(obj.optimal_pickup_point, str):
-                data = json.loads(obj.optimal_pickup_point)
-                if isinstance(data, dict) and 'address' in data:
-                    return data
-            
-            # If we don't have a properly formatted record, return basic info
+                try:
+                    pickup_data = json.loads(obj.optimal_pickup_point)
+                except json.JSONDecodeError:
+                    logger.warning(f"Could not decode optimal_pickup_point JSON for ride request {obj.id}")
+                    return None
+            else:
+                pickup_data = obj.optimal_pickup_point
+                
+            # Handle case where pickup_data is None
+            if not pickup_data:
+                return None
+                
             return {
-                'coordinates': obj.optimal_pickup_point,
-                'address': 'Suggested pickup location'
+                'address': pickup_data.get('address', 'Unknown location'),
+                'latitude': pickup_data.get('latitude'),
+                'longitude': pickup_data.get('longitude'),
+                'distance_from_rider': pickup_data.get('distance_from_rider')
             }
         except Exception as e:
-            logger.error(f"Error parsing optimal_pickup_point: {e}")
-            return {
-                'coordinates': None,
-                'address': 'Suggested pickup location'
-            }
+            logger.error(f"Error extracting optimal pickup info: {str(e)}")
+            return None
 
     def validate(self, data):
         logger.info(f"Validating ride request data: {data}")
