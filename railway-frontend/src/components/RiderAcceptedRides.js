@@ -27,8 +27,11 @@ import { API_BASE_URL } from '../config';
 import { format } from 'date-fns';
 import axios from 'axios';
 import { useAuth } from '../contexts/AuthContext';
-import { View, Text, FlatList, StyleSheet, TouchableOpacity, ActivityIndicator, Linking, ScrollView } from 'react-native';
-import { Icon } from 'react-native-elements';
+
+// Replace with web components
+import { View, Text, FlatList, StyleSheet, TouchableOpacity } from 'react-native-web';
+// Remove unnecessary imports
+// import { Icon } from 'react-native-elements';
 
 const RiderAcceptedRides = () => {
   const [acceptedRides, setAcceptedRides] = useState([]);
@@ -440,41 +443,51 @@ const RiderAcceptedRides = () => {
     setOpenCancelDialog(false);
   };
 
+  // Remove direct link handling
   const handleCall = (phoneNumber) => {
     if (!phoneNumber) {
-      Alert.alert('No Phone Number', 'The driver has not provided a phone number.');
+      alert('No Phone Number: The driver has not provided a phone number.');
       return;
     }
-    
-    Linking.openURL(`tel:${phoneNumber}`);
+    window.open(`tel:${phoneNumber}`, '_blank');
   };
 
   const handleEmail = (email) => {
     if (!email) {
-      Alert.alert('No Email', 'The driver has not provided an email address.');
+      alert('No Email: The driver has not provided an email address.');
       return;
     }
-    
-    Linking.openURL(`mailto:${email}`);
+    window.open(`mailto:${email}`, '_blank');
   };
 
   const renderRideItem = ({ item }) => (
     <TouchableOpacity onPress={() => handleRideClick(item)}>
-      <Card containerStyle={styles.card}>
-        <Card.Title>{item.pickup_location} → {item.dropoff_location}</Card.Title>
-        <Text style={styles.dateText}>
+      <Box sx={{ 
+        borderRadius: '8px', 
+        marginBottom: '10px', 
+        padding: '15px',
+        boxShadow: '0px 2px 4px rgba(0,0,0,0.1)',
+        background: '#fff'
+      }}>
+        <Typography variant="h6">{item.pickup_location} → {item.dropoff_location}</Typography>
+        <Typography sx={{ fontSize: '14px', color: '#555', marginBottom: '8px' }}>
           {formatDate(item.departure_time)}
-        </Text>
-        <Text style={styles.statusText}>
-          Status: <Text style={styles[item.status.toLowerCase()]}>{item.status}</Text>
-        </Text>
-        <Text style={styles.infoText}>
+        </Typography>
+        <Typography sx={{ fontSize: '14px', marginBottom: '5px' }}>
+          Status: <span style={{ 
+            color: item.status === 'ACCEPTED' ? 'green' : 
+                  item.status === 'PENDING' ? 'orange' :
+                  item.status === 'COMPLETED' ? 'blue' : 'red',
+            fontWeight: 'bold'
+          }}>{item.status}</span>
+        </Typography>
+        <Typography sx={{ fontSize: '14px', marginBottom: '3px' }}>
           Driver: {item.driver ? (item.driver.full_name || `${item.driver.first_name} ${item.driver.last_name}`) : (item.driver_name || 'Not assigned')}
-        </Text>
-        <Text style={styles.infoText}>
+        </Typography>
+        <Typography sx={{ fontSize: '14px', marginBottom: '3px' }}>
           Seats: {item.seats_needed}
-        </Text>
-      </Card>
+        </Typography>
+      </Box>
     </TouchableOpacity>
   );
 
@@ -484,261 +497,204 @@ const RiderAcceptedRides = () => {
     const driver = getDriverInfo(selectedRide);
     
     return (
-      <Card containerStyle={styles.detailCard}>
-        <Card.Title>Ride Details</Card.Title>
-        <ScrollView>
-          <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>From:</Text>
-            <Text style={styles.detailValue}>{selectedRide.pickup_location}</Text>
-          </View>
-          <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>To:</Text>
-            <Text style={styles.detailValue}>{selectedRide.dropoff_location}</Text>
-          </View>
-          <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>When:</Text>
-            <Text style={styles.detailValue}>{formatDate(selectedRide.departure_time)}</Text>
-          </View>
-          <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Status:</Text>
-            <Text style={[styles.detailValue, styles[selectedRide.status.toLowerCase()]]}>
+      <Paper sx={{ borderRadius: '8px', padding: '15px', margin: 0 }}>
+        <Typography variant="h5" sx={{ marginBottom: '15px' }}>Ride Details</Typography>
+        <Box sx={{ maxHeight: '70vh', overflow: 'auto' }}>
+          <Box sx={{ display: 'flex', marginBottom: '10px' }}>
+            <Typography sx={{ width: '80px', fontWeight: 'bold' }}>From:</Typography>
+            <Typography sx={{ flex: 1 }}>{selectedRide.pickup_location}</Typography>
+          </Box>
+          <Box sx={{ display: 'flex', marginBottom: '10px' }}>
+            <Typography sx={{ width: '80px', fontWeight: 'bold' }}>To:</Typography>
+            <Typography sx={{ flex: 1 }}>{selectedRide.dropoff_location}</Typography>
+          </Box>
+          <Box sx={{ display: 'flex', marginBottom: '10px' }}>
+            <Typography sx={{ width: '80px', fontWeight: 'bold' }}>When:</Typography>
+            <Typography sx={{ flex: 1 }}>{formatDate(selectedRide.departure_time)}</Typography>
+          </Box>
+          <Box sx={{ display: 'flex', marginBottom: '10px' }}>
+            <Typography sx={{ width: '80px', fontWeight: 'bold' }}>Status:</Typography>
+            <Typography sx={{ 
+              flex: 1,
+              color: selectedRide.status === 'ACCEPTED' ? 'green' : 
+                     selectedRide.status === 'PENDING' ? 'orange' :
+                     selectedRide.status === 'COMPLETED' ? 'blue' : 'red',
+              fontWeight: 'bold'
+            }}>
               {selectedRide.status}
-            </Text>
-          </View>
-          <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Seats:</Text>
-            <Text style={styles.detailValue}>{selectedRide.seats_needed}</Text>
-          </View>
+            </Typography>
+          </Box>
+          <Box sx={{ display: 'flex', marginBottom: '10px' }}>
+            <Typography sx={{ width: '80px', fontWeight: 'bold' }}>Seats:</Typography>
+            <Typography sx={{ flex: 1 }}>{selectedRide.seats_needed}</Typography>
+          </Box>
           
-          <View style={styles.divider} />
+          <Box sx={{ height: '1px', backgroundColor: '#e0e0e0', margin: '15px 0' }} />
           
-          <Text style={styles.sectionTitle}>Driver Information</Text>
-          <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Name:</Text>
-            <Text style={styles.detailValue}>
+          <Typography variant="h6" sx={{ marginBottom: '10px' }}>Driver Information</Typography>
+          <Box sx={{ display: 'flex', marginBottom: '10px' }}>
+            <Typography sx={{ width: '80px', fontWeight: 'bold' }}>Name:</Typography>
+            <Typography sx={{ flex: 1 }}>
               {driver.full_name || `${driver.first_name || ''} ${driver.last_name || ''}`.trim() || 'Unknown Driver'}
-            </Text>
-          </View>
+            </Typography>
+          </Box>
           
           {/* Contact options */}
-          <View style={styles.contactContainer}>
+          <Box sx={{ 
+            display: 'flex', 
+            justifyContent: 'space-around', 
+            flexWrap: 'wrap',
+            margin: '10px 0'
+          }}>
             {driver.phone_number ? (
               <Button
-                buttonStyle={styles.contactButton}
-                icon={<Icon name="phone" type="feather" color="#ffffff" />}
-                title="Call"
-                onPress={() => handleCall(driver.phone_number)}
-              />
+                variant="contained"
+                startIcon={<Phone />}
+                onClick={() => handleCall(driver.phone_number)}
+                sx={{ minWidth: '120px', margin: '5px' }}
+              >
+                Call
+              </Button>
             ) : (
-              <Text style={styles.contactInfo}>Contact through ChalBeyy app</Text>
+              <Typography sx={{ 
+                width: '100%', 
+                textAlign: 'center', 
+                color: '#555', 
+                margin: '10px 0'
+              }}>
+                Contact through ChalBeyy app
+              </Typography>
             )}
             
             {driver.email ? (
               <Button
-                buttonStyle={styles.contactButton}
-                icon={<Icon name="mail" type="feather" color="#ffffff" />}
-                title="Email"
-                onPress={() => handleEmail(driver.email)}
-              />
+                variant="contained"
+                startIcon={<Email />}
+                onClick={() => handleEmail(driver.email)}
+                sx={{ minWidth: '120px', margin: '5px' }}
+              >
+                Email
+              </Button>
             ) : (
-              <Text style={styles.contactInfo}>Contact through ChalBeyy app</Text>
+              <Typography sx={{ 
+                width: '100%', 
+                textAlign: 'center', 
+                color: '#555', 
+                margin: '10px 0'
+              }}>
+                Contact through ChalBeyy app
+              </Typography>
             )}
             
             {(!driver.phone_number && !driver.email) && (
               <Button
-                buttonStyle={styles.supportButton}
-                title="Contact Support"
-                onPress={() => Linking.openURL('mailto:support@chalbeyy.com')}
-              />
+                variant="contained"
+                color="warning"
+                onClick={() => window.open('mailto:support@chalbeyy.com', '_blank')}
+                sx={{ minWidth: '250px', margin: '5px' }}
+              >
+                Contact Support
+              </Button>
             )}
-          </View>
+          </Box>
           
-          <View style={styles.divider} />
+          <Box sx={{ height: '1px', backgroundColor: '#e0e0e0', margin: '15px 0' }} />
           
-          <Text style={styles.sectionTitle}>Vehicle Information</Text>
-          <Text style={styles.vehicleInfo}>
+          <Typography variant="h6" sx={{ marginBottom: '10px' }}>Vehicle Information</Typography>
+          <Typography sx={{ marginTop: '5px', lineHeight: '24px' }}>
             {getVehicleInfo(driver)}
-          </Text>
-        </ScrollView>
+          </Typography>
+        </Box>
         
-        <View style={styles.backButtonContainer}>
+        <Box sx={{ marginTop: '20px' }}>
           <Button
-            buttonStyle={styles.backButton}
-            title="Back to List"
-            onPress={() => setSelectedRide(null)}
-          />
-        </View>
-      </Card>
+            variant="contained"
+            color="inherit"
+            onClick={() => setSelectedRide(null)}
+            sx={{ backgroundColor: '#999' }}
+          >
+            Back to List
+          </Button>
+        </Box>
+      </Paper>
     );
   };
 
   if (loading) {
     return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#0000ff" />
-        <Text>Loading rides...</Text>
-      </View>
+      <Box sx={{ 
+        display: 'flex', 
+        justifyContent: 'center', 
+        alignItems: 'center',
+        flexDirection: 'column',
+        minHeight: '60vh'
+      }}>
+        <CircularProgress size={40} sx={{ marginBottom: 2 }} />
+        <Typography>Loading rides...</Typography>
+      </Box>
     );
   }
 
   if (error) {
     return (
-      <View style={styles.centered}>
-        <Text style={styles.errorText}>Error: {error}</Text>
+      <Box sx={{ 
+        display: 'flex', 
+        justifyContent: 'center', 
+        alignItems: 'center',
+        flexDirection: 'column',
+        padding: '20px'
+      }}>
+        <Alert severity="error" sx={{ marginBottom: 2, width: '100%' }}>
+          {error}
+        </Alert>
         <Button
-          title="Try Again"
-          onPress={fetchAcceptedRides}
-          buttonStyle={styles.retryButton}
-        />
-      </View>
+          variant="contained"
+          onClick={fetchAcceptedRides}
+          startIcon={<Refresh />}
+        >
+          Try Again
+        </Button>
+      </Box>
     );
   }
 
   if (acceptedRides.length === 0) {
     return (
-      <View style={styles.centered}>
-        <Text>You don't have any rides yet.</Text>
-      </View>
+      <Box sx={{ 
+        display: 'flex', 
+        justifyContent: 'center', 
+        alignItems: 'center',
+        minHeight: '60vh'
+      }}>
+        <Typography>You don't have any rides yet.</Typography>
+      </Box>
     );
   }
 
   return (
-    <View style={styles.container}>
+    <Container sx={{ padding: '10px', backgroundColor: '#f5f5f5', minHeight: '80vh' }}>
       {selectedRide ? (
         renderSelectedRide()
       ) : (
-        <FlatList
-          data={acceptedRides}
-          renderItem={renderRideItem}
-          keyExtractor={(item) => item.id.toString()}
-          contentContainerStyle={styles.list}
-        />
+        <List sx={{ paddingBottom: '20px' }}>
+          {acceptedRides.map(ride => (
+            <ListItem 
+              key={ride.id.toString()} 
+              button 
+              onClick={() => handleRideClick(ride)}
+              sx={{ 
+                padding: 0, 
+                marginBottom: '10px',
+                display: 'block'
+              }}
+            >
+              {renderRideItem({ item: ride })}
+            </ListItem>
+          ))}
+        </List>
       )}
-    </View>
+    </Container>
   );
 };
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: 10,
-    backgroundColor: '#f5f5f5',
-  },
-  centered: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  list: {
-    paddingBottom: 20,
-  },
-  card: {
-    borderRadius: 8,
-    marginBottom: 10,
-    padding: 15,
-  },
-  detailCard: {
-    borderRadius: 8,
-    padding: 15,
-    margin: 0,
-  },
-  dateText: {
-    fontSize: 14,
-    color: '#555',
-    marginBottom: 8,
-  },
-  statusText: {
-    fontSize: 14,
-    marginBottom: 5,
-  },
-  infoText: {
-    fontSize: 14,
-    marginBottom: 3,
-  },
-  accepted: {
-    color: 'green',
-    fontWeight: 'bold',
-  },
-  pending: {
-    color: 'orange',
-    fontWeight: 'bold',
-  },
-  completed: {
-    color: 'blue',
-    fontWeight: 'bold',
-  },
-  cancelled: {
-    color: 'red',
-    fontWeight: 'bold',
-  },
-  rejected: {
-    color: 'red',
-    fontWeight: 'bold',
-  },
-  errorText: {
-    color: 'red',
-    marginBottom: 20,
-    textAlign: 'center',
-  },
-  retryButton: {
-    backgroundColor: '#2089dc',
-    paddingHorizontal: 30,
-  },
-  detailRow: {
-    flexDirection: 'row',
-    marginBottom: 10,
-  },
-  detailLabel: {
-    width: 80,
-    fontWeight: 'bold',
-  },
-  detailValue: {
-    flex: 1,
-  },
-  divider: {
-    height: 1,
-    backgroundColor: '#e0e0e0',
-    marginVertical: 15,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 10,
-  },
-  contactContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    flexWrap: 'wrap',
-    marginTop: 10,
-    marginBottom: 10,
-  },
-  contactButton: {
-    backgroundColor: '#2089dc',
-    minWidth: 120,
-    margin: 5,
-  },
-  supportButton: {
-    backgroundColor: '#f0ad4e',
-    minWidth: 250,
-    margin: 5,
-  },
-  contactInfo: {
-    width: '100%',
-    textAlign: 'center',
-    color: '#555',
-    marginVertical: 10,
-  },
-  vehicleInfo: {
-    marginTop: 5,
-    lineHeight: 24,
-  },
-  backButtonContainer: {
-    marginTop: 20,
-  },
-  backButton: {
-    backgroundColor: '#999',
-  },
-});
 
 export default RiderAcceptedRides; 
