@@ -109,7 +109,22 @@ const RiderAcceptedRides = () => {
       }
       
       const data = await response.json();
-      console.log('Accepted rides data:', data);
+      console.log('Accepted rides data (full):', JSON.stringify(data));
+      console.log('First ride structure:', data.length > 0 ? Object.keys(data[0]) : 'No rides');
+      if (data.length > 0) {
+        console.log('Has ride_details?', data[0].hasOwnProperty('ride_details'));
+        console.log('Has ride?', data[0].hasOwnProperty('ride'));
+        if (data[0].ride) {
+          console.log('Direct ride object fields:', Object.keys(data[0].ride));
+        }
+        if (data[0].ride_details) {
+          console.log('ride_details fields:', Object.keys(data[0].ride_details));
+          console.log('Has driver in ride_details?', data[0].ride_details.hasOwnProperty('driver'));
+          if (data[0].ride_details.driver) {
+            console.log('Driver fields in ride_details:', Object.keys(data[0].ride_details.driver));
+          }
+        }
+      }
       
       // Process the data based on format
       // The backend might return a simplified format if there were serialization issues
@@ -132,16 +147,26 @@ const RiderAcceptedRides = () => {
             dropoff_location: item.dropoff_location,
             departure_time: new Date(item.departure_time),
             seats_needed: item.seats_needed,
+            ride: item.ride || null, // Keep this for backward compatibility
             rider: {
               name: item.rider_name
             },
             ride_details: {
               id: item.ride_id,
               driver: {
-                name: item.driver_name
+                first_name: item.driver_name?.split(' ')[0] || '',
+                last_name: item.driver_name?.split(' ')[1] || '',
+                email: item.driver_email || '',
+                phone_number: item.driver_phone || '',
+                vehicle_make: item.vehicle_make || '',
+                vehicle_model: item.vehicle_model || '',
+                vehicle_color: item.vehicle_color || '',
+                license_plate: item.license_plate || ''
               }
             }
           }));
+          
+          console.log('Mapped data (first item):', mappedData.length > 0 ? mappedData[0] : 'No rides');
           setAcceptedRides(mappedData);
           if (mappedData.length > 0) {
             setSelectedRide(mappedData[0]);
@@ -183,7 +208,7 @@ const RiderAcceptedRides = () => {
     fetchAcceptedRides();
   };
 
-  const handleRideClick = (ride) => {
+  const handleRideClick = async (ride) => {
     // Log the ride structure to understand what we're working with
     console.log('Selected ride details:', ride);
     console.log('Ride structure:', {
@@ -195,6 +220,59 @@ const RiderAcceptedRides = () => {
     });
     
     setSelectedRide(ride);
+    
+    // If ride_details exists but driver info is missing or incomplete, fetch detailed data
+    if (ride.ride_details && ride.ride_details.id && 
+        (!ride.ride_details.driver || !ride.ride_details.driver.first_name)) {
+      try {
+        // Show loading indicator for the details panel
+        setLoading(true);
+        
+        // Get the token
+        const token = localStorage.getItem('token');
+        if (!token) {
+          console.error('No token available for detailed fetch');
+          return;
+        }
+        
+        // Clean the token
+        const cleanToken = token.trim().replace(/^["'](.*)["']$/, '$1').replace(/^Bearer\s+/i, '');
+        
+        // Get detailed ride data
+        console.log(`Fetching detailed data for ride ${ride.id}`);
+        const response = await fetch(`${API_BASE_URL}/api/rides/${ride.ride_details.id}/`, {
+          headers: {
+            'Authorization': `Bearer ${cleanToken}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (!response.ok) {
+          throw new Error(`Failed to fetch ride details: ${response.status}`);
+        }
+        
+        const detailedRideData = await response.json();
+        console.log('Detailed ride data:', detailedRideData);
+        
+        // Update selected ride with more complete data
+        if (detailedRideData.driver) {
+          // Create a new object merging the existing ride with detailed driver data
+          const updatedRide = {
+            ...ride,
+            ride_details: {
+              ...ride.ride_details,
+              driver: detailedRideData.driver
+            }
+          };
+          console.log('Updated ride with detailed driver info:', updatedRide);
+          setSelectedRide(updatedRide);
+        }
+      } catch (error) {
+        console.error('Error fetching detailed ride data:', error);
+      } finally {
+        setLoading(false);
+      }
+    }
   };
 
   const getStatusChip = (status) => {
@@ -252,7 +330,30 @@ const RiderAcceptedRides = () => {
   };
 
   const getDriverInfo = (ride) => {
-    return ride?.ride_details?.driver || null;
+    // First check ride_details.driver (standard API format)
+    if (ride?.ride_details?.driver) {
+      return ride.ride_details.driver;
+    }
+    
+    // Then check ride.driver (possible legacy or different format)
+    if (ride?.ride?.driver) {
+      return ride.ride.driver;
+    }
+    
+    // Finally check if we're dealing with a simplified structure
+    // where ride object itself might contain driver info
+    if (ride?.ride && typeof ride.ride === 'object') {
+      const possibleDriver = ride.ride;
+      // Check if this object looks like a driver (has typical driver fields)
+      if (possibleDriver.first_name || possibleDriver.last_name || 
+          possibleDriver.email || possibleDriver.phone_number) {
+        return possibleDriver;
+      }
+    }
+    
+    // Add explicit logging when we fail to find driver info
+    console.warn('No driver info found for ride:', ride);
+    return null;
   };
 
   const formatDate = (dateString) => {
