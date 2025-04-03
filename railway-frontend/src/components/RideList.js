@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { Box, Typography, Button, Grid, Alert, Chip, Divider } from '@mui/material';
 import { LocationOn, AccessTime, People, DirectionsCar, Person, Email, Phone, Place, EventSeat } from '@mui/icons-material';
-import { API_BASE_URL } from '../config';
+import { API_BASE_URL, getAuthHeader, getAuthHeadersWithContentType } from '../config';
 import './RideTablet.css';
 
 const RideList = () => {
@@ -34,9 +34,7 @@ const RideList = () => {
 
       console.log('RideList - Making API request...');
       const response = await axios.get(`${API_BASE_URL}/api/rides/rides/`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
+        headers: getAuthHeader()
       });
       
       console.log('RideList - API response received:', response.status);
@@ -96,14 +94,11 @@ const RideList = () => {
 
   const handleAcceptRequest = async (requestId) => {
     try {
-      const token = localStorage.getItem('token');
       await axios.post(
         `${API_BASE_URL}/api/rides/requests/${requestId}/accept/`,
         {},
         {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
+          headers: getAuthHeader()
         }
       );
       fetchRides();
@@ -114,14 +109,11 @@ const RideList = () => {
 
   const handleRejectRequest = async (requestId) => {
     try {
-      const token = localStorage.getItem('token');
       await axios.post(
         `${API_BASE_URL}/api/rides/requests/${requestId}/reject/`,
         {},
         {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
+          headers: getAuthHeader()
         }
       );
       fetchRides();

@@ -28,9 +28,18 @@ function Navbar() {
     console.log('Navbar auth state:', { 
       isAuthenticated, 
       userType,
-      user
+      user,
+      token: authState.token ? 'exists' : 'missing'
     });
-  }, [isAuthenticated, userType, user]);
+    
+    // This check helps detect if localStorage and authState are in sync
+    const tokenInStorage = localStorage.getItem('token');
+    console.log('Token comparison:', {
+      authStateHasToken: !!authState.token,
+      localStorageHasToken: !!tokenInStorage,
+      inSync: !!authState.token === !!tokenInStorage
+    });
+  }, [isAuthenticated, userType, user, authState.token]);
 
   // For fallback/compatibility - check localStorage directly
   useEffect(() => {

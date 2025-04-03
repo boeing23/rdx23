@@ -23,7 +23,7 @@ import {
   CircularProgress
 } from '@mui/material';
 import { Schedule, LocationOn, Person, Phone, Email, Event, AccessTime, Cancel, Refresh, DirectionsCar, DriveEta } from '@mui/icons-material';
-import { API_BASE_URL } from '../config';
+import { API_BASE_URL, getAuthHeader, getAuthHeadersWithContentType } from '../config';
 import { format } from 'date-fns';
 import axios from 'axios';
 import { useAuth } from '../contexts/AuthContext';
@@ -49,9 +49,7 @@ const RiderAcceptedRides = () => {
     try {
       console.log('Fetching accepted rides...');
       const response = await axios.get(`${API_BASE_URL}/api/rides/requests/accepted/`, {
-        headers: {
-          Authorization: `Token ${authState.token}`
-        }
+        headers: getAuthHeader()
       });
       
       console.log('Full accepted rides data:', JSON.stringify(response.data, null, 2));
@@ -139,9 +137,7 @@ const RiderAcceptedRides = () => {
             try {
               console.log(`Fetching details for driver ID: ${driverId}`);
               const userResponse = await axios.get(`${API_BASE_URL}/api/users/${driverId}/`, {
-                headers: {
-                  Authorization: `Token ${authState.token}`
-                }
+                headers: getAuthHeader()
               });
               
               console.log(`User data for driver ${driverId}:`, userResponse.data);
@@ -257,9 +253,7 @@ const RiderAcceptedRides = () => {
         
         // Fetch user details from the users API
         const userResponse = await axios.get(`${API_BASE_URL}/api/users/${driverId}/`, {
-          headers: {
-            Authorization: `Token ${authState.token}`
-          }
+          headers: getAuthHeader()
         });
         
         console.log('Fetched user details:', userResponse.data);
