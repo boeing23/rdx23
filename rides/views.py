@@ -957,151 +957,151 @@ def generate_route(start, end, num_points=20):
         r = 6371000  # Radius of earth in meters
         return c * r
 
-# Create your views here.
+# Permission classes
+class IsDriverOrReadOnly(permissions.BasePermission):
+    def has_object_permission(self, request, view, obj):
+        if request.method in permissions.SAFE_METHODS:
+            return True
+        return obj.driver == request.user
 
-    class IsDriverOrReadOnly(permissions.BasePermission):
-        def has_object_permission(self, request, view, obj):
-            if request.method in permissions.SAFE_METHODS:
-                return True
-            return obj.driver == request.user
+    def has_permission(self, request, view):
+        if request.method in permissions.SAFE_METHODS:
+            return True
+        return request.user.user_type == 'DRIVER'
 
-        def has_permission(self, request, view):
-            if request.method in permissions.SAFE_METHODS:
-                return True
-            return request.user.user_type == 'DRIVER'
-
-    class IsRiderOrDriver(permissions.BasePermission):
-        def has_permission(self, request, view):
-            logger.info(f"Checking permission for user: {request.user.username}")
-            logger.info(f"User type: {request.user.user_type}")
-            logger.info(f"Request method: {request.method}")
-            logger.info(f"User authenticated: {request.user.is_authenticated}")
+class IsRiderOrDriver(permissions.BasePermission):
+    def has_permission(self, request, view):
+        logger.info(f"Checking permission for user: {request.user.username}")
+        logger.info(f"User type: {request.user.user_type}")
+        logger.info(f"Request method: {request.method}")
+        logger.info(f"User authenticated: {request.user.is_authenticated}")
+        
+        if not request.user.is_authenticated:
+            logger.warning(f"User {request.user.username} is not authenticated")
+            return False
             
-            if not request.user.is_authenticated:
-                logger.warning(f"User {request.user.username} is not authenticated")
-                return False
-                
-            # For POST requests, only allow riders
-            if request.method == 'POST':
-                is_rider = request.user.user_type == 'RIDER'
-                logger.info(f"POST request - User is rider: {is_rider}")
-                return is_rider
-                
-            # For other methods, allow both riders and drivers
-            is_allowed = request.user.user_type in ['RIDER', 'DRIVER']
-            logger.info(f"Non-POST request - User type allowed: {is_allowed}")
-            return is_allowed
+        # For POST requests, only allow riders
+        if request.method == 'POST':
+            is_rider = request.user.user_type == 'RIDER'
+            logger.info(f"POST request - User is rider: {is_rider}")
+            return is_rider
+            
+        # For other methods, allow both riders and drivers
+        is_allowed = request.user.user_type in ['RIDER', 'DRIVER']
+        logger.info(f"Non-POST request - User type allowed: {is_allowed}")
+        return is_allowed
 
-    class RideViewSet(viewsets.ModelViewSet):
-        serializer_class = RideSerializer
-        permission_classes = [permissions.IsAuthenticated]
+# ViewSet classes
+class RideViewSet(viewsets.ModelViewSet):
+    serializer_class = RideSerializer
+    permission_classes = [permissions.IsAuthenticated]
 
-        def get_queryset(self):
-            user = self.request.user
-            if hasattr(user, 'user_type') and user.user_type == 'driver':
-                return Ride.objects.filter(driver=user)
-            else:
-                return Ride.objects.filter(status='SCHEDULED').exclude(driver=user)
+    def get_queryset(self):
+        user = self.request.user
+        if hasattr(user, 'user_type') and user.user_type == 'driver':
+            return Ride.objects.filter(driver=user)
+        else:
+            return Ride.objects.filter(status='SCHEDULED').exclude(driver=user)
 
-    class RideRequestViewSet(viewsets.ModelViewSet):
-        serializer_class = RideRequestSerializer
-        permission_classes = [permissions.IsAuthenticated]
+class RideRequestViewSet(viewsets.ModelViewSet):
+    serializer_class = RideRequestSerializer
+    permission_classes = [permissions.IsAuthenticated]
 
-        def get_queryset(self):
-            return RideRequest.objects.filter(rider=self.request.user)
+    def get_queryset(self):
+        return RideRequest.objects.filter(rider=self.request.user)
 
-        def create(self, request, *args, **kwargs):
-            try:
-                logger.info("Starting ride request creation")
-                logger.info(f"Request data: {request.data}")
-                logger.info(f"User: {request.user.username}, ID: {request.user.id}, Type: {request.user.user_type}")
-                
-                # Validate the serializer
-                serializer = self.get_serializer(data=request.data)
-                if not serializer.is_valid():
-                    logger.error(f"Serializer validation failed: {serializer.errors}")
-                    return Response({
-                        'status': 'error',
-                        'has_match': False,
-                        'errors': serializer.errors
-                    }, status=status.HTTP_400_BAD_REQUEST)
-                    
-                logger.info(f"Serializer validated successfully: {serializer.validated_data}")
-                
-                # Create the ride request
-                ride_request = serializer.save(rider=request.user)
-                logger.info(f"Created ride request: {ride_request.id}")
-                
-                return Response({
-                    'status': 'success',
-                    'ride_request_id': ride_request.id,
-                    'message': 'Ride request created successfully'
-                }, status=status.HTTP_201_CREATED)
-                
-            except Exception as e:
-                logger.error(f"Error creating ride request: {str(e)}")
-                logger.exception("Full exception details:")
+    def create(self, request, *args, **kwargs):
+        try:
+            logger.info("Starting ride request creation")
+            logger.info(f"Request data: {request.data}")
+            logger.info(f"User: {request.user.username}, ID: {request.user.id}, Type: {request.user.user_type}")
+            
+            # Validate the serializer
+            serializer = self.get_serializer(data=request.data)
+            if not serializer.is_valid():
+                logger.error(f"Serializer validation failed: {serializer.errors}")
                 return Response({
                     'status': 'error',
-                    'message': str(e)
-                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-    class NotificationViewSet(viewsets.ModelViewSet):
-        serializer_class = NotificationSerializer
-        permission_classes = [permissions.IsAuthenticated]
-
-        def get_queryset(self):
-            # Log authentication details
-            logger.info(f"Notification request from user: {self.request.user.username}")
-            logger.info(f"User authenticated: {self.request.user.is_authenticated}")
-            logger.info(f"Request headers: {dict(self.request.headers)}")
-            logger.info(f"Auth header: {self.request.headers.get('Authorization', 'Not found')}")
+                    'has_match': False,
+                    'errors': serializer.errors
+                }, status=status.HTTP_400_BAD_REQUEST)
+                
+            logger.info(f"Serializer validated successfully: {serializer.validated_data}")
             
-            # Log notification retrieval for debugging
-            notifications = Notification.objects.filter(recipient=self.request.user).order_by('-created_at')
-            logger.info(f"Retrieved {notifications.count()} notifications for user {self.request.user.username}")
+            # Create the ride request
+            ride_request = serializer.save(rider=request.user)
+            logger.info(f"Created ride request: {ride_request.id}")
             
-            # Log RIDE_MATCH notifications for debugging
-            ride_match_count = notifications.filter(notification_type='RIDE_MATCH').count()
-            logger.info(f"User {self.request.user.username} has {ride_match_count} RIDE_MATCH notifications")
+            return Response({
+                'status': 'success',
+                'ride_request_id': ride_request.id,
+                'message': 'Ride request created successfully'
+            }, status=status.HTTP_201_CREATED)
             
-            if ride_match_count > 0:
-                sample = notifications.filter(notification_type='RIDE_MATCH').first()
-                logger.info(f"Sample RIDE_MATCH notification: id={sample.id}, ride_request={sample.ride_request_id if sample.ride_request else 'None'}")
-            
-            return notifications
+        except Exception as e:
+            logger.error(f"Error creating ride request: {str(e)}")
+            logger.exception("Full exception details:")
+            return Response({
+                'status': 'error',
+                'message': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-        @action(detail=True, methods=['post'])
-        def mark_as_read(self, request, pk=None):
-            notification = self.get_object()
-            notification.is_read = True
-            notification.save()
-            return Response({'status': 'notification marked as read'})
+class NotificationViewSet(viewsets.ModelViewSet):
+    serializer_class = NotificationSerializer
+    permission_classes = [permissions.IsAuthenticated]
 
-        @action(detail=False, methods=['post'])
-        def mark_all_as_read(self, request):
-            self.get_queryset().update(is_read=True)
-            return Response({'status': 'all notifications marked as read'})
-
-    def mark_past_rides_complete(self):
-        """
-        Automatically mark rides as complete if their departure time has passed.
-        """
-        current_time = timezone.now()
-        past_rides = RideRequest.objects.filter(
-            status='ACCEPTED',
-            departure_time__lt=current_time
-        )
+    def get_queryset(self):
+        # Log authentication details
+        logger.info(f"Notification request from user: {self.request.user.username}")
+        logger.info(f"User authenticated: {self.request.user.is_authenticated}")
+        logger.info(f"Request headers: {dict(self.request.headers)}")
+        logger.info(f"Auth header: {self.request.headers.get('Authorization', 'Not found')}")
         
-        for ride_request in past_rides:
-            ride_request.status = 'COMPLETED'
-            ride_request.save()
-            
-            # Create notification for the rider
-            Notification.objects.create(
-                recipient=ride_request.rider,
-                message=f"Your ride to {ride_request.ride.end_location} has been automatically marked as completed",
-                ride=ride_request.ride,
-                ride_request=ride_request,
-                notification_type='RIDE_COMPLETED'
-            )
+        # Log notification retrieval for debugging
+        notifications = Notification.objects.filter(recipient=self.request.user).order_by('-created_at')
+        logger.info(f"Retrieved {notifications.count()} notifications for user {self.request.user.username}")
+        
+        # Log RIDE_MATCH notifications for debugging
+        ride_match_count = notifications.filter(notification_type='RIDE_MATCH').count()
+        logger.info(f"User {self.request.user.username} has {ride_match_count} RIDE_MATCH notifications")
+        
+        if ride_match_count > 0:
+            sample = notifications.filter(notification_type='RIDE_MATCH').first()
+            logger.info(f"Sample RIDE_MATCH notification: id={sample.id}, ride_request={sample.ride_request_id if sample.ride_request else 'None'}")
+        
+        return notifications
+
+    @action(detail=True, methods=['post'])
+    def mark_as_read(self, request, pk=None):
+        notification = self.get_object()
+        notification.is_read = True
+        notification.save()
+        return Response({'status': 'notification marked as read'})
+
+    @action(detail=False, methods=['post'])
+    def mark_all_as_read(self, request):
+        self.get_queryset().update(is_read=True)
+        return Response({'status': 'all notifications marked as read'})
+
+def mark_past_rides_complete():
+    """
+    Automatically mark rides as complete if their departure time has passed.
+    """
+    current_time = timezone.now()
+    past_rides = RideRequest.objects.filter(
+        status='ACCEPTED',
+        departure_time__lt=current_time
+    )
+    
+    for ride_request in past_rides:
+        ride_request.status = 'COMPLETED'
+        ride_request.save()
+        
+        # Create notification for the rider
+        Notification.objects.create(
+            recipient=ride_request.rider,
+            message=f"Your ride to {ride_request.ride.end_location} has been automatically marked as completed",
+            ride=ride_request.ride,
+            ride_request=ride_request,
+            notification_type='RIDE_COMPLETED'
+        )
