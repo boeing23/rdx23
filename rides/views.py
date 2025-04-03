@@ -1002,7 +1002,51 @@ def generate_route(start, end, num_points=20):
                 return Ride.objects.filter(driver=user)
             else:
                 return Ride.objects.filter(status='SCHEDULED').exclude(driver=user)
+
+    class RideRequestViewSet(viewsets.ModelViewSet):
+        serializer_class = RideRequestSerializer
+        permission_classes = [permissions.IsAuthenticated]
+
+        def get_queryset(self):
+            return RideRequest.objects.filter(rider=self.request.user)
+
+        def create(self, request, *args, **kwargs):
+            try:
+                logger.info("Starting ride request creation")
+                logger.info(f"Request data: {request.data}")
+                logger.info(f"User: {request.user.username}, ID: {request.user.id}, Type: {request.user.user_type}")
                 
+                # Validate the serializer
+                serializer = self.get_serializer(data=request.data)
+                if not serializer.is_valid():
+                    logger.error(f"Serializer validation failed: {serializer.errors}")
+                    return Response({
+                        'status': 'error',
+                        'has_match': False,
+                        'errors': serializer.errors
+                    }, status=status.HTTP_400_BAD_REQUEST)
+                    
+                logger.info(f"Serializer validated successfully: {serializer.validated_data}")
+                
+                # Create the ride request
+                ride_request = serializer.save(rider=request.user)
+                logger.info(f"Created ride request: {ride_request.id}")
+                
+                return Response({
+                    'status': 'success',
+                    'ride_request_id': ride_request.id,
+                    'message': 'Ride request created successfully'
+                }, status=status.HTTP_201_CREATED)
+                
+            except Exception as e:
+                logger.error(f"Error creating ride request: {str(e)}")
+                logger.exception("Full exception details:")
+                return Response({
+                    'status': 'error',
+                    'message': str(e)
+                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    class NotificationViewSet(viewsets.ModelViewSet):
         serializer_class = NotificationSerializer
         permission_classes = [permissions.IsAuthenticated]
 
