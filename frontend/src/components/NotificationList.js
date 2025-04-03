@@ -51,31 +51,24 @@ function NotificationList() {
         return;
       }
 
-      // Make sure token is properly formatted (no extra quotes or spaces)
+      // Clean token format
       const cleanToken = token.trim().replace(/^["'](.*)["']$/, '$1');
       
-      // Check token validity before making the request
-      if (!cleanToken || cleanToken.length < 10) {
-        console.error('Invalid token format');
-        setError('Invalid authentication token. Please log in again.');
-        localStorage.removeItem('token');
-        localStorage.removeItem('userType');
-        return;
-      }
-
       console.log('Fetching notifications with token...');
-      const headers = {
-        'Authorization': `Bearer ${cleanToken}`,
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-      };
-
+      console.log('Token format check:', cleanToken.substring(0, 10) + '...');
+      
       const response = await fetch(`${API_BASE_URL}/api/rides/notifications/`, {
         method: 'GET',
-        headers: headers,
-        // Adding credentials to ensure cookies are sent
-        credentials: 'include'
+        headers: {
+          'Authorization': `Bearer ${cleanToken}`,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        }
+        // Removed credentials: 'include' as it can cause issues with JWT
       });
+
+      // Log response details for debugging
+      console.log('Notifications response status:', response.status);
 
       if (response.ok) {
         const data = await response.json();
@@ -86,24 +79,32 @@ function NotificationList() {
         setError('');
       } else {
         // Handle response error
-        let errorMessage = 'Failed to fetch notifications';
-        try {
-          const errorData = await response.json();
-          errorMessage = errorData.message || errorData.detail || errorMessage;
-        } catch (e) {
-          // If can't parse JSON, use status text
-          errorMessage = `${errorMessage}: ${response.statusText}`;
-        }
+        console.error('Error fetching notifications:', response.status);
         
-        console.error('Error response status:', response.status, errorMessage);
-        setError(errorMessage);
+        try {
+          const errorData = await response.text();
+          console.error('Error response data:', errorData);
+          console.error('Error response headers:', Object.fromEntries([...response.headers]));
+          
+          // Try to parse as JSON if possible
+          try {
+            const jsonError = JSON.parse(errorData);
+            setError(jsonError.detail || `Error ${response.status}: ${response.statusText}`);
+          } catch (e) {
+            setError(`Error ${response.status}: ${response.statusText}`);
+          }
+        } catch (e) {
+          setError(`Error ${response.status}: ${response.statusText}`);
+        }
         
         // If unauthorized, handle token expiration
         if (response.status === 401) {
-          console.log('Unauthorized, clearing token and redirecting to login');
+          console.log('Unauthorized, clearing token');
           localStorage.removeItem('token');
           localStorage.removeItem('userType');
-          // Don't redirect immediately to avoid disruptive user experience
+          localStorage.removeItem('userId');
+          // Dispatch auth-change event
+          window.dispatchEvent(new Event('auth-change'));
         }
       }
     } catch (err) {
@@ -113,49 +114,9 @@ function NotificationList() {
   };
 
   useEffect(() => {
-    // Perform a single test fetch first to diagnose issues
-    const testFetch = async () => {
-      try {
-        // First try the health endpoint without auth
-        console.log('Testing API health endpoint without auth...');
-        const healthResponse = await fetch(`${API_BASE_URL}/api/health/`);
-        console.log('Health endpoint response:', healthResponse.status);
-        
-        // Test notifications endpoint without auth to see what error we get
-        console.log('Testing notifications endpoint without auth (should fail)...');
-        const noAuthResponse = await fetch(`${API_BASE_URL}/api/rides/notifications/`);
-        console.log('No auth response status:', noAuthResponse.status);
-        
-        // Now test with auth
-        const token = localStorage.getItem('token');
-        if (token) {
-          console.log('Testing with auth token...');
-          // Try various Authorization header formats
-          const authResponse = await fetch(`${API_BASE_URL}/api/rides/notifications/`, {
-            headers: {
-              'Authorization': `Bearer ${token}`
-            }
-          });
-          console.log('Auth response status:', authResponse.status);
-          
-          if (authResponse.status === 401) {
-            // Try with a different format
-            console.log('Trying token without Bearer prefix...');
-            const authResponse2 = await fetch(`${API_BASE_URL}/api/rides/notifications/`, {
-              headers: {
-                'Authorization': token
-              }
-            });
-            console.log('Auth response (no Bearer) status:', authResponse2.status);
-          }
-        }
-      } catch (error) {
-        console.error('Test fetch error:', error);
-      }
-    };
-    
-    testFetch();
+    // Fetch notifications when component mounts and periodically
     fetchNotifications();
+    
     // Poll for new notifications every 30 seconds
     const interval = setInterval(fetchNotifications, 30000);
     return () => clearInterval(interval);
@@ -169,10 +130,14 @@ function NotificationList() {
         return;
       }
 
+      // Clean token format
+      const cleanToken = token.trim().replace(/^["'](.*)["']$/, '$1');
+
       const response = await fetch(`${API_BASE_URL}/api/rides/notifications/${notificationId}/mark_as_read/`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${token}`,
+          'Authorization': `Bearer ${cleanToken}`,
+          'Content-Type': 'application/json',
           'Accept': 'application/json'
         }
       });
@@ -188,8 +153,14 @@ function NotificationList() {
         );
         setUnreadCount(prev => Math.max(0, prev - 1));
       } else {
-        const errorData = await response.json().catch(() => ({}));
-        console.error('Error marking notification as read:', errorData.message || 'Failed to mark as read');
+        console.error(`Error marking notification ${notificationId} as read: ${response.status}`);
+        if (response.status === 401) {
+          setError('Your session has expired. Please log in again.');
+          localStorage.removeItem('token');
+          localStorage.removeItem('userType');
+          localStorage.removeItem('userId');
+          window.dispatchEvent(new Event('auth-change'));
+        }
       }
     } catch (err) {
       console.error('Error marking notification as read:', err);
@@ -205,13 +176,16 @@ function NotificationList() {
         return;
       }
 
+      // Clean token format
+      const cleanToken = token.trim().replace(/^["'](.*)["']$/, '$1');
+
       console.log(`Accepting ride request ${rideRequestId}`);
       
       // Use the correct URL based on the server configuration
       const response = await fetch(`${API_BASE_URL}/api/rides/requests/${rideRequestId}/accept_match/`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${token}`,
+          'Authorization': `Bearer ${cleanToken}`,
           'Content-Type': 'application/json',
           'Accept': 'application/json'
         },
@@ -229,11 +203,20 @@ function NotificationList() {
         try {
           const errorText = await response.text();
           console.error('Error response body:', errorText);
+          
+          if (response.status === 401) {
+            alert('Your session has expired. Please log in again.');
+            localStorage.removeItem('token');
+            localStorage.removeItem('userType');
+            localStorage.removeItem('userId');
+            window.dispatchEvent(new Event('auth-change'));
+            return;
+          }
         } catch (e) {
           console.error('Could not parse error response:', e);
         }
         
-        alert('Failed to accept ride match. Please check the console for details.');
+        alert('Failed to accept ride match. Please try again.');
       }
     } catch (error) {
       console.error('Error accepting ride match:', error);

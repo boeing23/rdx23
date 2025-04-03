@@ -27,13 +27,20 @@ const RideList = () => {
       if (!token) {
         console.error('RideList - No token found');
         setError('Please log in to view rides');
+        setLoading(false);
         return;
       }
+
+      // Clean token format
+      const cleanToken = token.trim().replace(/^["'](.*)["']$/, '$1');
+      console.log('RideList - Token format check:', cleanToken.substring(0, 10) + '...');
 
       console.log('RideList - Making API request...');
       const response = await axios.get(`${API_BASE_URL}/api/rides/rides/`, {
         headers: {
-          'Authorization': `Bearer ${token}`
+          'Authorization': `Bearer ${cleanToken}`,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
         }
       });
       
@@ -52,8 +59,13 @@ const RideList = () => {
         // Clear invalid token
         localStorage.removeItem('token');
         localStorage.removeItem('userType');
-        // Redirect to login
-        navigate('/login');
+        localStorage.removeItem('userId');
+        // Dispatch event for navbar update
+        window.dispatchEvent(new Event('auth-change'));
+        // Redirect to login after a short delay
+        setTimeout(() => {
+          navigate('/login');
+        }, 2000);
       } else {
         setError('Error fetching rides. Please try again.');
       }
@@ -75,36 +87,74 @@ const RideList = () => {
   const handleAcceptRequest = async (requestId) => {
     try {
       const token = localStorage.getItem('token');
+      if (!token) {
+        setError('Please log in to accept requests');
+        return;
+      }
+
+      // Clean token format
+      const cleanToken = token.trim().replace(/^["'](.*)["']$/, '$1');
+
       await axios.post(
         `${API_BASE_URL}/api/rides/requests/${requestId}/accept/`,
         {},
         {
           headers: {
-            'Authorization': `Bearer ${token}`
+            'Authorization': `Bearer ${cleanToken}`,
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
           }
         }
       );
       fetchRides();
     } catch (err) {
-      setError('Error accepting request. Please try again.');
+      console.error('Error accepting request:', err);
+      if (err.response?.status === 401) {
+        setError('Your session has expired. Please log in again.');
+        localStorage.removeItem('token');
+        localStorage.removeItem('userType');
+        localStorage.removeItem('userId');
+        window.dispatchEvent(new Event('auth-change'));
+      } else {
+        setError('Error accepting request. Please try again.');
+      }
     }
   };
 
   const handleRejectRequest = async (requestId) => {
     try {
       const token = localStorage.getItem('token');
+      if (!token) {
+        setError('Please log in to reject requests');
+        return;
+      }
+
+      // Clean token format
+      const cleanToken = token.trim().replace(/^["'](.*)["']$/, '$1');
+
       await axios.post(
         `${API_BASE_URL}/api/rides/requests/${requestId}/reject/`,
         {},
         {
           headers: {
-            'Authorization': `Bearer ${token}`
+            'Authorization': `Bearer ${cleanToken}`,
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
           }
         }
       );
       fetchRides();
     } catch (err) {
-      setError('Error rejecting request. Please try again.');
+      console.error('Error rejecting request:', err);
+      if (err.response?.status === 401) {
+        setError('Your session has expired. Please log in again.');
+        localStorage.removeItem('token');
+        localStorage.removeItem('userType');
+        localStorage.removeItem('userId');
+        window.dispatchEvent(new Event('auth-change'));
+      } else {
+        setError('Error rejecting request. Please try again.');
+      }
     }
   };
 
