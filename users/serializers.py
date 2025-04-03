@@ -1,28 +1,36 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from .models import Rating
+import logging
 
 User = get_user_model()
+logger = logging.getLogger(__name__)
 
 class UserSerializer(serializers.ModelSerializer):
     password2 = serializers.CharField(write_only=True, required=False)
     
     class Meta:
         model = User
-        fields = (
-            'id', 'username', 'email', 'password', 'password2', 'first_name', 'last_name',
-            'user_type', 'phone_number', 'rating', 'total_rides',
-            'is_verified', 'emergency_contact', 'emergency_phone',
-            'vehicle_make', 'vehicle_model', 'vehicle_year',
-            'vehicle_color', 'license_plate', 'max_passengers',
-            'preferred_pickup_locations'
-        )
-        read_only_fields = ('rating', 'total_rides', 'is_verified')
-        extra_kwargs = {
-            'password': {'write_only': True, 'required': False},
-            'id': {'read_only': True},
-            'user_type': {'required': True}
-        }
+        fields = [
+            'id', 'username', 'email', 'first_name', 'last_name', 
+            'phone_number', 'user_type', 'profile_image', 
+            'vehicle_make', 'vehicle_model', 'vehicle_color', 
+            'vehicle_year', 'license_plate', 'max_passengers'
+        ]
+        extra_kwargs = {'password': {'write_only': True}}
+        
+    def to_representation(self, instance):
+        """Custom representation to include all driver details when needed"""
+        data = super().to_representation(instance)
+        
+        # Log what fields are available for debugging
+        logger.info(f"Serializing user {instance.id} with fields: {list(data.keys())}")
+        
+        # Log vehicle details specifically
+        if instance.user_type == 'DRIVER':
+            logger.info(f"Driver vehicle details - Make: {instance.vehicle_make}, Model: {instance.vehicle_model}")
+        
+        return data
 
     def validate(self, data):
         # Only validate password if it's being set
@@ -122,14 +130,44 @@ class UserSerializer(serializers.ModelSerializer):
         instance.save()
         return instance
 
-class RatingSerializer(serializers.ModelSerializer):
-    from_user = UserSerializer(read_only=True)
-    to_user = UserSerializer(read_only=True)
+class UserRegistrationSerializer(serializers.ModelSerializer):
+    password = serializers.CharField(write_only=True)
+    
+    class Meta:
+        model = User
+        fields = [
+            'id', 'username', 'email', 'password', 
+            'first_name', 'last_name', 'phone_number',
+            'user_type', 'vehicle_make', 'vehicle_model',
+            'vehicle_color', 'vehicle_year', 'license_plate',
+            'max_passengers'
+        ]
+    
+    def create(self, validated_data):
+        password = validated_data.pop('password')
+        user = User.objects.create(**validated_data)
+        user.set_password(password)
+        user.save()
+        return user
 
+class RatingSerializer(serializers.ModelSerializer):
+    reviewer_name = serializers.SerializerMethodField()
+    subject_name = serializers.SerializerMethodField()
+    
     class Meta:
         model = Rating
-        fields = ('id', 'from_user', 'to_user', 'rating', 'comment', 'created_at')
-        read_only_fields = ('created_at',)
+        fields = ['id', 'reviewer', 'subject', 'reviewer_name', 'subject_name', 'rating', 'comment', 'created_at']
+        read_only_fields = ['reviewer', 'created_at']
+    
+    def get_reviewer_name(self, obj):
+        if obj.reviewer:
+            return f"{obj.reviewer.first_name} {obj.reviewer.last_name}"
+        return ""
+    
+    def get_subject_name(self, obj):
+        if obj.subject:
+            return f"{obj.subject.first_name} {obj.subject.last_name}"
+        return ""
 
     def validate(self, data):
         if self.context['request'].user == data['to_user']:

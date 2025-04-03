@@ -25,6 +25,10 @@ import {
 import { Schedule, LocationOn, Person, Phone, Email, Event, AccessTime, Cancel, Refresh, DirectionsCar, DriveEta } from '@mui/icons-material';
 import { API_BASE_URL } from '../config';
 import { format } from 'date-fns';
+import axios from 'axios';
+import { useAuth } from '../contexts/AuthContext';
+import { View, Text, FlatList, StyleSheet, TouchableOpacity, ActivityIndicator, Linking, ScrollView } from 'react-native';
+import { Icon } from 'react-native-elements';
 
 const RiderAcceptedRides = () => {
   const [acceptedRides, setAcceptedRides] = useState([]);
@@ -34,175 +38,146 @@ const RiderAcceptedRides = () => {
   const [openCancelDialog, setOpenCancelDialog] = useState(false);
   const [isRetrying, setIsRetrying] = useState(false);
   const [retryable, setRetryable] = useState(false);
+  const { authState } = useAuth();
 
   const fetchAcceptedRides = async () => {
     setLoading(true);
     setError(null);
     try {
       console.log('Fetching accepted rides...');
-      const token = localStorage.getItem('token');
-      
-      // Log token info for debugging (without exposing full token)
-      if (token) {
-        console.log(`Token available (length: ${token.length})`);
-      } else {
-        console.error('No token available for fetch');
-      }
-      
-      // First make a test request to check server status
-      try {
-        console.log('Testing server connection...');
-        const pingResponse = await fetch(`${API_BASE_URL}/api/rides/`);
-        console.log(`Server health check status: ${pingResponse.status}`);
-      } catch (pingError) {
-        console.warn('Server health check failed:', pingError.message);
-      }
-      
-      // Clean the token to ensure proper formatting
-      const cleanToken = token ? token.trim().replace(/^["'](.*)["']$/, '$1').replace(/^Bearer\s+/i, '') : '';
-      
-      const response = await fetch(`${API_BASE_URL}/api/rides/requests/accepted/`, {
+      const response = await axios.get(`${API_BASE_URL}/api/rides/requests/accepted/`, {
         headers: {
-          'Authorization': `Bearer ${cleanToken}`,
-          'Content-Type': 'application/json'
+          Authorization: `Token ${authState.token}`
         }
       });
       
-      console.log(`Response status: ${response.status}`);
+      console.log('Full accepted rides data:', JSON.stringify(response.data, null, 2));
       
-      if (!response.ok) {
-        // Try to get more detailed error information
-        let errorDetail = '';
+      // Map the response data based on its structure
+      let mappedRides = [];
+      
+      if (Array.isArray(response.data)) {
+        console.log('Response is array format (simplified fallback)');
+        // This is the simplified fallback format returned by the backend
+        mappedRides = response.data.map(ride => {
+          console.log('Processing ride in simplified format:', ride);
+          
+          // Parse driver name into first and last name if available
+          let firstName = '', lastName = '';
+          if (ride.driver_name) {
+            const nameParts = ride.driver_name.split(' ');
+            firstName = nameParts[0] || '';
+            lastName = nameParts.slice(1).join(' ') || '';
+          }
+          
+          // Create mapped object with all available driver info from API
+          return {
+            id: ride.id,
+            status: ride.status,
+            ride_id: ride.ride_id,
+            pickup_location: ride.pickup_location,
+            dropoff_location: ride.dropoff_location,
+            departure_time: ride.departure_time,
+            seats_needed: ride.seats_needed,
+            ride_details: null, // Not available in this format
+            driver: {
+              id: ride.driver_id || null,
+              first_name: firstName,
+              last_name: lastName,
+              full_name: ride.driver_name || 'Unknown Driver',
+              email: ride.driver_email || null,
+              phone_number: ride.driver_phone || null,
+              vehicle_make: ride.vehicle_make || null,
+              vehicle_model: ride.vehicle_model || null,
+              vehicle_color: ride.vehicle_color || null,
+              vehicle_year: ride.vehicle_year || null,
+              license_plate: ride.license_plate || null
+            }
+          };
+        });
+      } else {
+        console.log('Response appears to be in standard format');
+        mappedRides = response.data.map(ride => {
+          console.log('Processing ride in standard format:', ride);
+          
+          // Check if ride_details and driver are populated
+          const hasRideDetails = ride.ride_details && typeof ride.ride_details === 'object';
+          const hasDriverInRideDetails = hasRideDetails && ride.ride_details.driver;
+          
+          // Get driver info from the most appropriate location
+          const driver = hasDriverInRideDetails ? ride.ride_details.driver : 
+                        (ride.driver ? ride.driver : null);
+          
+          console.log('Driver info available:', driver ? 'Yes' : 'No');
+          
+          return {
+            ...ride,
+            driver: driver
+          };
+        });
+      }
+      
+      console.log(`Processed ${mappedRides.length} rides`);
+      
+      // Get the user IDs of all drivers
+      const driverIds = mappedRides
+        .filter(ride => ride.driver && ride.driver.id)
+        .map(ride => ride.driver.id);
+      
+      console.log('Driver IDs to fetch:', driverIds);
+      
+      // If we have driver IDs, fetch their full details from users table
+      if (driverIds.length > 0) {
         try {
-          const errorResponse = await response.text();
-          console.error('Error response:', errorResponse);
-          
-          // Check if the error might be related to optimal_pickup_point
-          if (errorResponse.includes('optimal_pickup_point')) {
-            console.error('Error appears to be related to optimal_pickup_point field');
-            errorDetail = ' (Database schema issue detected)';
-            throw new Error('Database schema error: optimal_pickup_point field');
-          }
-          
-          // Try to parse as JSON if possible
-          try {
-            const errorJson = JSON.parse(errorResponse);
-            console.error('Error details:', errorJson);
-            errorDetail = errorJson.detail || errorJson.message || errorJson.error_details
-              ? ` - ${errorJson.detail || errorJson.message || errorJson.error_details}`
-              : '';
-          } catch (e) {
-            // Not JSON, use text
-            errorDetail = errorResponse ? ` - ${errorResponse.substring(0, 100)}...` : '';
-          }
-        } catch (parseError) {
-          console.error('Could not parse error response:', parseError);
-        }
-        
-        if (response.status === 500) {
-          throw new Error(`Server error (500)${errorDetail}`);
-        } else if (response.status === 401) {
-          throw new Error('Authentication error - please log in again');
-        } else {
-          throw new Error(`Error ${response.status}${errorDetail}`);
-        }
-      }
-      
-      const data = await response.json();
-      console.log('Accepted rides data (full):', JSON.stringify(data));
-      console.log('First ride structure:', data.length > 0 ? Object.keys(data[0]) : 'No rides');
-      if (data.length > 0) {
-        console.log('Has ride_details?', data[0].hasOwnProperty('ride_details'));
-        console.log('Has ride?', data[0].hasOwnProperty('ride'));
-        if (data[0].ride) {
-          console.log('Direct ride object fields:', Object.keys(data[0].ride));
-        }
-        if (data[0].ride_details) {
-          console.log('ride_details fields:', Object.keys(data[0].ride_details));
-          console.log('Has driver in ride_details?', data[0].ride_details.hasOwnProperty('driver'));
-          if (data[0].ride_details.driver) {
-            console.log('Driver fields in ride_details:', Object.keys(data[0].ride_details.driver));
-          }
-        }
-      }
-      
-      // Process the data based on format
-      // The backend might return a simplified format if there were serialization issues
-      if (data.length > 0) {
-        if (data[0].hasOwnProperty('ride_details')) {
-          // Standard format
-          console.log('Received standard ride request format');
-          setAcceptedRides(data);
-          if (data.length > 0) {
-            setSelectedRide(data[0]);
-          }
-        } else if (data[0].hasOwnProperty('ride_id')) {
-          // Simplified fallback format
-          console.log('Received simplified fallback format');
-          // Map the simplified data to a format that works with our UI
-          const mappedData = data.map(item => {
-            // Parse driver name into components
-            const driverNameParts = item.driver_name?.split(' ') || [];
-            const firstName = driverNameParts[0] || '';
-            const lastName = driverNameParts.slice(1).join(' ') || '';
+          // Fetch driver details from users_user table
+          await Promise.all(driverIds.map(async (driverId) => {
+            if (!driverId) return;
             
-            // Create a complete mapped object with placeholder data for a better user experience
-            return {
-              id: item.id,
-              status: item.status,
-              pickup_location: item.pickup_location,
-              dropoff_location: item.dropoff_location,
-              departure_time: new Date(item.departure_time),
-              seats_needed: item.seats_needed,
-              ride: item.ride || null, // Keep this for backward compatibility
-              rider: {
-                name: item.rider_name
-              },
-              driver_name: item.driver_name, // Keep the original driver_name for reference
-              ride_details: {
-                id: item.ride_id,
-                driver: {
-                  first_name: firstName,
-                  last_name: lastName,
-                  full_name: item.driver_name,
-                  // Add placeholder data for good user experience
-                  email: 'Contact through ChalBeyy',
-                  phone_number: 'Contact through ChalBeyy',
-                  vehicle_make: 'Vehicle details',
-                  vehicle_model: 'available at pickup',
-                  vehicle_color: '',
-                  license_plate: 'Available at pickup'
+            try {
+              console.log(`Fetching details for driver ID: ${driverId}`);
+              const userResponse = await axios.get(`${API_BASE_URL}/api/users/${driverId}/`, {
+                headers: {
+                  Authorization: `Token ${authState.token}`
                 }
-              }
-            };
-          });
-          
-          console.log('Mapped data (first item):', mappedData.length > 0 ? mappedData[0] : 'No rides');
-          setAcceptedRides(mappedData);
-          if (mappedData.length > 0) {
-            setSelectedRide(mappedData[0]);
-          }
-        } else {
-          console.error('Unknown data format received:', data);
-          setError('Received unexpected data format from server');
+              });
+              
+              console.log(`User data for driver ${driverId}:`, userResponse.data);
+              
+              // Update the corresponding ride with complete driver info
+              mappedRides = mappedRides.map(ride => {
+                if (ride.driver && ride.driver.id === driverId) {
+                  return {
+                    ...ride,
+                    driver: {
+                      ...ride.driver,
+                      ...userResponse.data,
+                      // Keep the original full_name if it exists
+                      full_name: ride.driver.full_name || `${userResponse.data.first_name} ${userResponse.data.last_name}`
+                    }
+                  };
+                }
+                return ride;
+              });
+            } catch (err) {
+              console.error(`Error fetching driver ${driverId} details:`, err);
+            }
+          }));
+        } catch (err) {
+          console.error('Error fetching driver details:', err);
         }
-      } else {
-        // Empty array - no rides
-        setAcceptedRides([]);
-        setSelectedRide(null);
-      }
-    } catch (error) {
-      console.error('Error fetching accepted rides:', error);
-      
-      // Set a more detailed error message
-      if (error.message.includes('Database schema error')) {
-        setError('Server is being updated. Please try again later.');
-      } else {
-        setError(`Failed to load rides: ${error.message}`);
       }
       
-      // If the error might be fixable with a retry, set retryable flag
-      setRetryable(true);
+      setAcceptedRides(mappedRides);
+      console.log(`Final rides data with ${mappedRides.length} rides`);
+    } catch (err) {
+      console.error('Error fetching accepted rides:', err);
+      if (err.response) {
+        console.error('Error response:', err.response.data);
+        console.error('Status code:', err.response.status);
+        setError(`Error ${err.response.status}: ${JSON.stringify(err.response.data)}`);
+      } else {
+        setError('Network error. Please check your connection.');
+      }
     } finally {
       setLoading(false);
     }
@@ -262,156 +237,53 @@ const RiderAcceptedRides = () => {
   };
 
   const handleRideClick = async (ride) => {
-    // Log the ride structure to understand what we're working with
-    console.log('Selected ride details:', ride);
-    console.log('Ride structure:', {
-      hasRideDetails: !!ride.ride_details,
-      hasDriver: !!(ride.ride_details?.driver),
-      driverInfo: ride.ride_details?.driver,
-      hasRideProperty: !!ride.ride,
-      rideDriverInfo: ride.ride?.driver
-    });
+    console.log('Selected ride:', ride);
     
-    setSelectedRide(ride);
+    // Check if driver info is incomplete
+    const isDriverInfoIncomplete = !ride.driver || 
+                                  !ride.driver.phone_number || 
+                                  !ride.driver.vehicle_make || 
+                                  !ride.driver.license_plate;
     
-    // Get the driver info
-    const driverInfo = getDriverInfo(ride);
-    console.log('Driver info from getDriverInfo:', driverInfo);
-    
-    // Check if we need to fetch complete driver details
-    const needsDriverDetails = driverInfo && 
-      (driverInfo.id || driverInfo.username) && 
-      (!driverInfo.vehicle_make || !driverInfo.vehicle_model || !driverInfo.phone_number);
-    
-    if (needsDriverDetails) {
+    if (isDriverInfoIncomplete && ride.driver && ride.driver.id) {
       try {
-        // Show loading indicator
-        setLoading(true);
+        console.log(`Fetching complete driver details for ID: ${ride.driver.id}`);
         
-        // Get the token
-        const token = localStorage.getItem('token');
-        if (!token) {
-          console.error('No token available for detailed fetch');
-          return;
-        }
+        // Get driver ID from the appropriate source
+        const driverId = ride.driver.id;
         
-        // Clean the token
-        const cleanToken = token.trim().replace(/^["'](.*)["']$/, '$1').replace(/^Bearer\s+/i, '');
-        
-        // Get driver user ID
-        const driverId = driverInfo.id || driverInfo.username;
-        console.log(`Fetching detailed driver data for user ${driverId}`);
-        
-        // Fetch user details from the users API endpoint
-        const response = await fetch(`${API_BASE_URL}/api/users/${driverId}/`, {
+        // Fetch user details from the users API
+        const userResponse = await axios.get(`${API_BASE_URL}/api/users/${driverId}/`, {
           headers: {
-            'Authorization': `Bearer ${cleanToken}`,
-            'Content-Type': 'application/json'
+            Authorization: `Token ${authState.token}`
           }
         });
         
-        if (!response.ok) {
-          throw new Error(`Failed to fetch driver details: ${response.status}`);
-        }
+        console.log('Fetched user details:', userResponse.data);
         
-        const driverUserData = await response.json();
-        console.log('Detailed driver user data:', driverUserData);
-        
-        // Create updated driver info with complete profile
-        const completeDriverInfo = {
-          ...driverInfo,
-          // Add or update these fields from user data
-          first_name: driverUserData.first_name || driverInfo.first_name,
-          last_name: driverUserData.last_name || driverInfo.last_name,
-          email: driverUserData.email || driverInfo.email,
-          phone_number: driverUserData.phone_number || driverInfo.phone_number,
-          vehicle_make: driverUserData.vehicle_make || driverInfo.vehicle_make,
-          vehicle_model: driverUserData.vehicle_model || driverInfo.vehicle_model,
-          vehicle_color: driverUserData.vehicle_color || driverInfo.vehicle_color,
-          vehicle_year: driverUserData.vehicle_year || driverInfo.vehicle_year,
-          license_plate: driverUserData.license_plate || driverInfo.license_plate
+        // Create updated ride with complete driver information
+        const updatedRide = {
+          ...ride,
+          driver: {
+            ...ride.driver,
+            ...userResponse.data
+          }
         };
         
-        console.log('Complete driver info:', completeDriverInfo);
+        // Update the ride in the list
+        setAcceptedRides(acceptedRides.map(r => r.id === ride.id ? updatedRide : r));
         
-        // Update selected ride with the complete driver information
-        const updatedRide = { ...ride };
-        
-        // Update the driver info in the appropriate place
-        if (updatedRide.ride_details?.driver) {
-          updatedRide.ride_details.driver = completeDriverInfo;
-        } else if (updatedRide.ride?.driver) {
-          updatedRide.ride.driver = completeDriverInfo;
-        } else if (updatedRide.ride_details) {
-          updatedRide.ride_details.driver = completeDriverInfo;
-        } else {
-          // Create ride_details if it doesn't exist
-          updatedRide.ride_details = {
-            ...(updatedRide.ride_details || {}),
-            driver: completeDriverInfo
-          };
-        }
-        
-        console.log('Updated ride with complete driver info:', updatedRide);
+        // Update selected ride
         setSelectedRide(updatedRide);
-      } catch (error) {
-        console.error('Error fetching detailed driver data:', error);
-      } finally {
-        setLoading(false);
+      } catch (err) {
+        console.error('Error fetching driver details:', err);
+        
+        // Still select the ride even if fetching details failed
+        setSelectedRide(ride);
       }
-    }
-    
-    // If ride_details exists but driver info is missing or incomplete, also try fetching detailed ride data
-    if (ride.ride_details && ride.ride_details.id && 
-        (!ride.ride_details.driver || !ride.ride_details.driver.first_name)) {
-      try {
-        // Show loading indicator for the details panel
-        setLoading(true);
-        
-        // Get the token
-        const token = localStorage.getItem('token');
-        if (!token) {
-          console.error('No token available for detailed fetch');
-          return;
-        }
-        
-        // Clean the token
-        const cleanToken = token.trim().replace(/^["'](.*)["']$/, '$1').replace(/^Bearer\s+/i, '');
-        
-        // Get detailed ride data
-        console.log(`Fetching detailed data for ride ${ride.id}`);
-        const response = await fetch(`${API_BASE_URL}/api/rides/${ride.ride_details.id}/`, {
-          headers: {
-            'Authorization': `Bearer ${cleanToken}`,
-            'Content-Type': 'application/json'
-          }
-        });
-        
-        if (!response.ok) {
-          throw new Error(`Failed to fetch ride details: ${response.status}`);
-        }
-        
-        const detailedRideData = await response.json();
-        console.log('Detailed ride data:', detailedRideData);
-        
-        // Update selected ride with more complete data
-        if (detailedRideData.driver) {
-          // Create a new object merging the existing ride with detailed driver data
-          const updatedRide = {
-            ...ride,
-            ride_details: {
-              ...ride.ride_details,
-              driver: detailedRideData.driver
-            }
-          };
-          console.log('Updated ride with detailed driver info:', updatedRide);
-          setSelectedRide(updatedRide);
-        }
-      } catch (error) {
-        console.error('Error fetching detailed ride data:', error);
-      } finally {
-        setLoading(false);
-      }
+    } else {
+      // If driver info is already complete, just select the ride
+      setSelectedRide(ride);
     }
   };
 
@@ -470,52 +342,93 @@ const RiderAcceptedRides = () => {
   };
 
   const getDriverInfo = (ride) => {
-    // First check ride_details.driver (standard API format)
-    if (ride?.ride_details?.driver) {
+    if (!ride) return null;
+    
+    // Try to get driver from ride_details.driver first
+    if (ride.ride_details && ride.ride_details.driver) {
+      console.log('Using driver from ride_details.driver');
       return ride.ride_details.driver;
     }
     
-    // Then check ride.driver (possible legacy or different format)
-    if (ride?.ride?.driver) {
-      return ride.ride.driver;
+    // Then try ride.driver
+    if (ride.driver) {
+      console.log('Using driver from ride.driver');
+      return ride.driver;
     }
     
-    // Finally check if we're dealing with a simplified structure
-    // where ride object itself might contain driver info
-    if (ride?.ride && typeof ride.ride === 'object') {
-      const possibleDriver = ride.ride;
-      // Check if this object looks like a driver (has typical driver fields)
-      if (possibleDriver.first_name || possibleDriver.last_name || 
-          possibleDriver.email || possibleDriver.phone_number) {
-        return possibleDriver;
-      }
-    }
-    
-    // Add explicit logging when we fail to find driver info
-    console.warn('No driver info found for ride:', ride);
-    
-    // As a last resort, if we have driver name but no other details,
-    // create a placeholder driver object with the name and default values
-    // for a better user experience
-    if (ride && ride.driver_name) {
+    // Fallback for driver name only (simplified format)
+    if (ride.driver_name) {
+      console.log('Using driver_name fallback');
+      
+      // Create placeholder driver object
       const nameParts = ride.driver_name.split(' ');
       return {
         first_name: nameParts[0] || '',
         last_name: nameParts.slice(1).join(' ') || '',
-        email: 'Contact through ChalBeyy app',
-        phone_number: 'Contact through ChalBeyy app',
-        vehicle_make: 'Vehicle details available at pickup',
-        vehicle_model: '',
-        vehicle_color: '',
-        license_plate: 'Available at pickup'
+        full_name: ride.driver_name,
+        email: ride.driver_email || 'Contact through support',
+        phone_number: ride.driver_phone || 'Contact through app',
+        vehicle_make: ride.vehicle_make || 'Available at pickup',
+        vehicle_model: ride.vehicle_model || '',
+        vehicle_color: ride.vehicle_color || '',
+        vehicle_year: ride.vehicle_year || '',
+        license_plate: ride.license_plate || 'Provided before pickup'
       };
     }
     
-    return null;
+    console.warn('No driver info found');
+    return {
+      first_name: 'Unknown',
+      last_name: 'User',
+      full_name: 'Unknown User',
+      email: null,
+      phone_number: null,
+      vehicle_make: null,
+      vehicle_model: null,
+      vehicle_color: null,
+      vehicle_year: null,
+      license_plate: null
+    };
+  };
+
+  const getVehicleInfo = (driver) => {
+    if (!driver) return 'Not provided';
+    
+    const make = driver.vehicle_make;
+    const model = driver.vehicle_model;
+    const color = driver.vehicle_color;
+    const year = driver.vehicle_year;
+    const plate = driver.license_plate;
+    
+    if (!make && !model && !color && !year && !plate) {
+      return 'Vehicle details will be available at pickup';
+    }
+    
+    let vehicleInfo = '';
+    
+    if (year) vehicleInfo += `${year} `;
+    if (color) vehicleInfo += `${color} `;
+    if (make) vehicleInfo += `${make} `;
+    if (model) vehicleInfo += `${model}`;
+    
+    vehicleInfo = vehicleInfo.trim();
+    
+    if (plate) {
+      vehicleInfo += vehicleInfo ? `, License: ${plate}` : `License: ${plate}`;
+    }
+    
+    return vehicleInfo || 'Vehicle details will be available at pickup';
   };
 
   const formatDate = (dateString) => {
-    return format(new Date(dateString), 'MMM d, yyyy h:mm a');
+    if (!dateString) return 'Not specified';
+    try {
+      const date = new Date(dateString);
+      return format(date, 'PPpp'); // e.g., "Apr 3, 2023, 2:30 PM"
+    } catch (error) {
+      console.error('Error formatting date:', error);
+      return dateString;
+    }
   };
 
   const handleOpenCancelDialog = (ride) => {
@@ -527,361 +440,305 @@ const RiderAcceptedRides = () => {
     setOpenCancelDialog(false);
   };
 
+  const handleCall = (phoneNumber) => {
+    if (!phoneNumber) {
+      Alert.alert('No Phone Number', 'The driver has not provided a phone number.');
+      return;
+    }
+    
+    Linking.openURL(`tel:${phoneNumber}`);
+  };
+
+  const handleEmail = (email) => {
+    if (!email) {
+      Alert.alert('No Email', 'The driver has not provided an email address.');
+      return;
+    }
+    
+    Linking.openURL(`mailto:${email}`);
+  };
+
+  const renderRideItem = ({ item }) => (
+    <TouchableOpacity onPress={() => handleRideClick(item)}>
+      <Card containerStyle={styles.card}>
+        <Card.Title>{item.pickup_location} → {item.dropoff_location}</Card.Title>
+        <Text style={styles.dateText}>
+          {formatDate(item.departure_time)}
+        </Text>
+        <Text style={styles.statusText}>
+          Status: <Text style={styles[item.status.toLowerCase()]}>{item.status}</Text>
+        </Text>
+        <Text style={styles.infoText}>
+          Driver: {item.driver ? (item.driver.full_name || `${item.driver.first_name} ${item.driver.last_name}`) : (item.driver_name || 'Not assigned')}
+        </Text>
+        <Text style={styles.infoText}>
+          Seats: {item.seats_needed}
+        </Text>
+      </Card>
+    </TouchableOpacity>
+  );
+
+  const renderSelectedRide = () => {
+    if (!selectedRide) return null;
+    
+    const driver = getDriverInfo(selectedRide);
+    
+    return (
+      <Card containerStyle={styles.detailCard}>
+        <Card.Title>Ride Details</Card.Title>
+        <ScrollView>
+          <View style={styles.detailRow}>
+            <Text style={styles.detailLabel}>From:</Text>
+            <Text style={styles.detailValue}>{selectedRide.pickup_location}</Text>
+          </View>
+          <View style={styles.detailRow}>
+            <Text style={styles.detailLabel}>To:</Text>
+            <Text style={styles.detailValue}>{selectedRide.dropoff_location}</Text>
+          </View>
+          <View style={styles.detailRow}>
+            <Text style={styles.detailLabel}>When:</Text>
+            <Text style={styles.detailValue}>{formatDate(selectedRide.departure_time)}</Text>
+          </View>
+          <View style={styles.detailRow}>
+            <Text style={styles.detailLabel}>Status:</Text>
+            <Text style={[styles.detailValue, styles[selectedRide.status.toLowerCase()]]}>
+              {selectedRide.status}
+            </Text>
+          </View>
+          <View style={styles.detailRow}>
+            <Text style={styles.detailLabel}>Seats:</Text>
+            <Text style={styles.detailValue}>{selectedRide.seats_needed}</Text>
+          </View>
+          
+          <View style={styles.divider} />
+          
+          <Text style={styles.sectionTitle}>Driver Information</Text>
+          <View style={styles.detailRow}>
+            <Text style={styles.detailLabel}>Name:</Text>
+            <Text style={styles.detailValue}>
+              {driver.full_name || `${driver.first_name || ''} ${driver.last_name || ''}`.trim() || 'Unknown Driver'}
+            </Text>
+          </View>
+          
+          {/* Contact options */}
+          <View style={styles.contactContainer}>
+            {driver.phone_number ? (
+              <Button
+                buttonStyle={styles.contactButton}
+                icon={<Icon name="phone" type="feather" color="#ffffff" />}
+                title="Call"
+                onPress={() => handleCall(driver.phone_number)}
+              />
+            ) : (
+              <Text style={styles.contactInfo}>Contact through ChalBeyy app</Text>
+            )}
+            
+            {driver.email ? (
+              <Button
+                buttonStyle={styles.contactButton}
+                icon={<Icon name="mail" type="feather" color="#ffffff" />}
+                title="Email"
+                onPress={() => handleEmail(driver.email)}
+              />
+            ) : (
+              <Text style={styles.contactInfo}>Contact through ChalBeyy app</Text>
+            )}
+            
+            {(!driver.phone_number && !driver.email) && (
+              <Button
+                buttonStyle={styles.supportButton}
+                title="Contact Support"
+                onPress={() => Linking.openURL('mailto:support@chalbeyy.com')}
+              />
+            )}
+          </View>
+          
+          <View style={styles.divider} />
+          
+          <Text style={styles.sectionTitle}>Vehicle Information</Text>
+          <Text style={styles.vehicleInfo}>
+            {getVehicleInfo(driver)}
+          </Text>
+        </ScrollView>
+        
+        <View style={styles.backButtonContainer}>
+          <Button
+            buttonStyle={styles.backButton}
+            title="Back to List"
+            onPress={() => setSelectedRide(null)}
+          />
+        </View>
+      </Card>
+    );
+  };
+
   if (loading) {
     return (
-      <Container>
-        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
-          <CircularProgress size={40} sx={{ mr: 2 }} />
-          <Typography>Loading your trips...</Typography>
-        </Box>
-      </Container>
+      <View style={styles.centered}>
+        <ActivityIndicator size="large" color="#0000ff" />
+        <Text>Loading rides...</Text>
+      </View>
     );
   }
 
   if (error) {
     return (
-      <Container maxWidth="lg" sx={{ py: 4 }}>
-        <Paper elevation={2} sx={{ p: 3, borderRadius: 2 }}>
-          <Alert 
-            severity="error" 
-            sx={{ mb: 2 }}
-            action={
-              retryable && (
-                <Button 
-                  color="inherit" 
-                  size="small" 
-                  onClick={fetchAcceptedRides} 
-                  disabled={loading}
-                >
-                  {loading ? <CircularProgress size={20} color="inherit" /> : 'Retry'}
-                </Button>
-              )
-            }
-          >
-            {error}
-          </Alert>
-          <Typography variant="h5" gutterBottom>
-            Unable to load your trips
-          </Typography>
-          <Typography variant="body1" color="text.secondary" paragraph>
-            We encountered a problem while trying to fetch your trip information. This could be due to:
-          </Typography>
-          <List>
-            <ListItem>
-              <ListItemIcon><Cancel /></ListItemIcon>
-              <ListItemText primary="Network connectivity issues" />
-            </ListItem>
-            <ListItem>
-              <ListItemIcon><Cancel /></ListItemIcon>
-              <ListItemText primary="Server maintenance" />
-            </ListItem>
-            <ListItem>
-              <ListItemIcon><Cancel /></ListItemIcon>
-              <ListItemText primary="Session timeout" />
-            </ListItem>
-          </List>
-          <Box sx={{ mt: 2 }}>
-            <Button 
-              variant="contained" 
-              color="primary"
-              onClick={handleRetry}
-              startIcon={isRetrying ? <CircularProgress size={20} color="inherit" /> : <Refresh />}
-              disabled={isRetrying}
-            >
-              {isRetrying ? 'Retrying...' : 'Retry'}
-            </Button>
-          </Box>
-        </Paper>
-      </Container>
+      <View style={styles.centered}>
+        <Text style={styles.errorText}>Error: {error}</Text>
+        <Button
+          title="Try Again"
+          onPress={fetchAcceptedRides}
+          buttonStyle={styles.retryButton}
+        />
+      </View>
+    );
+  }
+
+  if (acceptedRides.length === 0) {
+    return (
+      <View style={styles.centered}>
+        <Text>You don't have any rides yet.</Text>
+      </View>
     );
   }
 
   return (
-    <Container maxWidth="lg" sx={{ py: 4 }}>
-      <Typography variant="h4" component="h1" gutterBottom sx={{ textAlign: 'center', mb: 4 }}>
-        My Trips
-      </Typography>
-
-      {acceptedRides.length === 0 ? (
-        <Paper elevation={2} sx={{ p: 4, borderRadius: '12px', mt: 3, textAlign: 'center' }}>
-          <Box sx={{ 
-            display: 'flex', 
-            flexDirection: 'column', 
-            alignItems: 'center',
-            justifyContent: 'center',
-            py: 4
-          }}>
-            <Schedule sx={{ fontSize: 80, color: '#861F41', mb: 2, opacity: 0.8 }} />
-            <Typography variant="h5" gutterBottom sx={{ fontWeight: 'bold', color: '#861F41' }}>
-              Rides waiting, seats inviting!
-            </Typography>
-            <Typography variant="body1" gutterBottom color="text.secondary" sx={{ maxWidth: 600, mb: 3 }}>
-              Your journey begins with just one click! Find your perfect ride and let the adventures begin.
-            </Typography>
-            <Button 
-              variant="contained" 
-              onClick={() => window.location.href = '/request-ride'}
-              sx={{ 
-                borderRadius: '12px',
-                py: 1.5,
-                px: 4,
-                textTransform: 'none',
-                fontWeight: 600,
-                bgcolor: '#861F41', 
-                '&:hover': { bgcolor: '#5e0d29' }
-              }}
-            >
-              Find a Ride
-            </Button>
-          </Box>
-        </Paper>
+    <View style={styles.container}>
+      {selectedRide ? (
+        renderSelectedRide()
       ) : (
-        <Grid container spacing={3}>
-          {/* List of rides */}
-          <Grid item xs={12} md={4}>
-            <Paper sx={{ maxHeight: '70vh', overflow: 'auto' }}>
-              <List>
-                {acceptedRides.map((ride) => (
-                  <ListItem
-                    key={ride.id}
-                    button
-                    selected={selectedRide?.id === ride.id}
-                    onClick={() => handleRideClick(ride)}
-                  >
-                    <ListItemIcon>
-                      <Avatar>
-                        <Person />
-                      </Avatar>
-                    </ListItemIcon>
-                    <ListItemText
-                      primary={getFullName(getDriverInfo(ride))}
-                      secondary={
-                        <Box>
-                          <Typography variant="body2" color="text.secondary">
-                            {formatDate(ride.departure_time)}
-                          </Typography>
-                          <Typography variant="body2" color="text.secondary">
-                            {ride.pickup_location} → {ride.dropoff_location}
-                          </Typography>
-                        </Box>
-                      }
-                    />
-                    <ListItemSecondaryAction>
-                      {getStatusChip(ride.status)}
-                    </ListItemSecondaryAction>
-                  </ListItem>
-                ))}
-              </List>
-            </Paper>
-          </Grid>
-
-          {/* Ride details */}
-          <Grid item xs={12} md={8}>
-            {selectedRide ? (
-              <Card>
-                <CardContent>
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                    <Typography variant="h6">Ride Details</Typography>
-                    {selectedRide.status === 'ACCEPTED' && (
-                      <Button
-                        variant="outlined"
-                        color="error"
-                        startIcon={<Cancel />}
-                        onClick={() => handleOpenCancelDialog(selectedRide)}
-                      >
-                        Cancel
-                      </Button>
-                    )}
-                  </Box>
-
-                  <Grid container spacing={2}>
-                    <Grid item xs={12}>
-                      <Typography variant="subtitle1" gutterBottom>
-                        Driver Information
-                      </Typography>
-                      <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                        <Person sx={{ mr: 1, color: '#861F41' }} />
-                        <Typography>{getFullName(getDriverInfo(selectedRide))}</Typography>
-                      </Box>
-                      
-                      {/* Phone number section with conditional rendering */}
-                      <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                        <Phone sx={{ mr: 1, color: getPhoneNumber(getDriverInfo(selectedRide)) === 'Not provided' ? 'text.secondary' : '#861F41' }} />
-                        <Typography color={getPhoneNumber(getDriverInfo(selectedRide)) === 'Not provided' ? 'text.secondary' : 'inherit'}>
-                          {getPhoneNumber(getDriverInfo(selectedRide)).includes('ChalBeyy') 
-                            ? 'Contact through ChalBeyy app' 
-                            : getPhoneNumber(getDriverInfo(selectedRide))}
-                        </Typography>
-                      </Box>
-                      
-                      {/* Email section with conditional rendering */}
-                      <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                        <Email sx={{ mr: 1, color: getEmail(getDriverInfo(selectedRide)) === 'Not provided' ? 'text.secondary' : '#861F41' }} />
-                        <Typography color={getEmail(getDriverInfo(selectedRide)) === 'Not provided' ? 'text.secondary' : 'inherit'}>
-                          {getEmail(getDriverInfo(selectedRide)).includes('ChalBeyy')
-                            ? 'Contact through ChalBeyy app'
-                            : getEmail(getDriverInfo(selectedRide))}
-                        </Typography>
-                      </Box>
-                      
-                      {getDriverInfo(selectedRide) && (
-                        <>
-                          <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                            <DirectionsCar sx={{ mr: 1, color: '#861F41' }} />
-                            <Typography>
-                              Vehicle: {(() => {
-                                const driver = getDriverInfo(selectedRide);
-                                // Try different vehicle field variations
-                                const make = driver.vehicle_make || driver.make;
-                                const model = driver.vehicle_model || driver.model;
-                                
-                                // If we have obvious placeholder data, format it differently
-                                if (make === 'Vehicle details' || model?.includes('available at pickup')) {
-                                  return 'Vehicle details will be available at pickup';
-                                }
-                                
-                                const color = driver.vehicle_color || driver.color;
-                                const year = driver.vehicle_year || driver.year;
-                                
-                                // Create vehicle description with available information
-                                const parts = [];
-                                if (year) parts.push(year);
-                                if (make) parts.push(make);
-                                if (model) parts.push(model);
-                                
-                                let vehicleText = parts.join(' ');
-                                if (color && vehicleText) {
-                                  vehicleText += ` (${color})`;
-                                }
-                                
-                                return vehicleText || 'Not provided';
-                              })()}
-                            </Typography>
-                          </Box>
-                          <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                            <DriveEta sx={{ mr: 1, color: '#861F41' }} />
-                            <Typography>
-                              License Plate: {(() => {
-                                const driver = getDriverInfo(selectedRide);
-                                const plate = driver.license_plate || driver.licensePlate || driver.plate;
-                                
-                                if (plate === 'Available at pickup') {
-                                  return 'Will be provided before pickup';
-                                }
-                                
-                                return plate || 'Not provided';
-                              })()}
-                            </Typography>
-                          </Box>
-                        </>
-                      )}
-                    </Grid>
-
-                    <Grid item xs={12}>
-                      <Typography variant="subtitle1" gutterBottom>
-                        Trip Details
-                      </Typography>
-                      <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                        <LocationOn sx={{ mr: 1 }} />
-                        <Typography>Pickup: {selectedRide.pickup_location}</Typography>
-                      </Box>
-                      <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                        <LocationOn sx={{ mr: 1 }} />
-                        <Typography>Dropoff: {selectedRide.dropoff_location}</Typography>
-                      </Box>
-                      <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                        <Event sx={{ mr: 1 }} />
-                        <Typography>Date: {formatDate(selectedRide.departure_time)}</Typography>
-                      </Box>
-                      <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                        <Schedule sx={{ mr: 1 }} />
-                        <Typography>Seats: {selectedRide.seats_needed}</Typography>
-                      </Box>
-                    </Grid>
-
-                    {/* Add contact instructions and buttons */}
-                    {getDriverInfo(selectedRide) && (
-                      <Grid item xs={12}>
-                        <Box mt={2} sx={{ bgcolor: '#f8f8f8', p: 2, borderRadius: 1 }}>
-                          <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                            {(getPhoneNumber(getDriverInfo(selectedRide)) === 'Not provided' || 
-                             getPhoneNumber(getDriverInfo(selectedRide)).includes('ChalBeyy')) && 
-                            (getEmail(getDriverInfo(selectedRide)) === 'Not provided' || 
-                             getEmail(getDriverInfo(selectedRide)).includes('ChalBeyy')) 
-                              ? 'Contact Options:' : ''}
-                          </Typography>
-                          
-                          {(getPhoneNumber(getDriverInfo(selectedRide)) === 'Not provided' || 
-                            getPhoneNumber(getDriverInfo(selectedRide)).includes('ChalBeyy')) && 
-                           (getEmail(getDriverInfo(selectedRide)) === 'Not provided' || 
-                            getEmail(getDriverInfo(selectedRide)).includes('ChalBeyy')) && (
-                            <Box>
-                              <Typography variant="body2" color="text.secondary" paragraph>
-                                Driver contact information will be shared closer to departure time.
-                                If you need to contact your driver before then:
-                              </Typography>
-                              <Button 
-                                variant="contained" 
-                                color="primary" 
-                                size="small"
-                                startIcon={<Email />}
-                                onClick={() => window.open('mailto:support@chalbeyy.com?subject=Contact%20Driver%20for%20Ride%20' + selectedRide.id, '_blank')}
-                                sx={{ mr: 1, mb: 1 }}
-                              >
-                                Contact Support
-                              </Button>
-                              
-                              <Button 
-                                variant="outlined" 
-                                color="primary" 
-                                size="small"
-                                startIcon={<Phone />}
-                                onClick={() => window.open('tel:+18005551234')}
-                                sx={{ mr: 1, mb: 1 }}
-                              >
-                                Call Helpline
-                              </Button>
-                            </Box>
-                          )}
-                        </Box>
-                      </Grid>
-                    )}
-                  </Grid>
-                </CardContent>
-              </Card>
-            ) : (
-              <Paper sx={{ p: 3, textAlign: 'center' }}>
-                <Typography>Select a ride to view details</Typography>
-              </Paper>
-            )}
-          </Grid>
-        </Grid>
+        <FlatList
+          data={acceptedRides}
+          renderItem={renderRideItem}
+          keyExtractor={(item) => item.id.toString()}
+          contentContainerStyle={styles.list}
+        />
       )}
-
-      {/* Cancel Dialog */}
-      <Dialog open={openCancelDialog} onClose={handleCloseCancelDialog}>
-        <DialogTitle>Cancel Ride</DialogTitle>
-        <DialogContent>
-          <Typography>
-            Are you sure you want to cancel this ride? This action cannot be undone.
-          </Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCloseCancelDialog}>No, Keep It</Button>
-          <Button
-            onClick={() => {
-              handleCancelRide(selectedRide.id);
-              handleCloseCancelDialog();
-            }}
-            color="error"
-            variant="contained"
-          >
-            Yes, Cancel It
-          </Button>
-        </DialogActions>
-      </Dialog>
-    </Container>
+    </View>
   );
 };
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    padding: 10,
+    backgroundColor: '#f5f5f5',
+  },
+  centered: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  list: {
+    paddingBottom: 20,
+  },
+  card: {
+    borderRadius: 8,
+    marginBottom: 10,
+    padding: 15,
+  },
+  detailCard: {
+    borderRadius: 8,
+    padding: 15,
+    margin: 0,
+  },
+  dateText: {
+    fontSize: 14,
+    color: '#555',
+    marginBottom: 8,
+  },
+  statusText: {
+    fontSize: 14,
+    marginBottom: 5,
+  },
+  infoText: {
+    fontSize: 14,
+    marginBottom: 3,
+  },
+  accepted: {
+    color: 'green',
+    fontWeight: 'bold',
+  },
+  pending: {
+    color: 'orange',
+    fontWeight: 'bold',
+  },
+  completed: {
+    color: 'blue',
+    fontWeight: 'bold',
+  },
+  cancelled: {
+    color: 'red',
+    fontWeight: 'bold',
+  },
+  rejected: {
+    color: 'red',
+    fontWeight: 'bold',
+  },
+  errorText: {
+    color: 'red',
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  retryButton: {
+    backgroundColor: '#2089dc',
+    paddingHorizontal: 30,
+  },
+  detailRow: {
+    flexDirection: 'row',
+    marginBottom: 10,
+  },
+  detailLabel: {
+    width: 80,
+    fontWeight: 'bold',
+  },
+  detailValue: {
+    flex: 1,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: '#e0e0e0',
+    marginVertical: 15,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 10,
+  },
+  contactContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    flexWrap: 'wrap',
+    marginTop: 10,
+    marginBottom: 10,
+  },
+  contactButton: {
+    backgroundColor: '#2089dc',
+    minWidth: 120,
+    margin: 5,
+  },
+  supportButton: {
+    backgroundColor: '#f0ad4e',
+    minWidth: 250,
+    margin: 5,
+  },
+  contactInfo: {
+    width: '100%',
+    textAlign: 'center',
+    color: '#555',
+    marginVertical: 10,
+  },
+  vehicleInfo: {
+    marginTop: 5,
+    lineHeight: 24,
+  },
+  backButtonContainer: {
+    marginTop: 20,
+  },
+  backButton: {
+    backgroundColor: '#999',
+  },
+});
 
 export default RiderAcceptedRides; 

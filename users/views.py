@@ -3,8 +3,8 @@ from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
 from django.contrib.auth import get_user_model, authenticate
-from .serializers import UserSerializer, RatingSerializer
-from .models import Rating
+from .serializers import UserSerializer, RatingSerializer, UserRegistrationSerializer
+from .models import Rating, User
 from rest_framework_simplejwt.views import TokenObtainPairView
 from django.db.models import Avg
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -17,13 +17,95 @@ logger = logging.getLogger(__name__)
 class UserViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all()
     serializer_class = UserSerializer
+    permission_classes = [permissions.IsAuthenticated]
     
-    def get_permissions(self):
+    def get_serializer_class(self):
         if self.action == 'create':
-            permission_classes = [AllowAny]
-        else:
-            permission_classes = [IsAuthenticated]
-        return [permission() for permission in permission_classes]
+            return UserRegistrationSerializer
+        return UserSerializer
+    
+    def retrieve(self, request, pk=None):
+        """
+        Get user details by ID
+        """
+        try:
+            # Log the request for debugging
+            logger.info(f"Fetching user details for ID: {pk}")
+            
+            # Fetch the user
+            user = self.get_object()
+            
+            logger.info(f"Found user: {user.username}, type: {user.user_type}")
+            
+            # Serialize the user data
+            serializer = self.get_serializer(user)
+            
+            # Log fields for debugging
+            logger.info(f"Serialized fields: {list(serializer.data.keys())}")
+            
+            # Return the user data
+            return Response(serializer.data)
+            
+        except Exception as e:
+            logger.error(f"Error retrieving user: {str(e)}")
+            return Response(
+                {"error": str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
+    @action(detail=False, methods=['get'])
+    def search(self, request):
+        """
+        Search for users by name
+        """
+        try:
+            name = request.query_params.get('name', '')
+            if not name:
+                return Response({"error": "Name parameter is required"}, 
+                               status=status.HTTP_400_BAD_REQUEST)
+                
+            # Split the name into parts to search in first_name and last_name
+            name_parts = name.split()
+            
+            # Start with an empty queryset
+            queryset = User.objects.none()
+            
+            # If there's at least one part, search for it in first_name or last_name
+            if len(name_parts) > 0:
+                queryset = User.objects.filter(first_name__icontains=name_parts[0]) | \
+                          User.objects.filter(last_name__icontains=name_parts[0])
+                          
+            # If there's a second part, search for users with that in first_name or last_name
+            if len(name_parts) > 1:
+                queryset = queryset | User.objects.filter(first_name__icontains=name_parts[1]) | \
+                          User.objects.filter(last_name__icontains=name_parts[1])
+                          
+            # Log the results for debugging
+            logger.info(f"Search for name '{name}' found {queryset.count()} users")
+            
+            # Serialize and return the results
+            serializer = self.get_serializer(queryset, many=True)
+            return Response(serializer.data)
+            
+        except Exception as e:
+            logger.error(f"Error searching users: {str(e)}")
+            return Response(
+                {"error": str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
+    @action(detail=False, methods=['get'])
+    def me(self, request):
+        serializer = self.get_serializer(request.user)
+        return Response(serializer.data)
+
+    @action(detail=False, methods=['post'])
+    def register(self, request):
+        serializer = UserRegistrationSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     @action(detail=True, methods=['post'])
     def rate_user(self, request, pk=None):
@@ -58,11 +140,6 @@ class UserViewSet(viewsets.ModelViewSet):
         user = self.get_object()
         ratings = Rating.objects.filter(to_user=user)
         serializer = RatingSerializer(ratings, many=True)
-        return Response(serializer.data)
-
-    @action(detail=False, methods=['get'])
-    def me(self, request):
-        serializer = self.get_serializer(request.user)
         return Response(serializer.data)
 
     @action(detail=False, methods=['put'])
