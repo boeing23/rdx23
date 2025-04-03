@@ -39,30 +39,71 @@ function App() {
   const [userType, setUserType] = useState(null);
   const [isInitialized, setIsInitialized] = useState(false);
 
+  // Authentication state handler
   useEffect(() => {
-    const initializeAuth = () => {
+    const checkAuth = () => {
       const token = localStorage.getItem('token');
       const storedUserType = localStorage.getItem('userType');
       
+      console.log('App - Auth check:', { 
+        hasToken: !!token, 
+        userType: storedUserType,
+        isStringified: storedUserType && storedUserType.includes('"')
+      });
+
       if (token) {
         setIsAuthenticated(true);
-        console.log('App - Using user type as plain string:', storedUserType);
-        setUserType(storedUserType);
+        
+        // Handle string or JSON format
+        try {
+          // Try to parse as JSON if it appears to be stringified
+          if (storedUserType && (storedUserType.startsWith('"') || storedUserType.includes('{'))) {
+            const parsed = JSON.parse(storedUserType);
+            console.log('Parsed user type:', parsed);
+            setUserType(parsed);
+          } else {
+            // Otherwise use as plain string
+            console.log('Using user type as plain string:', storedUserType);
+            setUserType(storedUserType);
+          }
+        } catch (e) {
+          // If parsing fails, use as plain string
+          console.error('Error parsing user type:', e);
+          setUserType(storedUserType);
+        }
+      } else {
+        setIsAuthenticated(false);
+        setUserType(null);
       }
       setIsInitialized(true);
     };
 
-    initializeAuth();
+    checkAuth();
+    
+    // Listen for auth-change events
+    const handleAuthChange = () => {
+      console.log('App detected auth change event');
+      checkAuth();
+    };
+    
+    window.addEventListener('auth-change', handleAuthChange);
+    
+    return () => {
+      window.removeEventListener('auth-change', handleAuthChange);
+    };
   }, []);
 
+  // Handle logout
   const handleLogout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('userType');
+    localStorage.removeItem('userId');
     setIsAuthenticated(false);
     setUserType(null);
     window.location.href = '/';
   };
 
+  // Show loading state while checking authentication
   if (!isInitialized) {
     return null;
   }
@@ -70,44 +111,50 @@ function App() {
   return (
     <Router>
       <Navbar />
-      <Routes>
-        <Route 
-          path="/" 
-          element={
-            isAuthenticated ? (
-              <Navigate to={userType === 'DRIVER' ? '/offer' : '/rides'} replace />
-            ) : (
-              <Home />
-            )
-          } 
-        />
-        <Route 
-          path="/rides" 
-          element={
-            isAuthenticated ? (
-              userType === 'RIDER' ? <RideList /> : <Navigate to="/offer" replace />
-            ) : (
-              <Navigate to="/login" replace />
-            )
-          } 
-        />
-        <Route 
-          path="/offer" 
-          element={
-            isAuthenticated ? (
-              userType === 'DRIVER' ? <OfferRide /> : <Navigate to="/rides" replace />
-            ) : (
-              <Navigate to="/login" replace />
-            )
-          } 
-        />
-        <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<Register />} />
-        <Route path="/update-driver-profile" element={<UpdateDriverProfile />} />
-        <Route path="/request-ride" element={<RequestRide />} />
-        <Route path="/accepted-rides" element={<AcceptedRides />} />
-        <Route path="/notifications" element={<NotificationList />} />
-      </Routes>
+      <Container>
+        <Routes>
+          <Route 
+            path="/" 
+            element={
+              isAuthenticated ? (
+                <Navigate to="/rides" replace />
+              ) : (
+                <Home />
+              )
+            } 
+          />
+          <Route 
+            path="/rides" 
+            element={
+              isAuthenticated ? <RideList /> : <Navigate to="/login" replace />
+            } 
+          />
+          <Route 
+            path="/offer" 
+            element={
+              isAuthenticated ? (
+                userType === 'DRIVER' ? <OfferRide /> : <Navigate to="/rides" replace />
+              ) : (
+                <Navigate to="/login" replace />
+              )
+            } 
+          />
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
+          <Route path="/update-driver-profile" element={
+            isAuthenticated ? <UpdateDriverProfile /> : <Navigate to="/login" replace />
+          } />
+          <Route path="/request-ride" element={
+            isAuthenticated ? <RequestRide /> : <Navigate to="/login" replace />
+          } />
+          <Route path="/accepted-rides" element={
+            isAuthenticated ? <AcceptedRides /> : <Navigate to="/login" replace />
+          } />
+          <Route path="/notifications" element={
+            isAuthenticated ? <NotificationList /> : <Navigate to="/login" replace />
+          } />
+        </Routes>
+      </Container>
     </Router>
   );
 }

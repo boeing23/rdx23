@@ -44,15 +44,30 @@ const AcceptedRides = () => {
       console.log('Fetching accepted rides...');
       console.log('User type:', currentUserType);
       console.log('User ID:', userId);
+      console.log('Token:', token ? `${token.substring(0, 10)}...` : 'No token');
       
       const response = await fetch(`${API_BASE_URL}/api/rides/requests/accepted/`, {
         headers: {
           'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
         },
       });
 
+      // Log the response status for debugging
+      console.log('Response status:', response.status);
+      
       if (!response.ok) {
-        throw new Error('Failed to fetch accepted rides');
+        if (response.status === 401) {
+          console.error('Authentication failed. Token may be invalid or expired.');
+          localStorage.removeItem('token');
+          setError('Your session has expired. Please log in again.');
+          setTimeout(() => {
+            window.location.href = '/login';
+          }, 2000);
+          return;
+        }
+        throw new Error(`Failed to fetch accepted rides: ${response.status}`);
       }
 
       const data = await response.json();
