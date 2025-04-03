@@ -1111,218 +1111,98 @@ class RideRequestViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        return RideRequest.objects.filter(rider=self.request.user)
+        user = self.request.user
+        user_type = getattr(user, 'user_type', '').lower()
+        
+        if user_type == 'driver':
+            return RideRequest.objects.filter(ride__driver=user)
+        elif user_type == 'rider':
+            return RideRequest.objects.filter(rider=user)
+        return RideRequest.objects.none()
 
     def create(self, request, *args, **kwargs):
-        try:
-            logger.info("Starting ride request creation")
-            logger.info(f"Request data: {request.data}")
-            logger.info(f"User: {request.user.username}, ID: {request.user.id}, Type: {request.user.user_type}")
+        logging.info(f"RideRequestViewSet.create called with data: {request.data}")
+        
+        # Check if the request doesn't include a ride
+        if 'ride' not in request.data or not request.data['ride']:
+            # Get the rider from the authenticated user
+            rider = request.user
+            logging.info(f"No ride specified, identifying rider as: {rider}")
             
-            # Check if this is a ride-less request (just origin/destination)
-            if 'ride' not in request.data or not request.data['ride']:
-                logger.info("No specific ride provided - creating a pending ride request")
-                
-                # Clone the data to avoid modifying the original
-                data = request.data.copy()
-                
-                # Make sure we have coordinates for matching
-                required_fields = [
-                    'pickup_latitude', 'pickup_longitude', 
-                    'dropoff_latitude', 'dropoff_longitude',
-                    'pickup_location', 'dropoff_location',
-                    'departure_time', 'seats_needed'
-                ]
-                
-                # Validate required fields are present
-                missing_fields = [field for field in required_fields if field not in data or not data[field]]
-                if missing_fields:
-                    logger.error(f"Missing required fields for ride matching: {missing_fields}")
-                    return Response({
-                        'status': 'error',
-                        'has_match': False,
-                        'errors': {field: ['This field is required.'] for field in missing_fields}
-                    }, status=status.HTTP_400_BAD_REQUEST)
-                
-                # Create a dictionary for route matching
-                matching_data = {
-                    'pickup_location': data.get('pickup_location'),
-                    'dropoff_location': data.get('dropoff_location'),
-                    'pickup_location_coordinates': (
-                        float(data.get('pickup_longitude')), 
-                        float(data.get('pickup_latitude'))
-                    ),
-                    'dropoff_location_coordinates': (
-                        float(data.get('dropoff_longitude')), 
-                        float(data.get('dropoff_latitude'))
-                    ),
-                    'departure_time': data.get('departure_time'),
-                    'seats': int(data.get('seats_needed', 1))
-                }
-                
-                logger.info(f"Prepared matching data: {matching_data}")
-                
-                # Get all scheduled rides with available seats
-                available_rides = Ride.objects.filter(
-                    status='SCHEDULED',
-                    available_seats__gte=matching_data['seats'],
-                    departure_time__gt=timezone.now()
-                ).exclude(driver=request.user)
-                
-                logger.info(f"Found {available_rides.count()} potentially matching rides")
-                
-                # Create a pending ride request first (without a specific ride)
-                serializer = self.get_serializer(data=data)
-                if not serializer.is_valid():
-                    # If validation fails, try to remove the 'ride' field from validation
-                    errors = serializer.errors.copy()
-                    if 'ride' in errors:
-                        # Remove ride-related errors and create a serializer without ride requirement
-                        errors.pop('ride')
-                        if errors:
-                            # If there are other errors, return them
-                            logger.error(f"Validation failed with errors: {errors}")
-                            return Response({
-                                'status': 'error',
-                                'has_match': False,
-                                'errors': errors
-                            }, status=status.HTTP_400_BAD_REQUEST)
-                    else:
-                        logger.error(f"Validation failed with errors: {serializer.errors}")
-                        return Response({
-                            'status': 'error',
-                            'has_match': False,
-                            'errors': serializer.errors
-                        }, status=status.HTTP_400_BAD_REQUEST)
-                
-                # For a ride-less request, create a "pending" ride request
-                pending_ride_request = PendingRideRequest.objects.create(
-                    rider=request.user,
-                    pickup_location=data.get('pickup_location'),
-                    dropoff_location=data.get('dropoff_location'),
-                    pickup_latitude=data.get('pickup_latitude'),
-                    pickup_longitude=data.get('pickup_longitude'),
-                    dropoff_latitude=data.get('dropoff_latitude'),
-                    dropoff_longitude=data.get('dropoff_longitude'),
-                    departure_time=data.get('departure_time'),
-                    seats_needed=data.get('seats_needed', 1)
-                )
-                
-                logger.info(f"Created pending ride request: {pending_ride_request.id}")
-                
-                # Find suitable rides for this request
-                suitable_rides = []
-                
-                # Only try matching if there are available rides
-                if available_rides.exists():
-                    from .services import find_suitable_rides  # Import the service function
-                    try:
-                        suitable_rides = find_suitable_rides(
-                            rides=available_rides,
-                            ride_request_data=matching_data
-                        )
-                        logger.info(f"Found {len(suitable_rides)} suitable rides for the request")
-                    except Exception as e:
-                        logger.error(f"Error finding suitable rides: {str(e)}")
-                        logger.exception("Full exception details:")
-                
-                # If we found suitable rides, create ride requests and notifications for each
-                if suitable_rides:
-                    # Create a response with match information
-                    matches = []
-                    
-                    for match in suitable_rides[:3]:  # Limit to top 3 matches
-                        ride = match['ride']
-                        
-                        # Create a ride request for this specific match
-                        ride_request = RideRequest.objects.create(
-                            rider=request.user,
-                            ride=ride,
-                            pickup_location=data.get('pickup_location'),
-                            dropoff_location=data.get('dropoff_location'),
-                            pickup_latitude=data.get('pickup_latitude'),
-                            pickup_longitude=data.get('pickup_longitude'),
-                            dropoff_latitude=data.get('dropoff_latitude'),
-                            dropoff_longitude=data.get('dropoff_longitude'),
-                            departure_time=data.get('departure_time'),
-                            seats_needed=data.get('seats_needed', 1),
-                            status='PENDING',
-                            nearest_dropoff_point=match.get('nearest_dropoff_point'),
-                            optimal_pickup_point=match.get('optimal_pickup_point')
-                        )
-                        
-                        logger.info(f"Created ride request {ride_request.id} for ride {ride.id} with matching score {match['matching_score']:.2f}")
-                        
-                        # Create a notification for the rider
-                        Notification.objects.create(
-                            recipient=request.user,
-                            message=f"We found a potential ride match from {ride_request.pickup_location} to {ride_request.dropoff_location}",
-                            notification_type='RIDE_MATCH',
-                            ride=ride,
-                            ride_request=ride_request,
-                            sender=ride.driver
-                        )
-                        
-                        # Add to matches list for response
-                        matches.append({
-                            'ride_id': ride.id,
-                            'ride_request_id': ride_request.id,
-                            'driver': {
-                                'id': ride.driver.id,
-                                'name': f"{ride.driver.first_name} {ride.driver.last_name}".strip() or ride.driver.username,
-                            },
-                            'matching_score': match['matching_score'],
-                            'overlap_percentage': match['overlap_percentage'],
-                            'departure_time': ride.departure_time.isoformat()
-                        })
-                    
-                    return Response({
-                        'status': 'success',
-                        'has_match': True,
-                        'pending_request_id': pending_ride_request.id,
-                        'matches': matches,
-                        'message': f"We found {len(matches)} potential ride matches! Check your notifications."
-                    }, status=status.HTTP_201_CREATED)
-                else:
-                    # No matches found, just save the pending request
-                    return Response({
-                        'status': 'success',
-                        'has_match': False,
-                        'pending_request_id': pending_ride_request.id,
-                        'message': "Your ride request has been saved. We'll notify you when a matching ride becomes available."
-                    }, status=status.HTTP_201_CREATED)
+            # Extract data needed to find suitable rides
+            request_data = request.data.copy()
             
-            # If we get here, then a specific ride was requested
-            # Validate the serializer
-            serializer = self.get_serializer(data=request.data)
-            if not serializer.is_valid():
-                logger.error(f"Serializer validation failed: {serializer.errors}")
+            # Check if we have the necessary data
+            if not all(k in request_data for k in ['pickup_lat', 'pickup_lng', 'dropoff_lat', 'dropoff_lng']):
                 return Response({
-                    'status': 'error',
-                    'has_match': False,
-                    'errors': serializer.errors
+                    "status": "error",
+                    "has_match": False,
+                    "errors": {"non_field_errors": ["Missing location data. Please provide pickup and dropoff coordinates."]}
                 }, status=status.HTTP_400_BAD_REQUEST)
                 
-            logger.info(f"Serializer validated successfully: {serializer.validated_data}")
+            # Import the service function
+            from rides.services import find_suitable_rides
             
-            # Create the ride request
-            ride_request = serializer.save(rider=request.user)
-            logger.info(f"Created ride request: {ride_request.id}")
+            # Get available rides that match the rider's criteria
+            available_rides = Ride.objects.filter(
+                status='available',
+                departure_time__gte=timezone.now()
+            ).select_related('driver')
             
+            logging.info(f"Looking for suitable rides among {available_rides.count()} available rides")
+            
+            # Find suitable rides using our service function
+            suitable_rides = find_suitable_rides(available_rides, request_data)
+            
+            if not suitable_rides:
+                return Response({
+                    "status": "error",
+                    "has_match": False,
+                    "errors": {"non_field_errors": ["No suitable rides found for your request."]}
+                }, status=status.HTTP_404_NOT_FOUND)
+                
+            # Select the best match (first one, since they're sorted by matching score)
+            best_match = suitable_rides[0]
+            
+            # Add the ride ID to the request data
+            request_data['ride'] = best_match.id
+            request_data['rider'] = rider.id
+            
+            # Create a serializer with the updated data
+            serializer = self.get_serializer(data=request_data)
+            serializer.is_valid(raise_exception=True)
+            self.perform_create(serializer)
+            
+            # Return success response with the matched ride
             return Response({
-                'status': 'success',
-                'has_match': True,
-                'ride_request_id': ride_request.id,
-                'message': 'Ride request created successfully'
+                "status": "success",
+                "has_match": True,
+                "message": "Ride request created and matched with an available ride.",
+                "matched_ride": {
+                    "id": best_match.id,
+                    "driver": best_match.driver.get_full_name(),
+                    "start_location": best_match.start_location,
+                    "end_location": best_match.end_location,
+                    "departure_time": best_match.departure_time.isoformat()
+                },
+                "ride_request": serializer.data
             }, status=status.HTTP_201_CREATED)
             
-        except Exception as e:
-            logger.error(f"Error creating ride request: {str(e)}")
-            logger.exception("Full exception details:")
-            return Response({
-                'status': 'error',
-                'message': str(e)
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        # If a ride is specified, proceed with the normal creation process
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        
+        headers = self.get_success_headers(serializer.data)
+        return Response({
+            "status": "success",
+            "has_match": True,
+            "ride_request": serializer.data
+        }, status=status.HTTP_201_CREATED, headers=headers)
+    
+    def perform_create(self, serializer):
+        logging.info(f"Performing RideRequest creation with data: {serializer.validated_data}")
+        serializer.save()
 
 class NotificationViewSet(viewsets.ModelViewSet):
     serializer_class = NotificationSerializer

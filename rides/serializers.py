@@ -212,6 +212,9 @@ class RideRequestSerializer(serializers.ModelSerializer):
             'driver_details'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
+        extra_kwargs = {
+            'ride': {'required': False},
+        }
     
     def get_rider(self, obj):
         user = obj.rider
