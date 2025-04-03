@@ -1527,74 +1527,74 @@ class RideRequestViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'])
     def accept_match(self, request, pk=None):
         """
-        Action to accept a ride match by the rider
+        Accept a ride match, confirming the rider will join the driver's ride.
         """
-        logger.info(f"Accepting ride match for request {pk}")
-        
-        ride_request = self.get_object()
-        logger.info(f"Rider: {ride_request.rider.username}, Request status: {ride_request.status}")
-        
-        if ride_request.rider != request.user:
-            logger.warning(f"Permission denied: {request.user.username} tried to accept {ride_request.rider.username}'s request")
-            raise PermissionDenied("You don't have permission to accept this ride request")
-        
-        if ride_request.status != 'PENDING':
-            logger.warning(f"Invalid status: Ride request {pk} is {ride_request.status}, not PENDING")
-            return Response({'status': 'error', 'message': 'This ride request is not in pending status'}, 
-                          status=status.HTTP_400_BAD_REQUEST)
-
-        # Verify the ride still has enough available seats
-        ride = ride_request.ride
-        if ride.available_seats < ride_request.seats_needed:
-            logger.warning(f"Cannot accept match: not enough seats ({ride.available_seats} < {ride_request.seats_needed})")
+        try:
+            ride_request = self.get_object()
+            
+            if ride_request.status != 'PENDING':
+                return Response({
+                    'status': 'error',
+                    'detail': f'Cannot accept a ride that is already {ride_request.status}'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Update ride request status
+            ride_request.status = 'ACCEPTED'
+            
+            # Calculate optimal pickup point if it doesn't exist
+            if not ride_request.optimal_pickup_point:
+                from .services import calculate_optimal_pickup_point
+                try:
+                    # Calculate and store optimal pickup point
+                    optimal_pickup = calculate_optimal_pickup_point(ride_request.ride, ride_request)
+                    ride_request.optimal_pickup_point = optimal_pickup
+                    logger.info(f"Calculated optimal pickup point for ride request {ride_request.id}: {optimal_pickup}")
+                except Exception as e:
+                    logger.error(f"Error calculating optimal pickup point: {str(e)}")
+                    # Continue even if calculation fails
+            
+            ride_request.save()
+            
+            # Update ride's available seats
+            ride = ride_request.ride
+            ride.available_seats -= ride_request.seats_needed
+            ride.save()
+            
+            # Create notifications for both rider and driver
+            rider_notification = Notification.objects.create(
+                recipient=ride_request.rider,
+                sender=ride.driver,
+                notification_type='REQUEST_ACCEPTED',
+                ride=ride,
+                ride_request=ride_request,
+                message=f"Your ride request from {ride_request.pickup_location} to {ride_request.dropoff_location} has been accepted!"
+            )
+            
+            driver_notification = Notification.objects.create(
+                recipient=ride.driver,
+                sender=ride_request.rider,
+                notification_type='RIDE_ACCEPTED',
+                ride=ride,
+                ride_request=ride_request,
+                message=f"Rider has accepted your offer for the trip from {ride.start_location} to {ride.end_location}"
+            )
+            
+            # Send email notifications
+            from .services import send_ride_accepted_notification
+            send_ride_accepted_notification(ride_request)
+            
+            return Response({
+                'status': 'success',
+                'message': 'Ride match accepted successfully',
+                'ride_request': RideRequestSerializer(ride_request).data
+            })
+            
+        except Exception as e:
+            logger.error(f"Error accepting ride match: {str(e)}")
             return Response({
                 'status': 'error',
-                'message': f'This ride no longer has enough available seats. Required: {ride_request.seats_needed}, Available: {ride.available_seats}'
-            }, status=status.HTTP_400_BAD_REQUEST)
-        
-        # Update the status to ACCEPTED
-        logger.info(f"Updating ride request {pk} status to ACCEPTED")
-        ride_request.status = 'ACCEPTED'
-        ride_request.save()
-        
-        # Update available seats in the ride
-        logger.info(f"Updating available seats for ride {ride.id} from {ride.available_seats} to {ride.available_seats - ride_request.seats_needed}")
-        ride.available_seats -= ride_request.seats_needed
-        ride.save()
-        
-        # Create notifications for both rider and driver
-        logger.info(f"Creating notifications for ride request {pk}")
-        Notification.objects.create(
-            recipient=ride_request.ride.driver,
-            sender=ride_request.rider,
-            message=f"{ride_request.rider.first_name} {ride_request.rider.last_name} has accepted the ride match.",
-            ride=ride_request.ride,
-            ride_request=ride_request,
-            notification_type='REQUEST_ACCEPTED'
-        )
-        
-        Notification.objects.create(
-            recipient=ride_request.rider,
-            sender=ride_request.ride.driver,
-            message=f"You have successfully accepted the ride with {ride_request.ride.driver.first_name} {ride_request.ride.driver.last_name}.",
-            ride=ride_request.ride,
-            ride_request=ride_request,
-            notification_type='REQUEST_ACCEPTED'
-        )
-        
-        # Send email notification for ride accepted
-        logger.info(f"Attempting to send email notifications for ride request {pk}")
-        try:
-            # Send notification to both rider and driver
-            send_ride_match_notification(ride_request, notify_driver=True)
-            email_sent = send_ride_accepted_notification(ride_request)
-            logger.info(f"Email notification result: {email_sent}")
-        except Exception as e:
-            logger.error(f"Failed to send email notification for ride accepted: {str(e)}")
-            logger.exception("Email exception details:")
-        
-        logger.info(f"Ride match {pk} acceptance complete")
-        return Response({'status': 'success', 'message': 'Ride match accepted successfully'})
+                'detail': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     @action(detail=True, methods=['post'])
     def reject_match(self, request, pk=None):

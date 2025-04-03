@@ -33,127 +33,96 @@ const RiderAcceptedRides = () => {
   const [selectedRide, setSelectedRide] = useState(null);
   const [openCancelDialog, setOpenCancelDialog] = useState(false);
   const [isRetrying, setIsRetrying] = useState(false);
+  const [retryable, setRetryable] = useState(false);
 
   const fetchAcceptedRides = async () => {
+    setLoading(true);
+    setError(null);
     try {
+      console.log('Fetching accepted rides...');
       const token = localStorage.getItem('token');
       
-      if (!token) {
-        setError('Please log in to view your trips');
-        setLoading(false);
-        return;
+      // Log token info for debugging (without exposing full token)
+      if (token) {
+        console.log(`Token available (length: ${token.length})`);
+      } else {
+        console.error('No token available for fetch');
       }
-
-      // Clean the token (remove quotes or spaces)
-      const cleanToken = token.trim().replace(/^["'](.*)["']$/, '$1');
       
-      // Add a timeout to the fetch request
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 seconds timeout
-      
+      // First make a test request to check server status
       try {
-        console.log(`Fetching accepted rides from: ${API_BASE_URL}/api/rides/requests/accepted/`);
-        
-        const response = await fetch(`${API_BASE_URL}/api/rides/requests/accepted/`, {
-          headers: {
-            'Authorization': `Bearer ${cleanToken}`,
-            'Content-Type': 'application/json',
-            'Accept': 'application/json'
-          },
-          signal: controller.signal
-        });
-
-        // Handle common status codes
-        if (response.status === 404) {
-          console.log('No rides endpoint found (404) - user may have no trips yet');
-          setAcceptedRides([]);
-          setLoading(false);
-          setError('');
-          return;
-        } 
-        else if (response.status === 401) {
-          console.log('Authentication failed (401) - token may be expired');
-          localStorage.removeItem('token'); // Clear invalid token
-          setError('Your session has expired. Please log in again.');
-          setLoading(false);
-          return;
+        console.log('Testing server connection...');
+        const pingResponse = await fetch(`${API_BASE_URL}/api/health-check/`);
+        console.log(`Server health check status: ${pingResponse.status}`);
+      } catch (pingError) {
+        console.warn('Server health check failed:', pingError.message);
+      }
+      
+      // Clean the token to ensure proper formatting
+      const cleanToken = token ? token.trim().replace(/^["'](.*)["']$/, '$1').replace(/^Bearer\s+/i, '') : '';
+      
+      const response = await fetch(`${API_BASE_URL}/api/rides/requests/accepted/`, {
+        headers: {
+          'Authorization': `Bearer ${cleanToken}`,
+          'Content-Type': 'application/json'
         }
-        else if (response.status === 403) {
-          console.log('Permission denied (403) - user may not have rider role');
-          setAcceptedRides([]);
-          setError('You do not have permission to view trips. Please ensure you are registered as a rider.');
-          setLoading(false);
-          return;
-        }
-        else if (response.status === 500) {
-          console.error('Server error (500) - backend issue');
-          setError('The server encountered an error. Our team has been notified. Please try again later.');
-          setLoading(false);
-          return;
-        }
-        else if (!response.ok) {
-          // For any other non-successful response
-          console.error(`API response error: ${response.status} ${response.statusText}`);
+      });
+      
+      console.log(`Response status: ${response.status}`);
+      
+      if (!response.ok) {
+        // Try to get more detailed error information
+        let errorDetail = '';
+        try {
+          const errorResponse = await response.text();
+          console.error('Error response:', errorResponse);
           
-          // Try to get error details from response
-          let errorMessage = `Failed to fetch accepted rides: ${response.status}`;
-          try {
-            const errorData = await response.json();
-            if (errorData.detail || errorData.message) {
-              errorMessage = `Error: ${errorData.detail || errorData.message}`;
-            }
-          } catch (e) {
-            // If JSON parsing fails, use the status text
-            errorMessage = `Failed to fetch accepted rides: ${response.status} ${response.statusText}`;
+          // Check if the error might be related to optimal_pickup_point
+          if (errorResponse.includes('optimal_pickup_point')) {
+            console.error('Error appears to be related to optimal_pickup_point field');
+            errorDetail = ' (Database schema issue detected)';
+            throw new Error('Database schema error: optimal_pickup_point field');
           }
           
-          setError(errorMessage);
-          setLoading(false);
-          return;
-        }
-
-        const data = await response.json();
-        
-        if (!Array.isArray(data)) {
-          console.error('Expected array but got:', typeof data, data);
-          setError('Received invalid data format from the server');
-          setAcceptedRides([]);
-          setLoading(false);
-          return;
+          // Try to parse as JSON if possible
+          try {
+            const errorJson = JSON.parse(errorResponse);
+            console.error('Error details:', errorJson);
+            errorDetail = errorJson.detail ? ` - ${errorJson.detail}` : '';
+          } catch (e) {
+            // Not JSON, use text
+            errorDetail = errorResponse ? ` - ${errorResponse.substring(0, 100)}...` : '';
+          }
+        } catch (parseError) {
+          console.error('Could not parse error response:', parseError);
         }
         
-        // Filter out cancelled rides
-        const filteredRides = data.filter(ride => ride.status !== 'CANCELLED');
-        
-        // Sort rides by departure time (most recent first)
-        const sortedRides = filteredRides.sort((a, b) => 
-          new Date(b.departure_time) - new Date(a.departure_time)
-        );
-        
-        setAcceptedRides(sortedRides);
-        if (sortedRides.length > 0) {
-          setSelectedRide(sortedRides[0]);
+        if (response.status === 500) {
+          throw new Error(`Server error (500)${errorDetail}`);
+        } else if (response.status === 401) {
+          throw new Error('Authentication error - please log in again');
+        } else {
+          throw new Error(`Error ${response.status}${errorDetail}`);
         }
-        setError(''); // Clear any previous errors
-        setLoading(false);
-      } finally {
-        clearTimeout(timeoutId); // Always clear the timeout
       }
-    } catch (err) {
-      console.error('Error fetching accepted rides:', err);
       
-      // Special handling for common errors
-      if (err.name === 'AbortError') {
-        setError('Request timed out. Please check your connection and try again.');
-      } else if (err.name === 'TypeError' && err.message.includes('Failed to fetch')) {
-        setError('Network error. Please check your internet connection and try again.');
+      const data = await response.json();
+      console.log('Accepted rides data:', data);
+      setAcceptedRides(data);
+    } catch (error) {
+      console.error('Error fetching accepted rides:', error);
+      
+      // Set a more detailed error message
+      if (error.message.includes('Database schema error')) {
+        setError('Server is being updated. Please try again later.');
       } else {
-        setError(`Error: ${err.message || 'Something went wrong'}`);
+        setError(`Failed to load rides: ${error.message}`);
       }
       
-      setLoading(false);
+      // If the error might be fixable with a retry, set retryable flag
+      setRetryable(true);
     } finally {
-      setIsRetrying(false);
+      setLoading(false);
     }
   };
 
@@ -258,15 +227,16 @@ const RiderAcceptedRides = () => {
             severity="error" 
             sx={{ mb: 2 }}
             action={
-              <Button 
-                color="inherit" 
-                size="small" 
-                startIcon={isRetrying ? <CircularProgress size={20} color="inherit" /> : <Refresh />}
-                onClick={handleRetry}
-                disabled={isRetrying}
-              >
-                Retry
-              </Button>
+              retryable && (
+                <Button 
+                  color="inherit" 
+                  size="small" 
+                  onClick={fetchAcceptedRides} 
+                  disabled={loading}
+                >
+                  {loading ? <CircularProgress size={20} color="inherit" /> : 'Retry'}
+                </Button>
+              )
             }
           >
             {error}
