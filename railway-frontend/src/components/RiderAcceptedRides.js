@@ -220,49 +220,57 @@ const RiderAcceptedRides = () => {
       
       console.log('Driver IDs to fetch:', driverIds);
       
-      // If we have driver IDs, fetch their full details from users table
+      // If we have driver IDs, fetch their full details individually
       if (driverIds.length > 0) {
         try {
-          // Fetch all users in one request for efficiency
-          const usersResponse = await axios.get(`${API_BASE_URL}/api/users/`, {
-            headers: getAuthHeader()
+          console.log('Fetching individual driver details using multi-strategy approach...');
+          
+          // Use Promise.all to fetch all driver details concurrently
+          const driversPromises = driverIds.map(async (driverId) => {
+            if (!driverId) return null;
+            
+            // Use our multi-strategy function
+            const driverDetails = await fetchDriverDetails(driverId);
+            
+            if (driverDetails) {
+              console.log(`Driver ${driverId} details fetched successfully`);
+              return { id: driverId, details: driverDetails };
+            } else {
+              console.log(`Failed to fetch driver ${driverId} details with all strategies`);
+              return { id: driverId, details: null };
+            }
           });
           
-          console.log('Users API response:', usersResponse.data);
-          console.log('Example user object structure:', usersResponse.data[0]);
+          // Wait for all driver details to be fetched
+          const driversResults = await Promise.all(driversPromises);
           
-          // Create a map of driver details for quick lookup
-          const driverDetailsMap = {};
-          if (Array.isArray(usersResponse.data)) {
-            usersResponse.data.forEach(user => {
-              if (user && user.id) {
-                driverDetailsMap[user.id] = user;
-              }
-            });
+          // Update the rides with driver details
+          for (const result of driversResults) {
+            if (result && result.details) {
+              // Update all rides with this driver
+              mappedRides = mappedRides.map(ride => {
+                if (ride.driver && ride.driver.id === result.id) {
+                  const driverDetails = result.details;
+                  return {
+                    ...ride,
+                    driver: {
+                      ...ride.driver,
+                      ...driverDetails,
+                      // Keep the original full_name if it exists
+                      full_name: ride.driver.full_name || 
+                               `${driverDetails.first_name || ''} ${driverDetails.last_name || ''}`.trim() || 
+                               'Unknown Driver'
+                    }
+                  };
+                }
+                return ride;
+              });
+            }
           }
           
-          console.log('Driver details map created with', Object.keys(driverDetailsMap).length, 'users');
-          
-          // Update rides with driver details
-          mappedRides = mappedRides.map(ride => {
-            if (ride.driver && ride.driver.id && driverDetailsMap[ride.driver.id]) {
-              const driverDetails = driverDetailsMap[ride.driver.id];
-              return {
-                ...ride,
-                driver: {
-                  ...ride.driver,
-                  ...driverDetails,
-                  // Keep the original full_name if it exists
-                  full_name: ride.driver.full_name || 
-                           `${driverDetails.first_name || ''} ${driverDetails.last_name || ''}`.trim() || 
-                           'Unknown Driver'
-                }
-              };
-            }
-            return ride;
-          });
+          console.log('Driver details fetching complete');
         } catch (err) {
-          console.error('Error fetching driver details:', err);
+          console.error('Error in driver details fetch process:', err);
           // Continue with partial data rather than failing completely
         }
       }
@@ -492,7 +500,7 @@ const RiderAcceptedRides = () => {
   // Additional debug function to check API connectivity
   const testDriverDetailsEndpoint = async () => {
     try {
-      console.log('Testing driver details endpoint...');
+      console.log('Testing driver details endpoints...');
       console.log('Auth header:', JSON.stringify(getAuthHeader()));
       
       // Check if the auth token is valid
@@ -502,82 +510,80 @@ const RiderAcceptedRides = () => {
         console.log('Token format check:', token.substring(0, 15) + '...');
       }
       
-      // First make a simple OPTIONS request to check CORS
+      // Try the API call for all users (likely to fail due to permissions)
+      console.log('1. Testing GET request to /api/users/ (all users)...');
       try {
-        console.log('Testing CORS with OPTIONS request...');
-        const optionsResponse = await fetch(`${API_BASE_URL}/api/users/`, {
-          method: 'OPTIONS',
-          headers: {
-            'Accept': 'application/json',
-            'Content-Type': 'application/json'
-          }
+        const allUsersResponse = await axios.get(`${API_BASE_URL}/api/users/`, {
+          headers: getAuthHeader()
         });
-        console.log('OPTIONS response status:', optionsResponse.status);
-        console.log('OPTIONS response headers:', [...optionsResponse.headers.entries()]);
-      } catch (corsErr) {
-        console.error('CORS preflight failed:', corsErr);
+        
+        console.log('✅ All users API call succeeded:', allUsersResponse.status);
+        console.log('Users count:', allUsersResponse.data.length);
+      } catch (allUsersErr) {
+        console.error('❌ All users API call failed:', allUsersErr.message);
+        if (allUsersErr.response) {
+          console.error('Status:', allUsersErr.response.status);
+          console.error('Data:', allUsersErr.response.data);
+        }
       }
       
-      // Try the actual API call
-      console.log('Making GET request to /api/users/...');
-      const response = await axios.get(`${API_BASE_URL}/api/users/`, {
-        headers: getAuthHeader()
-      });
-      
-      console.log('Users API response status:', response.status);
-      console.log('Users API response headers:', response.headers);
-      console.log('Users API response data count:', response.data.length);
-      
-      if (Array.isArray(response.data) && response.data.length > 0) {
-        const sampleUser = response.data[0];
-        console.log('First user example:', sampleUser);
-        console.log('User fields available:', Object.keys(sampleUser));
+      // Try to get a specific driver (more likely to succeed)
+      console.log('2. Testing GET request to /api/users/1/ (specific user)...');
+      try {
+        const singleUserResponse = await axios.get(`${API_BASE_URL}/api/users/1/`, {
+          headers: getAuthHeader()
+        });
         
-        // Check for specific driver-related fields
+        console.log('✅ Single user API call succeeded:', singleUserResponse.status);
+        console.log('User data:', singleUserResponse.data);
+        
+        // Check for driver-related fields
+        const user = singleUserResponse.data;
         const driverFields = ['vehicle_make', 'vehicle_model', 'vehicle_color', 'license_plate'];
         driverFields.forEach(field => {
-          console.log(`Field "${field}" exists:`, field in sampleUser);
-          if (field in sampleUser) {
-            console.log(`Field "${field}" value:`, sampleUser[field]);
+          console.log(`Field "${field}" exists:`, field in user);
+          if (field in user) {
+            console.log(`Field "${field}" value:`, user[field]);
           }
         });
-      } else {
-        console.warn('No users found in response');
+      } catch (singleUserErr) {
+        console.error('❌ Single user API call failed:', singleUserErr.message);
+        if (singleUserErr.response) {
+          console.error('Status:', singleUserErr.response.status);
+          console.error('Data:', singleUserErr.response.data);
+        }
+        
+        // Try with a different user ID if the first fails
+        console.log('Trying with user ID 2...');
+        try {
+          const altUserResponse = await axios.get(`${API_BASE_URL}/api/users/2/`, {
+            headers: getAuthHeader()
+          });
+          console.log('✅ Alternative user API call succeeded:', altUserResponse.status);
+        } catch (altErr) {
+          console.error('❌ Alternative user API call also failed:', altErr.message);
+        }
+      }
+      
+      // Check auth token validity (logout endpoint should work)
+      console.log('3. Testing user-related endpoint /api/users/me/ for auth check...');
+      try {
+        const meResponse = await axios.get(`${API_BASE_URL}/api/users/me/`, {
+          headers: getAuthHeader()
+        });
+        console.log('✅ Current user API call succeeded:', meResponse.status);
+        console.log('Current user:', meResponse.data);
+      } catch (meErr) {
+        console.error('❌ Current user API call failed:', meErr.message);
+        if (meErr.response) {
+          console.error('Status:', meErr.response.status);
+          console.error('Data:', meErr.response.data);
+        }
       }
       
       return true;
     } catch (err) {
-      console.error('Error testing driver details endpoint:', err.message);
-      
-      // Log detailed error information
-      if (err.response) {
-        console.error('Response status:', err.response.status);
-        console.error('Response headers:', err.response.headers);
-        console.error('Response data:', err.response.data);
-        
-        // Check for common authentication issues
-        if (err.response.status === 401) {
-          console.error('Authentication error - Invalid or expired token');
-        } else if (err.response.status === 403) {
-          console.error('Permission error - User lacks permission to access the users endpoint');
-        }
-      } else if (err.request) {
-        console.error('No response received:', err.request);
-      }
-      
-      // Try an alternative endpoint as a control test
-      try {
-        console.log('Trying control endpoint /api/rides/ to check general API connectivity...');
-        const controlResponse = await axios.get(`${API_BASE_URL}/api/rides/`, {
-          headers: getAuthHeader()
-        });
-        console.log('Control endpoint response status:', controlResponse.status);
-        console.log('API connectivity seems OK, problem is specific to /api/users/ endpoint');
-      } catch (controlErr) {
-        console.error('Control endpoint also failed:', controlErr.message);
-        console.error('General API connectivity issue detected');
-      }
-      
+      console.error('Error in API diagnostics:', err.message);
       return false;
     }
   };
@@ -1047,6 +1053,67 @@ const RiderAcceptedRides = () => {
         </DialogActions>
       </Dialog>
     );
+  };
+
+  // Function to intelligently fetch driver details using all available methods
+  const fetchDriverDetails = async (driverId) => {
+    if (!driverId) return null;
+    
+    console.log(`Attempting to fetch details for driver ID: ${driverId}`);
+    
+    // Try multiple strategies to get driver info
+    try {
+      // Strategy 1: Direct fetch using ID (most direct)
+      console.log(`Strategy 1: Direct fetch by ID for driver ${driverId}`);
+      try {
+        const directResponse = await axios.get(`${API_BASE_URL}/api/users/${driverId}/`, {
+          headers: getAuthHeader()
+        });
+        console.log(`✅ Direct fetch succeeded for driver ${driverId}`);
+        return directResponse.data;
+      } catch (err) {
+        console.log(`❌ Direct fetch failed for driver ${driverId}:`, err.message);
+        // Continue to next strategy
+      }
+      
+      // Strategy 2: Check if this is the current user
+      console.log(`Strategy 2: Checking if driver ${driverId} is the current user`);
+      try {
+        const meResponse = await axios.get(`${API_BASE_URL}/api/users/me/`, {
+          headers: getAuthHeader()
+        });
+        
+        // If this is the current user, return the data
+        if (meResponse.data && meResponse.data.id == driverId) {
+          console.log(`✅ Driver ${driverId} is the current user, using /me/ data`);
+          return meResponse.data;
+        } else {
+          console.log(`Driver ${driverId} is not the current user`);
+        }
+      } catch (err) {
+        console.log(`❌ /me/ endpoint failed:`, err.message);
+        // Continue to next strategy
+      }
+      
+      // Strategy 3: Look for a driver details specific endpoint
+      console.log(`Strategy 3: Trying driver-specific endpoint for ${driverId}`);
+      try {
+        const driverResponse = await axios.get(`${API_BASE_URL}/api/drivers/${driverId}/`, {
+          headers: getAuthHeader()
+        });
+        console.log(`✅ Driver endpoint succeeded for driver ${driverId}`);
+        return driverResponse.data;
+      } catch (err) {
+        console.log(`❌ Driver endpoint failed for driver ${driverId}:`, err.message);
+      }
+      
+      // No strategy worked
+      console.log(`All strategies failed for driver ${driverId}`);
+      return null;
+    } catch (error) {
+      console.error(`Error in fetchDriverDetails for driver ${driverId}:`, error);
+      return null;
+    }
   };
 
   if (loading) {
