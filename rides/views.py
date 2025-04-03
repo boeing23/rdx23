@@ -1003,6 +1003,35 @@ class RideViewSet(viewsets.ModelViewSet):
         else:
             return Ride.objects.filter(status='SCHEDULED').exclude(driver=user)
 
+    def create(self, request, *args, **kwargs):
+        """
+        Create a new ride with the authenticated user as the driver.
+        Only users with driver user_type can create rides.
+        """
+        # Verify the user is a driver
+        if not hasattr(request.user, 'user_type') or request.user.user_type.upper() != 'DRIVER':
+            logger.warning(f"Non-driver user {request.user.username} attempted to create a ride")
+            return Response(
+                {"error": "Only drivers can create rides", "detail": "You must have a driver account to create rides."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        logger.info(f"Driver {request.user.username} is creating a ride")
+        
+        # Add the driver to the request data
+        data = request.data.copy()
+        data['driver'] = request.user.id
+        
+        serializer = self.get_serializer(data=data)
+        if serializer.is_valid():
+            # Save with the authenticated user as the driver
+            ride = serializer.save(driver=request.user)
+            logger.info(f"Ride created successfully with ID: {ride.id}")
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        else:
+            logger.error(f"Ride creation failed: {serializer.errors}")
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
 class RideRequestViewSet(viewsets.ModelViewSet):
     serializer_class = RideRequestSerializer
     permission_classes = [permissions.IsAuthenticated]
