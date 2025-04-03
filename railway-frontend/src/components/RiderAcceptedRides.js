@@ -20,13 +20,16 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
-  CircularProgress
+  CircularProgress,
+  Divider
 } from '@mui/material';
-import { Schedule, LocationOn, Person, Phone, Email, Event, AccessTime, Cancel, Refresh, DirectionsCar, DriveEta } from '@mui/icons-material';
+import { Schedule, LocationOn, Person, Phone, Email, Event, AccessTime, Cancel, Refresh, DirectionsCar, DriveEta, EventSeat } from '@mui/icons-material';
 import { API_BASE_URL, getAuthHeader, getAuthHeadersWithContentType } from '../config';
 import { format } from 'date-fns';
 import axios from 'axios';
 import { useAuth } from '../contexts/AuthContext';
+import { Link, useNavigate } from 'react-router-dom';
+import './RideTablet.css';
 
 // Replace with web components
 import { View, Text, FlatList, StyleSheet, TouchableOpacity } from 'react-native-web';
@@ -361,14 +364,81 @@ const RiderAcceptedRides = () => {
 
   // Add this to the useEffect to explore API on component mount
   useEffect(() => {
+    console.log('RiderAcceptedRides - useEffect triggered');
     fetchAcceptedRides();
     
-    // Also explore available API endpoints for debugging
+    // Debug token and authorization
     const token = localStorage.getItem('token');
+    console.log('Auth token exists:', !!token);
     if (token) {
-      exploreApiEndpoints(token);
+      console.log('Auth header format:', `Bearer ${token.substring(0, 10)}...`);
     }
   }, []);
+
+  // Additional debug function to check API connectivity
+  const testDriverDetailsEndpoint = async () => {
+    try {
+      console.log('Testing driver details endpoint...');
+      const response = await axios.get(`${API_BASE_URL}/api/users/`, {
+        headers: getAuthHeader()
+      });
+      console.log('Users API response status:', response.status);
+      console.log('Users API response data count:', response.data.length);
+      console.log('First user example:', response.data[0]);
+      return true;
+    } catch (err) {
+      console.error('Error testing driver details endpoint:', err.message);
+      if (err.response) {
+        console.error('Response status:', err.response.status);
+        console.error('Response data:', err.response.data);
+      }
+      return false;
+    }
+  };
+
+  // Call the debug function to diagnose driver details issue
+  useEffect(() => {
+    if (acceptedRides.length > 0) {
+      testDriverDetailsEndpoint();
+    }
+  }, [acceptedRides]);
+
+  // Format the date for display
+  const formatDate = (dateString) => {
+    try {
+      const date = new Date(dateString);
+      
+      // Check if date is valid
+      if (isNaN(date.getTime())) {
+        console.error('Invalid date:', dateString);
+        return 'Invalid date';
+      }
+      
+      // Format the date with timezone
+      const dateFormatter = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'America/New_York',
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric'
+      });
+      
+      // Format the time with timezone
+      const timeFormatter = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'America/New_York',
+        hour: 'numeric',
+        minute: '2-digit',
+        timeZoneName: 'short'
+      });
+      
+      return {
+        date: dateFormatter.format(date),
+        time: timeFormatter.format(date)
+      };
+    } catch (e) {
+      console.error('Error formatting date:', e);
+      return { date: 'Invalid date', time: 'Invalid time' };
+    }
+  };
 
   const handleRetry = () => {
     setIsRetrying(true);
@@ -559,17 +629,6 @@ const RiderAcceptedRides = () => {
     return vehicleInfo || 'Vehicle details will be available at pickup';
   };
 
-  const formatDate = (dateString) => {
-    if (!dateString) return 'Not specified';
-    try {
-      const date = new Date(dateString);
-      return format(date, 'PPpp'); // e.g., "Apr 3, 2023, 2:30 PM"
-    } catch (error) {
-      console.error('Error formatting date:', error);
-      return dateString;
-    }
-  };
-
   const handleOpenCancelDialog = (ride) => {
     setSelectedRide(ride);
     setOpenCancelDialog(true);
@@ -596,163 +655,154 @@ const RiderAcceptedRides = () => {
     window.open(`mailto:${email}`, '_blank');
   };
 
-  const renderRideItem = ({ item }) => (
-    <TouchableOpacity onPress={() => handleRideClick(item)}>
-      <Box sx={{ 
-        borderRadius: '8px', 
-        marginBottom: '10px', 
-        padding: '15px',
-        boxShadow: '0px 2px 4px rgba(0,0,0,0.1)',
-        background: '#fff'
-      }}>
-        <Typography variant="h6">{item.pickup_location} → {item.dropoff_location}</Typography>
-        <Typography sx={{ fontSize: '14px', color: '#555', marginBottom: '8px' }}>
-          {formatDate(item.departure_time)}
-        </Typography>
-        <Typography sx={{ fontSize: '14px', marginBottom: '5px' }}>
-          Status: <span style={{ 
-            color: item.status === 'ACCEPTED' ? 'green' : 
-                  item.status === 'PENDING' ? 'orange' :
-                  item.status === 'COMPLETED' ? 'blue' : 'red',
-            fontWeight: 'bold'
-          }}>{item.status}</span>
-        </Typography>
-        <Typography sx={{ fontSize: '14px', marginBottom: '3px' }}>
-          Driver: {item.driver ? (item.driver.full_name || `${item.driver.first_name} ${item.driver.last_name}`) : (item.driver_name || 'Not assigned')}
-        </Typography>
-        <Typography sx={{ fontSize: '14px', marginBottom: '3px' }}>
-          Seats: {item.seats_needed}
-        </Typography>
-      </Box>
-    </TouchableOpacity>
-  );
-
-  const renderSelectedRide = () => {
-    if (!selectedRide) return null;
-    
-    const driver = getDriverInfo(selectedRide);
+  const renderRideCard = (ride) => {
+    const driver = ride.driver || {};
+    const formatted = formatDate(ride.departure_time);
     
     return (
-      <Paper sx={{ borderRadius: '8px', padding: '15px', margin: 0 }}>
-        <Typography variant="h5" sx={{ marginBottom: '15px' }}>Ride Details</Typography>
-        <Box sx={{ maxHeight: '70vh', overflow: 'auto' }}>
-          <Box sx={{ display: 'flex', marginBottom: '10px' }}>
-            <Typography sx={{ width: '80px', fontWeight: 'bold' }}>From:</Typography>
-            <Typography sx={{ flex: 1 }}>{selectedRide.pickup_location}</Typography>
-          </Box>
-          <Box sx={{ display: 'flex', marginBottom: '10px' }}>
-            <Typography sx={{ width: '80px', fontWeight: 'bold' }}>To:</Typography>
-            <Typography sx={{ flex: 1 }}>{selectedRide.dropoff_location}</Typography>
-          </Box>
-          <Box sx={{ display: 'flex', marginBottom: '10px' }}>
-            <Typography sx={{ width: '80px', fontWeight: 'bold' }}>When:</Typography>
-            <Typography sx={{ flex: 1 }}>{formatDate(selectedRide.departure_time)}</Typography>
-          </Box>
-          <Box sx={{ display: 'flex', marginBottom: '10px' }}>
-            <Typography sx={{ width: '80px', fontWeight: 'bold' }}>Status:</Typography>
-            <Typography sx={{ 
-              flex: 1,
-              color: selectedRide.status === 'ACCEPTED' ? 'green' : 
-                     selectedRide.status === 'PENDING' ? 'orange' :
-                     selectedRide.status === 'COMPLETED' ? 'blue' : 'red',
-              fontWeight: 'bold'
-            }}>
-              {selectedRide.status}
+      <div className="ride-tablet">
+        <div className="ride-tablet-content">
+          <Box>
+            <Typography variant="h6" align="center" gutterBottom>
+              Trip #{ride.id}
             </Typography>
-          </Box>
-          <Box sx={{ display: 'flex', marginBottom: '10px' }}>
-            <Typography sx={{ width: '80px', fontWeight: 'bold' }}>Seats:</Typography>
-            <Typography sx={{ flex: 1 }}>{selectedRide.seats_needed}</Typography>
-          </Box>
-          
-          <Box sx={{ height: '1px', backgroundColor: '#e0e0e0', margin: '15px 0' }} />
-          
-          <Typography variant="h6" sx={{ marginBottom: '10px' }}>Driver Information</Typography>
-          <Box sx={{ display: 'flex', marginBottom: '10px' }}>
-            <Typography sx={{ width: '80px', fontWeight: 'bold' }}>Name:</Typography>
-            <Typography sx={{ flex: 1 }}>
-              {driver.full_name || `${driver.first_name || ''} ${driver.last_name || ''}`.trim() || 'Unknown Driver'}
-            </Typography>
+            <Chip 
+              label={ride.status} 
+              color={
+                ride.status === 'ACCEPTED' ? "success" : 
+                ride.status === 'PENDING' ? "warning" :
+                ride.status === 'COMPLETED' ? "info" : "error"
+              }
+              size="small"
+              sx={{ mb: 2 }}
+            />
+            <Divider sx={{ mb: 2 }} />
           </Box>
           
-          {/* Contact options */}
-          <Box sx={{ 
-            display: 'flex', 
-            justifyContent: 'space-around', 
-            flexWrap: 'wrap',
-            margin: '10px 0'
-          }}>
-            {driver.phone_number ? (
-              <Button
-                variant="contained"
-                startIcon={<Phone />}
-                onClick={() => handleCall(driver.phone_number)}
-                sx={{ minWidth: '120px', margin: '5px' }}
-              >
-                Call
-              </Button>
-            ) : (
-              <Typography sx={{ 
-                width: '100%', 
-                textAlign: 'center', 
-                color: '#555', 
-                margin: '10px 0'
-              }}>
-                Contact through ChalBeyy app
+          <div className="ride-details">
+            <div className="location-text">
+              <LocationOn className="location-icon" />
+              <Typography variant="subtitle1">
+                From: {ride.pickup_location}
               </Typography>
-            )}
-            
-            {driver.email ? (
-              <Button
-                variant="contained"
-                startIcon={<Email />}
-                onClick={() => handleEmail(driver.email)}
-                sx={{ minWidth: '120px', margin: '5px' }}
-              >
-                Email
-              </Button>
-            ) : (
-              <Typography sx={{ 
-                width: '100%', 
-                textAlign: 'center', 
-                color: '#555', 
-                margin: '10px 0'
-              }}>
-                Contact through ChalBeyy app
+            </div>
+            <div className="location-text">
+              <LocationOn className="location-icon" />
+              <Typography variant="subtitle1">
+                To: {ride.dropoff_location}
               </Typography>
-            )}
+            </div>
             
-            {(!driver.phone_number && !driver.email) && (
-              <Button
-                variant="contained"
-                color="warning"
-                onClick={() => window.open('mailto:support@chalbeyy.com', '_blank')}
-                sx={{ minWidth: '250px', margin: '5px' }}
-              >
-                Contact Support
-              </Button>
-            )}
-          </Box>
-          
-          <Box sx={{ height: '1px', backgroundColor: '#e0e0e0', margin: '15px 0' }} />
-          
-          <Typography variant="h6" sx={{ marginBottom: '10px' }}>Vehicle Information</Typography>
-          <Typography sx={{ marginTop: '5px', lineHeight: '24px' }}>
-            {getVehicleInfo(driver)}
-          </Typography>
-        </Box>
-        
-        <Box sx={{ marginTop: '20px' }}>
-          <Button
-            variant="contained"
-            color="inherit"
-            onClick={() => setSelectedRide(null)}
-            sx={{ backgroundColor: '#999' }}
-          >
-            Back to List
-          </Button>
-        </Box>
-      </Paper>
+            <div className="ride-meta">
+              <div className="time-details">
+                <AccessTime className="time-icon" />
+                <Typography variant="body2">
+                  {formatted.date}
+                  <br />
+                  {formatted.time}
+                </Typography>
+              </div>
+              
+              <Box display="flex" alignItems="center">
+                <EventSeat color="primary" sx={{ mr: 1 }} />
+                <Chip 
+                  label={`${ride.seats_needed} seat${ride.seats_needed !== 1 ? 's' : ''}`}
+                  color="primary"
+                  size="small"
+                  variant="outlined"
+                />
+              </Box>
+            </div>
+            
+            <Divider sx={{ my: 1 }} />
+            
+            <Box sx={{ mt: 1 }}>
+              <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 1 }}>
+                Driver Information
+              </Typography>
+              
+              <Box display="flex" alignItems="center" mb={0.5}>
+                <Person sx={{ mr: 1, color: "#800000" }} />
+                <Typography variant="body2">
+                  {driver.full_name || 'Driver information unavailable'}
+                </Typography>
+              </Box>
+              
+              {driver.phone_number && (
+                <Box display="flex" alignItems="center" mb={0.5}>
+                  <Phone sx={{ mr: 1, fontSize: "0.9rem", color: "#555" }} />
+                  <Typography variant="body2">
+                    {driver.phone_number}
+                  </Typography>
+                </Box>
+              )}
+              
+              {driver.email && (
+                <Box display="flex" alignItems="center" mb={0.5}>
+                  <Email sx={{ mr: 1, fontSize: "0.9rem", color: "#555" }} />
+                  <Typography variant="body2">
+                    {driver.email}
+                  </Typography>
+                </Box>
+              )}
+              
+              {(driver.vehicle_make || driver.vehicle_model || driver.vehicle_color) && (
+                <Box display="flex" alignItems="center" mb={0.5}>
+                  <DirectionsCar sx={{ mr: 1, fontSize: "0.9rem", color: "#555" }} />
+                  <Typography variant="body2">
+                    {[
+                      driver.vehicle_color, 
+                      driver.vehicle_make, 
+                      driver.vehicle_model
+                    ].filter(Boolean).join(' ')}
+                    {driver.license_plate ? ` (${driver.license_plate})` : ''}
+                  </Typography>
+                </Box>
+              )}
+            </Box>
+            
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 2 }}>
+              {ride.status === 'ACCEPTED' && (
+                <Button
+                  variant="contained"
+                  color="secondary"
+                  onClick={() => {
+                    setSelectedRide(ride);
+                    setOpenCancelDialog(true);
+                  }}
+                  size="small"
+                >
+                  Cancel Trip
+                </Button>
+              )}
+              
+              {driver.phone_number && (
+                <Button
+                  variant="contained"
+                  color="primary"
+                  onClick={() => handleCall(driver.phone_number)}
+                  size="small"
+                  startIcon={<Phone />}
+                >
+                  Call
+                </Button>
+              )}
+              
+              {driver.email && (
+                <Button
+                  variant="contained"
+                  color="primary"
+                  onClick={() => handleEmail(driver.email)}
+                  size="small"
+                  startIcon={<Email />}
+                >
+                  Email
+                </Button>
+              )}
+            </Box>
+          </div>
+        </div>
+      </div>
     );
   };
 
@@ -766,7 +816,7 @@ const RiderAcceptedRides = () => {
         minHeight: '60vh'
       }}>
         <CircularProgress size={40} sx={{ marginBottom: 2 }} />
-        <Typography>Loading rides...</Typography>
+        <Typography>Loading your trips...</Typography>
       </Box>
     );
   }
@@ -806,22 +856,13 @@ const RiderAcceptedRides = () => {
             <Typography variant="subtitle1" sx={{ mb: 2, fontWeight: 'bold' }}>
               Showing limited information based on available data:
             </Typography>
-            <List sx={{ paddingBottom: '20px' }}>
+            <Grid container spacing={3}>
               {acceptedRides.map(ride => (
-                <ListItem 
-                  key={ride.id.toString()} 
-                  button 
-                  onClick={() => handleRideClick(ride)}
-                  sx={{ 
-                    padding: 0, 
-                    marginBottom: '10px',
-                    display: 'block'
-                  }}
-                >
-                  {renderRideItem({ item: ride })}
-                </ListItem>
+                <Grid item xs={12} sm={6} md={4} key={ride.id}>
+                  {renderRideCard(ride)}
+                </Grid>
               ))}
-            </List>
+            </Grid>
           </Box>
         )}
       </Box>
@@ -834,36 +875,55 @@ const RiderAcceptedRides = () => {
         display: 'flex', 
         justifyContent: 'center', 
         alignItems: 'center',
+        flexDirection: 'column',
         minHeight: '60vh'
       }}>
-        <Typography>You don't have any rides yet.</Typography>
+        <Typography variant="h6" gutterBottom>You don't have any trips yet</Typography>
+        <Typography variant="body1" color="textSecondary">
+          When you request and get accepted for a ride, it will appear here.
+        </Typography>
+        <Button 
+          variant="contained" 
+          color="primary"
+          sx={{ mt: 3 }}
+          onClick={() => navigate('/rides')}
+          startIcon={<DirectionsCar />}
+        >
+          Find Available Rides
+        </Button>
       </Box>
     );
   }
 
   return (
-    <Container sx={{ padding: '10px', backgroundColor: '#f5f5f5', minHeight: '80vh' }}>
-      {selectedRide ? (
-        renderSelectedRide()
-      ) : (
-        <List sx={{ paddingBottom: '20px' }}>
-          {acceptedRides.map(ride => (
-            <ListItem 
-              key={ride.id.toString()} 
-              button 
-              onClick={() => handleRideClick(ride)}
-              sx={{ 
-                padding: 0, 
-                marginBottom: '10px',
-                display: 'block'
-              }}
-            >
-              {renderRideItem({ item: ride })}
-            </ListItem>
-          ))}
-        </List>
-      )}
-    </Container>
+    <Box sx={{ px: 4, py: 3 }}>
+      <Box sx={{ 
+        display: 'flex', 
+        flexDirection: 'column', 
+        alignItems: 'center', 
+        mb: 5,
+        textAlign: 'center'
+      }}>
+        <Typography variant="h4" className="page-title" gutterBottom>
+          My Trips
+        </Typography>
+      </Box>
+      
+      <Grid container spacing={4}>
+        {acceptedRides.map(ride => (
+          <Grid item xs={12} sm={6} md={4} key={ride.id}>
+            {renderRideCard(ride)}
+          </Grid>
+        ))}
+      </Grid>
+
+      <CancelRideDialog
+        open={openCancelDialog}
+        handleClose={() => setOpenCancelDialog(false)}
+        ride={selectedRide}
+        onCancelled={fetchAcceptedRides}
+      />
+    </Box>
   );
 };
 
