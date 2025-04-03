@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Container,
   Typography,
@@ -28,7 +29,7 @@ import { API_BASE_URL, getAuthHeader, getAuthHeadersWithContentType } from '../c
 import { format } from 'date-fns';
 import axios from 'axios';
 import { useAuth } from '../contexts/AuthContext';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import './RideTablet.css';
 
 // Replace with web components
@@ -37,6 +38,7 @@ import { View, Text, FlatList, StyleSheet, TouchableOpacity } from 'react-native
 // import { Icon } from 'react-native-elements';
 
 const RiderAcceptedRides = () => {
+  const navigate = useNavigate();
   const [acceptedRides, setAcceptedRides] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -56,12 +58,62 @@ const RiderAcceptedRides = () => {
       
       let response;
       try {
+        // Log token before API call
+        const token = localStorage.getItem('token');
+        console.log('Token before API call:', token ? `${token.substring(0, 10)}...` : 'no token');
+        console.log('Auth header for API call:', JSON.stringify(getAuthHeader()));
+        
         response = await axios.get(`${API_BASE_URL}/api/rides/requests/accepted/`, {
           headers: getAuthHeader()
         });
+        
+        console.log('Accepted rides API call successful');
+        console.log('Response status:', response.status);
+        console.log('Response headers:', response.headers);
+        
+        // Check the raw response format
+        console.log('Response type:', typeof response.data);
+        
+        if (Array.isArray(response.data)) {
+          console.log('Response is array with', response.data.length, 'items');
+          
+          // Check structure of the first item
+          if (response.data.length > 0) {
+            const sampleRide = response.data[0];
+            console.log('Sample ride fields:', Object.keys(sampleRide));
+            
+            // Check specifically for problematic fields
+            console.log('Has optimal_pickup_point?', 'optimal_pickup_point' in sampleRide);
+            console.log('Optimal pickup value:', sampleRide.optimal_pickup_point);
+            console.log('Type of optimal pickup:', typeof sampleRide.optimal_pickup_point);
+            
+            console.log('Has nearest_dropoff_point?', 'nearest_dropoff_point' in sampleRide);
+            console.log('Nearest dropoff value:', sampleRide.nearest_dropoff_point);
+            console.log('Type of nearest dropoff:', typeof sampleRide.nearest_dropoff_point);
+            
+            // Check driver info
+            console.log('Has driver_id?', 'driver_id' in sampleRide);
+            console.log('Driver ID value:', sampleRide.driver_id);
+            
+            console.log('Has driver_name?', 'driver_name' in sampleRide);
+            console.log('Driver name value:', sampleRide.driver_name);
+          }
+        }
+        
         console.log('Full accepted rides data:', JSON.stringify(response.data, null, 2));
       } catch (apiError) {
         console.error('API Error fetching accepted rides:', apiError);
+        
+        // More detailed error logging
+        if (apiError.response) {
+          console.error('Error status:', apiError.response.status);
+          console.error('Error headers:', apiError.response.headers);
+          console.error('Error data:', apiError.response.data);
+        } else if (apiError.request) {
+          console.error('No response received', apiError.request);
+        } else {
+          console.error('Error message:', apiError.message);
+        }
         
         // If we get a 500 error, try using our fallback data structure
         if (apiError.response && apiError.response.status === 500) {
@@ -251,6 +303,68 @@ const RiderAcceptedRides = () => {
         return createEmptyRide();
       }
       
+      // Safely handle potentially problematic JSON fields
+      let safeOptimalPickup = null;
+      let safeNearestDropoff = null;
+      
+      // Safety check for optimal_pickup_point
+      if ('optimal_pickup_point' in ride) {
+        console.log('Found optimal_pickup_point, type:', typeof ride.optimal_pickup_point);
+        
+        if (ride.optimal_pickup_point === null) {
+          console.log('optimal_pickup_point is null');
+          safeOptimalPickup = null;
+        } else {
+          try {
+            // If it's a string, try to parse as JSON
+            if (typeof ride.optimal_pickup_point === 'string') {
+              if (ride.optimal_pickup_point.trim() === '') {
+                console.log('optimal_pickup_point is empty string');
+                safeOptimalPickup = null;
+              } else {
+                safeOptimalPickup = JSON.parse(ride.optimal_pickup_point);
+                console.log('Successfully parsed optimal_pickup_point');
+              }
+            } else {
+              // Use as-is if it's already an object
+              safeOptimalPickup = ride.optimal_pickup_point;
+            }
+          } catch (jsonError) {
+            console.error('Error parsing optimal_pickup_point:', jsonError);
+            safeOptimalPickup = null;
+          }
+        }
+      }
+      
+      // Safety check for nearest_dropoff_point
+      if ('nearest_dropoff_point' in ride) {
+        console.log('Found nearest_dropoff_point, type:', typeof ride.nearest_dropoff_point);
+        
+        if (ride.nearest_dropoff_point === null) {
+          console.log('nearest_dropoff_point is null');
+          safeNearestDropoff = null;
+        } else {
+          try {
+            // If it's a string, try to parse as JSON
+            if (typeof ride.nearest_dropoff_point === 'string') {
+              if (ride.nearest_dropoff_point.trim() === '') {
+                console.log('nearest_dropoff_point is empty string');
+                safeNearestDropoff = null;
+              } else {
+                safeNearestDropoff = JSON.parse(ride.nearest_dropoff_point);
+                console.log('Successfully parsed nearest_dropoff_point');
+              }
+            } else {
+              // Use as-is if it's already an object
+              safeNearestDropoff = ride.nearest_dropoff_point;
+            }
+          } catch (jsonError) {
+            console.error('Error parsing nearest_dropoff_point:', jsonError);
+            safeNearestDropoff = null;
+          }
+        }
+      }
+      
       // Check if ride_details and driver are populated
       const hasRideDetails = ride.ride_details && typeof ride.ride_details === 'object';
       const hasDriverInRideDetails = hasRideDetails && ride.ride_details.driver;
@@ -290,11 +404,11 @@ const RiderAcceptedRides = () => {
         seats_needed: ride.seats_needed || 1,
         ride_details: ride.ride_details || null,
         driver: driverObj,
-        // Handle optional fields that might be causing the error
-        nearest_dropoff_point: ride.nearest_dropoff_point || null,
-        optimal_pickup_point: ride.optimal_pickup_point || null,
-        nearest_dropoff_info: ride.nearest_dropoff_info || null,
-        optimal_pickup_info: ride.optimal_pickup_info || null
+        // Use safe versions of problematic fields
+        optimal_pickup_point: safeOptimalPickup,
+        nearest_dropoff_point: safeNearestDropoff,
+        optimal_pickup_info: ride.optimal_pickup_info || null,
+        nearest_dropoff_info: ride.nearest_dropoff_info || null
       };
     } catch (e) {
       console.error('Error mapping ride:', e);
@@ -379,19 +493,91 @@ const RiderAcceptedRides = () => {
   const testDriverDetailsEndpoint = async () => {
     try {
       console.log('Testing driver details endpoint...');
+      console.log('Auth header:', JSON.stringify(getAuthHeader()));
+      
+      // Check if the auth token is valid
+      const token = localStorage.getItem('token');
+      console.log('Token exists:', !!token);
+      if (token) {
+        console.log('Token format check:', token.substring(0, 15) + '...');
+      }
+      
+      // First make a simple OPTIONS request to check CORS
+      try {
+        console.log('Testing CORS with OPTIONS request...');
+        const optionsResponse = await fetch(`${API_BASE_URL}/api/users/`, {
+          method: 'OPTIONS',
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json'
+          }
+        });
+        console.log('OPTIONS response status:', optionsResponse.status);
+        console.log('OPTIONS response headers:', [...optionsResponse.headers.entries()]);
+      } catch (corsErr) {
+        console.error('CORS preflight failed:', corsErr);
+      }
+      
+      // Try the actual API call
+      console.log('Making GET request to /api/users/...');
       const response = await axios.get(`${API_BASE_URL}/api/users/`, {
         headers: getAuthHeader()
       });
+      
       console.log('Users API response status:', response.status);
+      console.log('Users API response headers:', response.headers);
       console.log('Users API response data count:', response.data.length);
-      console.log('First user example:', response.data[0]);
+      
+      if (Array.isArray(response.data) && response.data.length > 0) {
+        const sampleUser = response.data[0];
+        console.log('First user example:', sampleUser);
+        console.log('User fields available:', Object.keys(sampleUser));
+        
+        // Check for specific driver-related fields
+        const driverFields = ['vehicle_make', 'vehicle_model', 'vehicle_color', 'license_plate'];
+        driverFields.forEach(field => {
+          console.log(`Field "${field}" exists:`, field in sampleUser);
+          if (field in sampleUser) {
+            console.log(`Field "${field}" value:`, sampleUser[field]);
+          }
+        });
+      } else {
+        console.warn('No users found in response');
+      }
+      
       return true;
     } catch (err) {
       console.error('Error testing driver details endpoint:', err.message);
+      
+      // Log detailed error information
       if (err.response) {
         console.error('Response status:', err.response.status);
+        console.error('Response headers:', err.response.headers);
         console.error('Response data:', err.response.data);
+        
+        // Check for common authentication issues
+        if (err.response.status === 401) {
+          console.error('Authentication error - Invalid or expired token');
+        } else if (err.response.status === 403) {
+          console.error('Permission error - User lacks permission to access the users endpoint');
+        }
+      } else if (err.request) {
+        console.error('No response received:', err.request);
       }
+      
+      // Try an alternative endpoint as a control test
+      try {
+        console.log('Trying control endpoint /api/rides/ to check general API connectivity...');
+        const controlResponse = await axios.get(`${API_BASE_URL}/api/rides/`, {
+          headers: getAuthHeader()
+        });
+        console.log('Control endpoint response status:', controlResponse.status);
+        console.log('API connectivity seems OK, problem is specific to /api/users/ endpoint');
+      } catch (controlErr) {
+        console.error('Control endpoint also failed:', controlErr.message);
+        console.error('General API connectivity issue detected');
+      }
+      
       return false;
     }
   };
@@ -803,6 +989,63 @@ const RiderAcceptedRides = () => {
           </div>
         </div>
       </div>
+    );
+  };
+
+  // Define the CancelRideDialog component
+  const CancelRideDialog = ({ open, handleClose, ride, onCancelled }) => {
+    const [cancelling, setCancelling] = useState(false);
+  
+    const handleCancelConfirm = async () => {
+      if (!ride) return;
+      
+      setCancelling(true);
+      try {
+        await handleCancelRide(ride.id);
+        handleClose();
+        if (onCancelled) onCancelled();
+      } catch (err) {
+        console.error('Error in cancel confirmation:', err);
+      } finally {
+        setCancelling(false);
+      }
+    };
+  
+    return (
+      <Dialog open={open} onClose={handleClose}>
+        <DialogTitle>Cancel Ride</DialogTitle>
+        <DialogContent>
+          <Typography>
+            Are you sure you want to cancel this ride? This action cannot be undone.
+          </Typography>
+          {ride && (
+            <Box sx={{ mt: 2 }}>
+              <Typography variant="subtitle2">
+                From: {ride.pickup_location}
+              </Typography>
+              <Typography variant="subtitle2">
+                To: {ride.dropoff_location}
+              </Typography>
+              <Typography variant="subtitle2">
+                {formatDate(ride.departure_time).date} at {formatDate(ride.departure_time).time}
+              </Typography>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleClose} disabled={cancelling}>
+            No, Keep It
+          </Button>
+          <Button 
+            onClick={handleCancelConfirm} 
+            color="secondary" 
+            disabled={cancelling}
+            startIcon={cancelling ? <CircularProgress size={20} /> : null}
+          >
+            {cancelling ? 'Cancelling...' : 'Yes, Cancel Ride'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     );
   };
 
