@@ -998,10 +998,24 @@ class RideViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
-        if hasattr(user, 'user_type') and user.user_type == 'driver':
+        # Log the user info to help with debugging
+        logger.info(f"Getting rides for user: {user.username}, user_type: {getattr(user, 'user_type', 'unknown')}")
+        
+        if hasattr(user, 'user_type') and user.user_type.upper() == 'DRIVER':
+            # Drivers see their own rides
+            logger.info(f"User is a DRIVER, returning their own rides")
             return Ride.objects.filter(driver=user)
         else:
-            return Ride.objects.filter(status='SCHEDULED').exclude(driver=user)
+            # Riders see all scheduled rides that have available seats
+            logger.info(f"User is a RIDER, returning available rides")
+            available_rides = Ride.objects.filter(
+                status='SCHEDULED',
+                available_seats__gt=0,
+                departure_time__gt=timezone.now()
+            ).exclude(driver=user)
+            
+            logger.info(f"Found {available_rides.count()} available rides")
+            return available_rides
 
     def create(self, request, *args, **kwargs):
         """
@@ -1031,6 +1045,66 @@ class RideViewSet(viewsets.ModelViewSet):
         else:
             logger.error(f"Ride creation failed: {serializer.errors}")
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=False, methods=['get'])
+    def debug_available_rides(self, request):
+        """
+        Debug endpoint to check what rides are available in the system
+        and why they might not be showing up for the current user.
+        """
+        user = request.user
+        
+        # Get all rides in the system
+        all_rides = Ride.objects.all()
+        logger.info(f"Total rides in system: {all_rides.count()}")
+        
+        # Check scheduled rides
+        scheduled_rides = Ride.objects.filter(status='SCHEDULED')
+        logger.info(f"Scheduled rides: {scheduled_rides.count()}")
+        
+        # Check rides with available seats
+        available_seat_rides = Ride.objects.filter(available_seats__gt=0)
+        logger.info(f"Rides with available seats: {available_seat_rides.count()}")
+        
+        # Check future rides
+        future_rides = Ride.objects.filter(departure_time__gt=timezone.now())
+        logger.info(f"Future rides: {future_rides.count()}")
+        
+        # Check rides that would be shown to this user
+        if hasattr(user, 'user_type') and user.user_type.upper() == 'DRIVER':
+            user_rides = Ride.objects.filter(driver=user)
+            filter_description = "Your own rides as a driver"
+        else:
+            user_rides = Ride.objects.filter(
+                status='SCHEDULED',
+                available_seats__gt=0,
+                departure_time__gt=timezone.now()
+            ).exclude(driver=user)
+            filter_description = "Available rides for riders"
+        
+        # Format a minimal version of ride data for the response
+        ride_data = []
+        for ride in user_rides:
+            ride_data.append({
+                'id': ride.id,
+                'start': ride.start_location,
+                'end': ride.end_location,
+                'seats': ride.available_seats,
+                'departure': ride.departure_time.isoformat(),
+                'status': ride.status,
+                'driver_id': ride.driver_id
+            })
+        
+        return Response({
+            'total_rides': all_rides.count(),
+            'scheduled_rides': scheduled_rides.count(),
+            'rides_with_seats': available_seat_rides.count(),
+            'future_rides': future_rides.count(),
+            'user_type': getattr(user, 'user_type', 'unknown'),
+            'filter_description': filter_description,
+            'available_to_user': user_rides.count(),
+            'ride_details': ride_data
+        })
 
 class RideRequestViewSet(viewsets.ModelViewSet):
     serializer_class = RideRequestSerializer
