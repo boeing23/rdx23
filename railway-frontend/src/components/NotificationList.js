@@ -93,16 +93,39 @@ function NotificationList() {
         setLoading(false);
         return;
       }
+      
+      // Log token format (first few characters) for debugging
+      console.log('Token format check:', {
+        length: token.length,
+        startsWithBearer: token.startsWith('Bearer '),
+        prefix: token.substring(0, 5) + '...',
+        containsQuotes: token.includes('"') || token.includes("'"),
+        containsSpaces: /\s/.test(token)
+      });
+
+      // Make sure to clean the token properly
+      const cleanToken = token.trim().replace(/^["'](.*)["']$/, '$1').replace(/^Bearer\s+/i, '');
 
       console.log('Fetching notifications from:', `${API_BASE_URL}/api/rides/notifications/`);
       
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
       
+      // Try a simple ping first to check if server is responsive
+      try {
+        const pingResponse = await fetch(`${API_BASE_URL}/api/health-check/`, {
+          method: 'GET',
+          signal: controller.signal
+        });
+        console.log('Server ping status:', pingResponse.status);
+      } catch (pingErr) {
+        console.log('Server ping failed:', pingErr.message);
+      }
+      
       const response = await fetch(`${API_BASE_URL}/api/rides/notifications/`, {
         method: 'GET',
         headers: {
-          'Authorization': `Bearer ${token}`,
+          'Authorization': `Bearer ${cleanToken}`,
           'Content-Type': 'application/json',
           'Accept': 'application/json'
         },
@@ -130,12 +153,26 @@ function NotificationList() {
       } else {
         // Better error handling
         let errorMessage = 'Failed to fetch notifications';
+        let errorDetails = null;
+        
         try {
-          const errorData = await response.json();
-          errorMessage = errorData.message || errorData.detail || errorMessage;
-          console.error('Error response data:', errorData);
+          const errorText = await response.text();
+          console.error('Raw error response:', errorText);
+          
+          try {
+            // Try to parse as JSON
+            const errorData = JSON.parse(errorText);
+            errorMessage = errorData.message || errorData.detail || errorMessage;
+            errorDetails = errorData;
+            console.error('Error response data:', errorData);
+          } catch (jsonErr) {
+            // If not valid JSON, use the text as is
+            if (errorText && errorText.length < 100) {
+              errorMessage = errorText;
+            }
+          }
         } catch (e) {
-          // If can't parse JSON, use status text
+          // If can't read response text
           errorMessage = `${errorMessage}: ${response.statusText}`;
         }
         
@@ -150,8 +187,17 @@ function NotificationList() {
           errorMessage = 'You do not have permission to view notifications.';
         } else if (response.status === 404) {
           errorMessage = 'Notification service not found. Please try again later.';
-        } else if (response.status >= 500) {
-          errorMessage = 'Server error. Please try again later.';
+        } else if (response.status === 500) {
+          console.error('Server error details:', errorDetails);
+          
+          // Check for common 500 error patterns
+          if (errorMessage.includes('token') || errorMessage.includes('authentication') || errorMessage.includes('jwt')) {
+            errorMessage = 'Authentication error. Please log out and log in again.';
+            localStorage.removeItem('token');
+          } else {
+            errorMessage = 'The server encountered an error while processing your request. Our team has been notified.';
+          }
+          
           setServerAvailable(false);
         }
         
