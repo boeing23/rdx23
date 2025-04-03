@@ -1119,6 +1119,180 @@ class RideRequestViewSet(viewsets.ModelViewSet):
             logger.info(f"Request data: {request.data}")
             logger.info(f"User: {request.user.username}, ID: {request.user.id}, Type: {request.user.user_type}")
             
+            # Check if this is a ride-less request (just origin/destination)
+            if 'ride' not in request.data or not request.data['ride']:
+                logger.info("No specific ride provided - creating a pending ride request")
+                
+                # Clone the data to avoid modifying the original
+                data = request.data.copy()
+                
+                # Make sure we have coordinates for matching
+                required_fields = [
+                    'pickup_latitude', 'pickup_longitude', 
+                    'dropoff_latitude', 'dropoff_longitude',
+                    'pickup_location', 'dropoff_location',
+                    'departure_time', 'seats_needed'
+                ]
+                
+                # Validate required fields are present
+                missing_fields = [field for field in required_fields if field not in data or not data[field]]
+                if missing_fields:
+                    logger.error(f"Missing required fields for ride matching: {missing_fields}")
+                    return Response({
+                        'status': 'error',
+                        'has_match': False,
+                        'errors': {field: ['This field is required.'] for field in missing_fields}
+                    }, status=status.HTTP_400_BAD_REQUEST)
+                
+                # Create a dictionary for route matching
+                matching_data = {
+                    'pickup_location': data.get('pickup_location'),
+                    'dropoff_location': data.get('dropoff_location'),
+                    'pickup_location_coordinates': (
+                        float(data.get('pickup_longitude')), 
+                        float(data.get('pickup_latitude'))
+                    ),
+                    'dropoff_location_coordinates': (
+                        float(data.get('dropoff_longitude')), 
+                        float(data.get('dropoff_latitude'))
+                    ),
+                    'departure_time': data.get('departure_time'),
+                    'seats': int(data.get('seats_needed', 1))
+                }
+                
+                logger.info(f"Prepared matching data: {matching_data}")
+                
+                # Get all scheduled rides with available seats
+                available_rides = Ride.objects.filter(
+                    status='SCHEDULED',
+                    available_seats__gte=matching_data['seats'],
+                    departure_time__gt=timezone.now()
+                ).exclude(driver=request.user)
+                
+                logger.info(f"Found {available_rides.count()} potentially matching rides")
+                
+                # Create a pending ride request first (without a specific ride)
+                serializer = self.get_serializer(data=data)
+                if not serializer.is_valid():
+                    # If validation fails, try to remove the 'ride' field from validation
+                    errors = serializer.errors.copy()
+                    if 'ride' in errors:
+                        # Remove ride-related errors and create a serializer without ride requirement
+                        errors.pop('ride')
+                        if errors:
+                            # If there are other errors, return them
+                            logger.error(f"Validation failed with errors: {errors}")
+                            return Response({
+                                'status': 'error',
+                                'has_match': False,
+                                'errors': errors
+                            }, status=status.HTTP_400_BAD_REQUEST)
+                    else:
+                        logger.error(f"Validation failed with errors: {serializer.errors}")
+                        return Response({
+                            'status': 'error',
+                            'has_match': False,
+                            'errors': serializer.errors
+                        }, status=status.HTTP_400_BAD_REQUEST)
+                
+                # For a ride-less request, create a "pending" ride request
+                pending_ride_request = PendingRideRequest.objects.create(
+                    rider=request.user,
+                    pickup_location=data.get('pickup_location'),
+                    dropoff_location=data.get('dropoff_location'),
+                    pickup_latitude=data.get('pickup_latitude'),
+                    pickup_longitude=data.get('pickup_longitude'),
+                    dropoff_latitude=data.get('dropoff_latitude'),
+                    dropoff_longitude=data.get('dropoff_longitude'),
+                    departure_time=data.get('departure_time'),
+                    seats_needed=data.get('seats_needed', 1)
+                )
+                
+                logger.info(f"Created pending ride request: {pending_ride_request.id}")
+                
+                # Find suitable rides for this request
+                suitable_rides = []
+                
+                # Only try matching if there are available rides
+                if available_rides.exists():
+                    from .services import find_suitable_rides  # Import the service function
+                    try:
+                        suitable_rides = find_suitable_rides(
+                            rides=available_rides,
+                            ride_request_data=matching_data
+                        )
+                        logger.info(f"Found {len(suitable_rides)} suitable rides for the request")
+                    except Exception as e:
+                        logger.error(f"Error finding suitable rides: {str(e)}")
+                        logger.exception("Full exception details:")
+                
+                # If we found suitable rides, create ride requests and notifications for each
+                if suitable_rides:
+                    # Create a response with match information
+                    matches = []
+                    
+                    for match in suitable_rides[:3]:  # Limit to top 3 matches
+                        ride = match['ride']
+                        
+                        # Create a ride request for this specific match
+                        ride_request = RideRequest.objects.create(
+                            rider=request.user,
+                            ride=ride,
+                            pickup_location=data.get('pickup_location'),
+                            dropoff_location=data.get('dropoff_location'),
+                            pickup_latitude=data.get('pickup_latitude'),
+                            pickup_longitude=data.get('pickup_longitude'),
+                            dropoff_latitude=data.get('dropoff_latitude'),
+                            dropoff_longitude=data.get('dropoff_longitude'),
+                            departure_time=data.get('departure_time'),
+                            seats_needed=data.get('seats_needed', 1),
+                            status='PENDING',
+                            nearest_dropoff_point=match.get('nearest_dropoff_point'),
+                            optimal_pickup_point=match.get('optimal_pickup_point')
+                        )
+                        
+                        logger.info(f"Created ride request {ride_request.id} for ride {ride.id} with matching score {match['matching_score']:.2f}")
+                        
+                        # Create a notification for the rider
+                        Notification.objects.create(
+                            recipient=request.user,
+                            message=f"We found a potential ride match from {ride_request.pickup_location} to {ride_request.dropoff_location}",
+                            notification_type='RIDE_MATCH',
+                            ride=ride,
+                            ride_request=ride_request,
+                            sender=ride.driver
+                        )
+                        
+                        # Add to matches list for response
+                        matches.append({
+                            'ride_id': ride.id,
+                            'ride_request_id': ride_request.id,
+                            'driver': {
+                                'id': ride.driver.id,
+                                'name': f"{ride.driver.first_name} {ride.driver.last_name}".strip() or ride.driver.username,
+                            },
+                            'matching_score': match['matching_score'],
+                            'overlap_percentage': match['overlap_percentage'],
+                            'departure_time': ride.departure_time.isoformat()
+                        })
+                    
+                    return Response({
+                        'status': 'success',
+                        'has_match': True,
+                        'pending_request_id': pending_ride_request.id,
+                        'matches': matches,
+                        'message': f"We found {len(matches)} potential ride matches! Check your notifications."
+                    }, status=status.HTTP_201_CREATED)
+                else:
+                    # No matches found, just save the pending request
+                    return Response({
+                        'status': 'success',
+                        'has_match': False,
+                        'pending_request_id': pending_ride_request.id,
+                        'message': "Your ride request has been saved. We'll notify you when a matching ride becomes available."
+                    }, status=status.HTTP_201_CREATED)
+            
+            # If we get here, then a specific ride was requested
             # Validate the serializer
             serializer = self.get_serializer(data=request.data)
             if not serializer.is_valid():
@@ -1137,6 +1311,7 @@ class RideRequestViewSet(viewsets.ModelViewSet):
             
             return Response({
                 'status': 'success',
+                'has_match': True,
                 'ride_request_id': ride_request.id,
                 'message': 'Ride request created successfully'
             }, status=status.HTTP_201_CREATED)
