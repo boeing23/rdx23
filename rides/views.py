@@ -1130,6 +1130,7 @@ class RideRequestViewSet(viewsets.ModelViewSet):
             
             user = request.user
             user_type = getattr(user, 'user_type', '').lower()
+            logger.info(f"User type: {user_type}")
             
             # Use select_related to fetch related ride and driver data in a single query
             if user_type == 'driver':
@@ -1155,6 +1156,7 @@ class RideRequestViewSet(viewsets.ModelViewSet):
             
             # Serialize the ride requests
             serializer = self.get_serializer(ride_requests, many=True)
+            logger.debug(f"Serialized data: {serializer.data}")
             
             # Enhance the response with direct driver information for frontend compatibility
             enhanced_data = []
@@ -1163,8 +1165,12 @@ class RideRequestViewSet(viewsets.ModelViewSet):
                 driver_details = {}
                 ride_details = ride_request_data.get('ride_details')
                 
+                logger.debug(f"Processing ride request: {ride_request_data.get('id')}")
+                logger.debug(f"Ride details: {ride_details}")
+                
                 if ride_details and 'driver' in ride_details:
                     driver = ride_details['driver']
+                    logger.debug(f"Found driver in ride_details: {driver}")
                     if driver:
                         driver_details = {
                             'driver_id': driver.get('id'),
@@ -1177,11 +1183,32 @@ class RideRequestViewSet(viewsets.ModelViewSet):
                             'vehicle_year': driver.get('vehicle_year'),
                             'license_plate': driver.get('license_plate')
                         }
+                        logger.debug(f"Extracted driver details: {driver_details}")
+                
+                # Try to use driver_details field as fallback
+                if not driver_details and ride_request_data.get('driver_details'):
+                    driver = ride_request_data.get('driver_details')
+                    logger.debug(f"Found driver in driver_details: {driver}")
+                    if driver:
+                        driver_details = {
+                            'driver_id': driver.get('id'),
+                            'driver_name': f"{driver.get('first_name', '')} {driver.get('last_name', '')}".strip(),
+                            'driver_email': driver.get('email'),
+                            'driver_phone': driver.get('phone_number'),
+                            'vehicle_make': driver.get('vehicle_make'),
+                            'vehicle_model': driver.get('vehicle_model'),
+                            'vehicle_color': driver.get('vehicle_color'),
+                            'vehicle_year': driver.get('vehicle_year'),
+                            'license_plate': driver.get('license_plate')
+                        }
+                        logger.debug(f"Extracted driver details from fallback: {driver_details}")
                 
                 # Merge the driver details with the original data
                 enhanced_ride_request = {**ride_request_data, **driver_details}
+                logger.debug(f"Enhanced ride request: {enhanced_ride_request}")
                 enhanced_data.append(enhanced_ride_request)
             
+            logger.info(f"Returning {len(enhanced_data)} enhanced ride requests")
             return Response(enhanced_data)
             
         except Exception as e:
