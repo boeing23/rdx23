@@ -1214,6 +1214,107 @@ class RideRequestViewSet(viewsets.ModelViewSet):
         return Response(mock_data)
 
     @action(detail=False, methods=['get'])
+    def mock_accepted(self, request):
+        """
+        A special endpoint that returns mock data when in DEBUG mode, 
+        otherwise it calls the regular accepted endpoint.
+        This allows frontend testing without changing the API URL.
+        """
+        from django.conf import settings
+        
+        # Check if we're in debug mode
+        if settings.DEBUG:
+            logger.info("DEBUG mode detected, returning mock data for accepted rides")
+            # Use the same mock data from test_mock_response
+            mock_data = [
+                {
+                    "id": 15,
+                    "rider": {
+                        "id": 5,
+                        "username": "rider_user",
+                        "first_name": "Rider",
+                        "last_name": "User",
+                        "email": "rider@example.com",
+                        "phone_number": "123-456-7890"
+                    },
+                    "ride": 10,
+                    "ride_details": {
+                        "id": 10,
+                        "driver": {
+                            "id": 3,
+                            "username": "driver_user",
+                            "first_name": "Driver",
+                            "last_name": "User",
+                            "email": "driver@example.com",
+                            "phone_number": "987-654-3210",
+                            "vehicle_make": "Toyota",
+                            "vehicle_model": "Camry",
+                            "vehicle_color": "Blue",
+                            "license_plate": "ABC123"
+                        },
+                        "start_location": "Campus Drive, Blacksburg",
+                        "end_location": "Main Street, Blacksburg",
+                        "departure_time": "2025-04-05T10:00:00Z",
+                        "seats_available": 3,
+                        "route_distance": 5.2,
+                        "route_duration": 15
+                    },
+                    "pickup_location": "Campus Drive, Blacksburg",
+                    "dropoff_location": "Main Street, Blacksburg",
+                    "pickup_latitude": 37.223866,
+                    "pickup_longitude": -80.428721,
+                    "dropoff_latitude": 37.230761,
+                    "dropoff_longitude": -80.414967,
+                    "departure_time": "2025-04-05T10:00:00Z",
+                    "seats_needed": 1,
+                    "status": "ACCEPTED",
+                    "created_at": "2025-04-01T08:30:00Z",
+                    "updated_at": "2025-04-01T09:00:00Z",
+                    "nearest_dropoff_point": "{\"latitude\": 37.230761, \"longitude\": -80.414967, \"address\": \"Main Street, Blacksburg\"}",
+                    "nearest_dropoff_info": {
+                        "address": "Main Street, Blacksburg",
+                        "latitude": 37.230761,
+                        "longitude": -80.414967,
+                        "distance_from_rider": 0.5
+                    },
+                    "optimal_pickup_point": "{\"latitude\": 37.223866, \"longitude\": -80.428721, \"address\": \"Campus Drive, Blacksburg\"}",
+                    "optimal_pickup_info": {
+                        "address": "Campus Drive, Blacksburg",
+                        "latitude": 37.223866,
+                        "longitude": -80.428721,
+                        "distance_from_rider": 0.1
+                    },
+                    "driver_details": {
+                        "id": 3,
+                        "username": "driver_user",
+                        "first_name": "Driver",
+                        "last_name": "User",
+                        "email": "driver@example.com",
+                        "phone_number": "987-654-3210",
+                        "vehicle_make": "Toyota",
+                        "vehicle_model": "Camry",
+                        "vehicle_color": "Blue",
+                        "license_plate": "ABC123"
+                    },
+                    "driver_id": 3,
+                    "driver_name": "Driver User",
+                    "driver_email": "driver@example.com",
+                    "driver_phone": "987-654-3210",
+                    "vehicle_make": "Toyota",
+                    "vehicle_model": "Camry",
+                    "vehicle_color": "Blue",
+                    "license_plate": "ABC123"
+                }
+            ]
+            
+            # For the frontend to test with fake data
+            return Response(mock_data)
+        else:
+            # Not in debug mode, call the normal accepted endpoint
+            logger.info("Production mode detected, calling real accepted endpoint")
+            return self.accepted(request)
+
+    @action(detail=False, methods=['get'])
     def accepted(self, request):
         """
         Get all accepted ride requests for the current user (both as rider and driver)
@@ -1349,8 +1450,25 @@ class RideRequestViewSet(viewsets.ModelViewSet):
             # Extract data needed to find suitable rides
             request_data = request.data.copy()
             
+            # Field name mapping from frontend to backend expected names
+            coord_mapping = {
+                'pickup_latitude': 'pickup_lat',
+                'pickup_longitude': 'pickup_lng',
+                'dropoff_latitude': 'dropoff_lat',
+                'dropoff_longitude': 'dropoff_lng'
+            }
+            
+            # Add backward compatibility for different field naming conventions
+            for frontend_name, backend_name in coord_mapping.items():
+                if frontend_name in request_data and backend_name not in request_data:
+                    request_data[backend_name] = request_data[frontend_name]
+            
+            logging.info(f"Processed request data: {request_data}")
+            
             # Check if we have the necessary data
             if not all(k in request_data for k in ['pickup_lat', 'pickup_lng', 'dropoff_lat', 'dropoff_lng']):
+                logging.error("Missing required coordinate fields")
+                logging.error(f"Available fields: {list(request_data.keys())}")
                 return Response({
                     "status": "error",
                     "has_match": False,
