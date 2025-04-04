@@ -1120,6 +1120,50 @@ class RideRequestViewSet(viewsets.ModelViewSet):
             return RideRequest.objects.filter(rider=user)
         return RideRequest.objects.none()
 
+    @action(detail=False, methods=['get'])
+    def accepted(self, request):
+        """
+        Get all accepted ride requests for the current user (both as rider and driver)
+        """
+        try:
+            logger.info(f"Fetching accepted rides for user: {request.user.username} (ID: {request.user.id})")
+            
+            user = request.user
+            user_type = getattr(user, 'user_type', '').lower()
+            
+            # Use select_related to fetch related ride and driver data in a single query
+            if user_type == 'driver':
+                ride_requests = RideRequest.objects.filter(
+                    ride__driver=user,
+                    status__in=['ACCEPTED', 'COMPLETED']
+                ).select_related(
+                    'ride',
+                    'rider'
+                ).order_by('-departure_time')
+            elif user_type == 'rider':
+                ride_requests = RideRequest.objects.filter(
+                    rider=user,
+                    status__in=['ACCEPTED', 'COMPLETED']
+                ).select_related(
+                    'ride',
+                    'ride__driver'
+                ).order_by('-departure_time')
+            else:
+                return Response([], status=status.HTTP_200_OK)
+            
+            logger.info(f"Found {ride_requests.count()} accepted rides")
+            
+            serializer = self.get_serializer(ride_requests, many=True)
+            return Response(serializer.data)
+            
+        except Exception as e:
+            logger.error(f"Error fetching accepted rides: {str(e)}")
+            logger.exception("Full exception details:")
+            return Response(
+                {"error": "An error occurred while fetching accepted rides"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
     def create(self, request, *args, **kwargs):
         logging.info(f"RideRequestViewSet.create called with data: {request.data}")
         
