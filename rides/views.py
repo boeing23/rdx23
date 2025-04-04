@@ -1153,8 +1153,36 @@ class RideRequestViewSet(viewsets.ModelViewSet):
             
             logger.info(f"Found {ride_requests.count()} accepted rides")
             
+            # Serialize the ride requests
             serializer = self.get_serializer(ride_requests, many=True)
-            return Response(serializer.data)
+            
+            # Enhance the response with direct driver information for frontend compatibility
+            enhanced_data = []
+            for ride_request_data in serializer.data:
+                # Get driver details from the ride if available
+                driver_details = {}
+                ride_details = ride_request_data.get('ride_details')
+                
+                if ride_details and 'driver' in ride_details:
+                    driver = ride_details['driver']
+                    if driver:
+                        driver_details = {
+                            'driver_id': driver.get('id'),
+                            'driver_name': f"{driver.get('first_name', '')} {driver.get('last_name', '')}".strip(),
+                            'driver_email': driver.get('email'),
+                            'driver_phone': driver.get('phone_number'),
+                            'vehicle_make': driver.get('vehicle_make'),
+                            'vehicle_model': driver.get('vehicle_model'),
+                            'vehicle_color': driver.get('vehicle_color'),
+                            'vehicle_year': driver.get('vehicle_year'),
+                            'license_plate': driver.get('license_plate')
+                        }
+                
+                # Merge the driver details with the original data
+                enhanced_ride_request = {**ride_request_data, **driver_details}
+                enhanced_data.append(enhanced_ride_request)
+            
+            return Response(enhanced_data)
             
         except Exception as e:
             logger.error(f"Error fetching accepted rides: {str(e)}")
