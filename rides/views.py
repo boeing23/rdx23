@@ -21,6 +21,7 @@ from .services import send_ride_match_notification, send_ride_accepted_notificat
 import math
 import random
 import pytz
+from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
@@ -1439,7 +1440,15 @@ class RideRequestViewSet(viewsets.ModelViewSet):
             return Response([])
 
     def create(self, request, *args, **kwargs):
-        logging.info(f"RideRequestViewSet.create called with data: {request.data}")
+        logging.info(f"====================== RIDE REQUEST DETAILS ======================")
+        logging.info(f"Raw request data: {request.data}")
+        logging.info(f"Request path: {request.path}")
+        logging.info(f"Request method: {request.method}")
+        logging.info(f"Request headers: {dict(request.headers)}")
+        for key, value in request.data.items():
+            logging.info(f"Field {key}: {value}")
+        logging.info(f"Rider user: {request.user.username} (ID: {request.user.id})")
+        logging.info(f"====================== END REQUEST DETAILS ======================")
         
         # Check if the request doesn't include a ride
         if 'ride' not in request.data or not request.data['ride']:
@@ -1518,6 +1527,74 @@ class RideRequestViewSet(viewsets.ModelViewSet):
                 logging.warning(f"Dropoff location: {request_data.get('dropoff_location')}")
                 logging.warning(f"Pickup coordinates: {pickup_coords}")
                 logging.warning(f"Dropoff coordinates: {dropoff_coords}")
+                
+                # Log the 404 response for diagnostic purposes
+                logging.error("TRACKING: Returning 404 - No suitable rides found for request")
+                logging.error(f"TRACKING: This request would create an entry in rides_riderequest IF a match was found")
+                logging.error(f"TRACKING: Full request data: {request_data}")
+                
+                # TESTING ONLY: Return a mock response for development
+                if settings.DEBUG:
+                    logging.info("DEBUG mode active: Returning a mock ride match response for testing")
+                    from django.contrib.auth import get_user_model
+                    from .models import Ride
+                    
+                    # Get a driver (any user will do for testing)
+                    User = get_user_model()
+                    try:
+                        mock_driver = User.objects.first()
+                        if not mock_driver:
+                            # If no users exist, use the current user as driver
+                            mock_driver = request.user
+                            
+                        # Create a mock ride 
+                        mock_ride = Ride.objects.create(
+                            driver=mock_driver,
+                            start_location=request_data.get('pickup_location', 'Test Start'),
+                            end_location=request_data.get('dropoff_location', 'Test End'),
+                            start_latitude=float(request_data.get('pickup_lat', 0)),
+                            start_longitude=float(request_data.get('pickup_lng', 0)),
+                            end_latitude=float(request_data.get('dropoff_lat', 0)),
+                            end_longitude=float(request_data.get('dropoff_lng', 0)),
+                            departure_time=timezone.now() + timezone.timedelta(minutes=15),
+                            available_seats=4,
+                            status='SCHEDULED'
+                        )
+                        
+                        # Use this mock ride
+                        request_data['ride'] = mock_ride.id
+                        request_data['rider'] = rider.id
+                        
+                        logging.info(f"Created mock ride #{mock_ride.id} for testing")
+                        
+                        # Continue with serializer creation
+                        serializer = self.get_serializer(data=request_data)
+                        serializer.is_valid(raise_exception=True)
+                        
+                        # Save the ride request with validated data
+                        ride_request = serializer.save()
+                        
+                        # Create a notification for the rider
+                        from .models import Notification
+                        notification = Notification.objects.create(
+                            recipient=rider,
+                            sender=mock_ride.driver,
+                            message=f"TEST ONLY: Mock ride match from {mock_ride.start_location} to {mock_ride.end_location}",
+                            ride=mock_ride,
+                            ride_request=ride_request,
+                            notification_type='RIDE_MATCH'
+                        )
+                        
+                        return Response({
+                            "status": "success",
+                            "has_match": True,
+                            "message": "TEST ONLY: Mock ride match created for testing",
+                            "ride_request": serializer.data
+                        }, status=status.HTTP_201_CREATED)
+                        
+                    except Exception as e:
+                        logging.error(f"Error creating mock ride: {str(e)}")
+                
                 return Response({
                     "status": "error",
                     "has_match": False,
@@ -1579,7 +1656,11 @@ class RideRequestViewSet(viewsets.ModelViewSet):
     
     def perform_create(self, serializer):
         logging.info(f"Performing RideRequest creation with data: {serializer.validated_data}")
+        # Log before saving to database
+        logging.info(f"TRACKING: About to save ride request to database")
         serializer.save()
+        # Log after saving to database
+        logging.info(f"TRACKING: Successfully saved ride request to database with ID: {serializer.instance.id}")
 
 class NotificationViewSet(viewsets.ModelViewSet):
     serializer_class = NotificationSerializer
