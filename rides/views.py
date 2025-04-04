@@ -1474,30 +1474,72 @@ class RideRequestViewSet(viewsets.ModelViewSet):
                     "has_match": False,
                     "errors": {"non_field_errors": ["Missing location data. Please provide pickup and dropoff coordinates."]}
                 }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Prepare location coordinates for the matching algorithm
+            pickup_coords = (float(request_data['pickup_lng']), float(request_data['pickup_lat']))
+            dropoff_coords = (float(request_data['dropoff_lng']), float(request_data['dropoff_lat']))
+            
+            logging.info(f"Using pickup coordinates: {pickup_coords}")
+            logging.info(f"Using dropoff coordinates: {dropoff_coords}")
+            
+            # Store coordinates for ride matching
+            request_data['pickup_location_coordinates'] = pickup_coords 
+            request_data['dropoff_location_coordinates'] = dropoff_coords
                 
             # Import the service function
             from rides.services import find_suitable_rides
             
             # Get available rides that match the rider's criteria
             available_rides = Ride.objects.filter(
-                status='available',
+                status__in=['available', 'AVAILABLE', 'SCHEDULED', 'scheduled'],
                 departure_time__gte=timezone.now()
             ).select_related('driver')
             
             logging.info(f"Looking for suitable rides among {available_rides.count()} available rides")
             
+            # Debug available rides
+            if available_rides.count() == 0:
+                logging.warning("No available rides found in the system!")
+            else:
+                for index, ride in enumerate(available_rides):
+                    logging.info(f"Available ride #{index+1}: ID={ride.id}, from={ride.start_location} to={ride.end_location}, " +
+                               f"status={ride.status}, seats={ride.available_seats}, " +
+                               f"departure={ride.departure_time}")
+            
             # Find suitable rides using our service function
-            suitable_rides = find_suitable_rides(available_rides, request_data)
+            suitable_rides = find_suitable_rides(
+                available_rides, 
+                request_data
+            )
             
             if not suitable_rides:
+                logging.warning("No suitable rides found for the request!")
+                logging.warning(f"Pickup location: {request_data.get('pickup_location')}")
+                logging.warning(f"Dropoff location: {request_data.get('dropoff_location')}")
+                logging.warning(f"Pickup coordinates: {pickup_coords}")
+                logging.warning(f"Dropoff coordinates: {dropoff_coords}")
                 return Response({
                     "status": "error",
                     "has_match": False,
                     "errors": {"non_field_errors": ["No suitable rides found for your request."]}
                 }, status=status.HTTP_404_NOT_FOUND)
+            
+            logging.info(f"Found {len(suitable_rides)} suitable rides")
+            for i, match in enumerate(suitable_rides):
+                logging.info(f"Match #{i+1}: ride_id={match['ride'].id}, " +
+                           f"overlap={match['overlap_percentage']:.2f}%, " +
+                           f"score={match['matching_score']:.2f}, " + 
+                           f"time_diff={match['time_diff_minutes']:.1f} minutes")
                 
             # Select the best match (first one, since they're sorted by matching score)
-            best_match = suitable_rides[0]
+            best_match = suitable_rides[0]['ride']
+            best_match_details = suitable_rides[0]
+            
+            logging.info(f"Selected best match: ride_id={best_match.id}, " +
+                       f"from={best_match.start_location} to={best_match.end_location}, " +
+                       f"driver={best_match.driver.username}, " +
+                       f"overlap={best_match_details['overlap_percentage']:.2f}%, " +
+                       f"score={best_match_details['matching_score']:.2f}")
             
             # Add the ride ID to the request data
             request_data['ride'] = best_match.id

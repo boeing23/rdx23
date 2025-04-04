@@ -5,301 +5,371 @@ import logging
 import os
 import json
 import math
-from geopy.distance import geodesic
+from geopy.distance import geodesic, great_circle
 from geopy.geocoders import Nominatim
-from .models import RideRequest
+from .models import RideRequest, Notification
 from django.db import transaction
 from datetime import datetime, timedelta
 from django.utils import timezone
+import pytz
 
 logger = logging.getLogger(__name__)
 
 def find_suitable_rides(rides, ride_request_data):
     """
-    Find suitable rides for a ride request based on route overlap, time proximity, and seat availability.
+    A simplified and more lenient version of finding suitable rides based on location proximity.
     
     Parameters:
-    rides (QuerySet): Available rides to search through
-    ride_request_data (dict): Data from the ride request
+    rides: QuerySet of available rides
+    ride_request_data: Dict containing the ride request information
     
     Returns:
     list: List of suitable rides with matching details
     """
     try:
-        # Extract necessary data from ride request
-        rider_pickup = ride_request_data.get('pickup_location_coordinates')
-        rider_dropoff = ride_request_data.get('dropoff_location_coordinates')
-        rider_departure_time = ride_request_data.get('departure_time')
-        seats_needed = ride_request_data.get('seats', 1)
+        logger.info(f"Finding suitable rides with data: {ride_request_data}")
         
-        logger.info(f"Finding suitable rides for request from {ride_request_data.get('pickup_location')} " +
-                    f"to {ride_request_data.get('dropoff_location')}")
-        logger.info(f"Rider coordinates: Pickup {rider_pickup}, Dropoff {rider_dropoff}")
+        # Extract coordinates
+        pickup_coords = ride_request_data.get('pickup_location_coordinates')
+        dropoff_coords = ride_request_data.get('dropoff_location_coordinates')
         
-        # Validate rider coordinates
-        if not rider_pickup or not rider_dropoff:
-            logger.error("Missing rider coordinates in find_suitable_rides")
-            return []
-            
-        # Convert rider_departure_time to datetime if it's a string
-        if isinstance(rider_departure_time, str):
+        # Handle different possible formats for coordinates
+        if isinstance(pickup_coords, str):
             try:
-                rider_departure_time = datetime.fromisoformat(rider_departure_time.replace('Z', '+00:00'))
-            except ValueError:
-                logger.error(f"Invalid departure time format: {rider_departure_time}")
+                pickup_coords = json.loads(pickup_coords)
+            except:
+                logger.error(f"Could not parse pickup_coords: {pickup_coords}")
+                return []
+                
+        if isinstance(dropoff_coords, str):
+            try:
+                dropoff_coords = json.loads(dropoff_coords)
+            except:
+                logger.error(f"Could not parse dropoff_coords: {dropoff_coords}")
                 return []
         
-        # Use lower overlap threshold for better inclusivity
-        MIN_OVERLAP_THRESHOLD = 25.0  # Lowered to 25% for better matching
-        MIN_MATCHING_SCORE = 50.0     # Lowered to 50% for better matching
+        logger.info(f"Using coordinates: pickup={pickup_coords}, dropoff={dropoff_coords}")
+        
+        # Extract departure time
+        departure_time = ride_request_data.get('departure_time')
+        if isinstance(departure_time, str):
+            try:
+                departure_time = datetime.fromisoformat(departure_time.replace('Z', '+00:00'))
+            except Exception as e:
+                logger.error(f"Error parsing departure time: {str(e)}")
+                departure_time = timezone.now()
+        elif not departure_time:
+            departure_time = timezone.now()
+            
+        logger.info(f"Using departure time: {departure_time}")
+        
+        # Extract seats needed
+        seats_needed = int(ride_request_data.get('seats_needed', 1))
+        logger.info(f"Seats needed: {seats_needed}")
+        
+        # Set very lenient thresholds for matching
+        MAX_TIME_DIFFERENCE = 120  # 2 hours in minutes
+        MIN_OVERLAP_SCORE = 20.0   # Very low overlap requirement
         
         suitable_rides = []
         
         for ride in rides:
-            # Skip rides with insufficient available seats
-            if ride.available_seats < seats_needed:
-                logger.debug(f"Skipping ride {ride.id}: insufficient seats ({ride.available_seats} available, {seats_needed} needed)")
-                continue
-            
-            # Get driver's coordinates
-            driver_start = (ride.start_longitude, ride.start_latitude)
-            driver_end = (ride.end_longitude, ride.end_latitude)
-            
-            # Validate driver coordinates
-            if not all([driver_start[0], driver_start[1], driver_end[0], driver_end[1]]):
-                logger.warning(f"Skipping ride {ride.id}: missing coordinates")
-                continue
+            try:
+                # Skip rides without enough seats
+                if ride.available_seats < seats_needed:
+                    logger.info(f"Ride {ride.id} skipped: Not enough seats ({ride.available_seats} < {seats_needed})")
+                    continue
                 
-            # Calculate route overlap (a simple method to start with)
-            overlap_percentage = calculate_route_overlap(
-                driver_start, driver_end, rider_pickup, rider_dropoff
-            )
-            
-            # If overlap is below threshold, skip this ride
-            if overlap_percentage < MIN_OVERLAP_THRESHOLD:
-                logger.debug(f"Skipping ride {ride.id}: low overlap ({overlap_percentage:.2f}%)")
-                continue
+                # Get driver route coordinates
+                driver_start = None
+                driver_end = None
                 
-            # Calculate time difference in minutes
-            time_diff = abs((ride.departure_time - rider_departure_time).total_seconds() / 60)
-            
-            # Calculate matching score
-            matching_score = calculate_matching_score(
-                overlap_percentage, time_diff, ride.available_seats, seats_needed
-            )
-            
-            # If matching score is below threshold, skip this ride
-            if matching_score < MIN_MATCHING_SCORE:
-                logger.debug(f"Skipping ride {ride.id}: low matching score ({matching_score:.2f})")
-                continue
+                # Try to get coordinates from different possible attributes
+                if hasattr(ride, 'start_location_coordinates'):
+                    driver_start = ride.start_location_coordinates
+                elif hasattr(ride, 'start_coordinates'):
+                    driver_start = ride.start_coordinates
+                else:
+                    # Create coordinates from lat/lng
+                    driver_start = (getattr(ride, 'start_longitude', 0), getattr(ride, 'start_latitude', 0))
                 
-            # Calculate pickup and dropoff points
-            nearest_dropoff = find_nearest_dropoff(driver_start, driver_end, rider_dropoff)
-            optimal_pickup = find_optimal_pickup(driver_start, driver_end, rider_pickup)
-            
-            # This ride is suitable, add it to results
-            suitable_ride = {
-                'ride': ride,
-                'overlap_percentage': overlap_percentage,
-                'matching_score': matching_score,
-                'time_diff_minutes': time_diff,
-                'nearest_dropoff_point': nearest_dropoff,
-                'optimal_pickup_point': optimal_pickup
-            }
-            
-            suitable_rides.append(suitable_ride)
-            logger.info(f"Found suitable ride {ride.id} with overlap {overlap_percentage:.2f}% " +
-                        f"and matching score {matching_score:.2f}")
+                if hasattr(ride, 'end_location_coordinates'):
+                    driver_end = ride.end_location_coordinates
+                elif hasattr(ride, 'end_coordinates'):
+                    driver_end = ride.end_coordinates
+                else:
+                    # Create coordinates from lat/lng
+                    driver_end = (getattr(ride, 'end_longitude', 0), getattr(ride, 'end_latitude', 0))
+                
+                # Make sure coordinates are valid
+                if not driver_start or not driver_end:
+                    logger.warning(f"Ride {ride.id} skipped: Missing coordinates")
+                    continue
+                
+                # Try to convert string coordinates if needed
+                if isinstance(driver_start, str):
+                    try:
+                        driver_start = json.loads(driver_start)
+                    except:
+                        logger.warning(f"Could not parse driver_start: {driver_start}")
+                        continue
+                        
+                if isinstance(driver_end, str):
+                    try:
+                        driver_end = json.loads(driver_end)
+                    except:
+                        logger.warning(f"Could not parse driver_end: {driver_end}")
+                        continue
+                
+                logger.info(f"Checking ride {ride.id} with route: {driver_start} -> {driver_end}")
+                
+                # Calculate overlap score
+                overlap_score = calculate_overlap(driver_start, driver_end, pickup_coords, dropoff_coords)
+                logger.info(f"Ride {ride.id} overlap score: {overlap_score:.2f}%")
+                
+                # Calculate time difference in minutes
+                time_diff = abs((ride.departure_time - departure_time).total_seconds() / 60)
+                logger.info(f"Ride {ride.id} time difference: {time_diff:.1f} minutes")
+                
+                # Calculate a simple matching score
+                # 60% weight for route overlap, 40% weight for time proximity
+                time_score = max(0, 100 - (time_diff / MAX_TIME_DIFFERENCE) * 100)
+                matching_score = 0.6 * overlap_score + 0.4 * time_score
+                logger.info(f"Ride {ride.id} matching score: {matching_score:.2f}")
+                
+                # Skip rides with too low overlap
+                if overlap_score < MIN_OVERLAP_SCORE:
+                    logger.info(f"Ride {ride.id} skipped: Overlap too low ({overlap_score:.2f}% < {MIN_OVERLAP_SCORE}%)")
+                    continue
+                
+                # Skip rides too far in time
+                if time_diff > MAX_TIME_DIFFERENCE:
+                    logger.info(f"Ride {ride.id} skipped: Time difference too large ({time_diff:.1f}min > {MAX_TIME_DIFFERENCE}min)")
+                    continue
+                
+                # Add to suitable rides
+                suitable_rides.append({
+                    'ride': ride,
+                    'overlap_percentage': overlap_score,
+                    'matching_score': matching_score,
+                    'time_diff_minutes': time_diff
+                })
+                logger.info(f"Ride {ride.id} added to suitable rides")
+                
+            except Exception as e:
+                logger.error(f"Error processing ride {ride.id}: {str(e)}")
+                continue
         
-        # Sort suitable rides by matching score (highest first)
+        # Sort by matching score (highest first)
         suitable_rides.sort(key=lambda r: r['matching_score'], reverse=True)
         
+        logger.info(f"Found {len(suitable_rides)} suitable rides")
         return suitable_rides
         
     except Exception as e:
-        logger.error(f"Error finding suitable rides: {str(e)}")
+        logger.error(f"Error in find_suitable_rides: {str(e)}")
         logger.exception("Full exception details:")
         return []
 
-def calculate_route_overlap(driver_start, driver_end, rider_pickup, rider_dropoff):
+def calculate_overlap(driver_start, driver_end, rider_pickup, rider_dropoff):
     """
-    Calculate a simple route overlap percentage between driver and rider routes.
-    
-    For simplicity, we'll use a basic calculation that checks:
-    1. Direction similarity (how parallel are the routes)
-    2. Distance between routes
-    3. Shared destination proximity
-    
-    Returns: overlap percentage (0-100)
-    """
-    try:
-        # Convert to latitude, longitude format
-        driver_start_lat_lng = (driver_start[1], driver_start[0])
-        driver_end_lat_lng = (driver_end[1], driver_end[0])
-        rider_pickup_lat_lng = (rider_pickup[1], rider_pickup[0])
-        rider_dropoff_lat_lng = (rider_dropoff[1], rider_dropoff[0])
-        
-        # Calculate direction vectors
-        driver_direction = (
-            driver_end_lat_lng[0] - driver_start_lat_lng[0],
-            driver_end_lat_lng[1] - driver_start_lat_lng[1]
-        )
-        
-        rider_direction = (
-            rider_dropoff_lat_lng[0] - rider_pickup_lat_lng[0],
-            rider_dropoff_lat_lng[1] - rider_pickup_lat_lng[1]
-        )
-        
-        # Calculate direction similarity using dot product
-        driver_magnitude = math.sqrt(driver_direction[0]**2 + driver_direction[1]**2)
-        rider_magnitude = math.sqrt(rider_direction[0]**2 + rider_direction[1]**2)
-        
-        if driver_magnitude > 0 and rider_magnitude > 0:
-            dot_product = (driver_direction[0] * rider_direction[0] + 
-                          driver_direction[1] * rider_direction[1])
-            
-            # Calculate cosine similarity, which ranges from -1 to 1
-            # where 1 is same direction, 0 is perpendicular, -1 is opposite
-            cosine_similarity = dot_product / (driver_magnitude * rider_magnitude)
-            
-            # Convert to range 0-100%
-            direction_score = (cosine_similarity + 1) * 50  # Converts -1...1 to 0...100
-        else:
-            direction_score = 0
-        
-        # Calculate distance between endpoints
-        # How close is rider destination to driver destination?
-        destination_distance = calculate_distance(driver_end_lat_lng, rider_dropoff_lat_lng)
-        
-        # Normalize destination distance (0-25km)
-        MAX_DEST_DISTANCE = 5  # km
-        destination_score = max(0, 100 - (destination_distance * 100 / MAX_DEST_DISTANCE))
-        
-        # Calculate a score for general route alignment
-        # Is the pickup point somewhat on the way to the driver's destination?
-        driver_trip_distance = calculate_distance(driver_start_lat_lng, driver_end_lat_lng)
-        
-        # Distance from driver's start to rider's pickup
-        pickup_distance = calculate_distance(driver_start_lat_lng, rider_pickup_lat_lng)
-        
-        # Distance from rider's pickup to driver's end
-        remaining_distance = calculate_distance(rider_pickup_lat_lng, driver_end_lat_lng)
-        
-        # If going to pickup adds less than 30% to the trip
-        detour_factor = (pickup_distance + remaining_distance) / (driver_trip_distance + 0.001)
-        detour_score = max(0, 100 - (detour_factor - 1) * 200)
-        
-        # Combined score - weighted average
-        DIRECTION_WEIGHT = 0.3
-        DESTINATION_WEIGHT = 0.3
-        DETOUR_WEIGHT = 0.4
-        
-        overlap_score = (
-            DIRECTION_WEIGHT * direction_score +
-            DESTINATION_WEIGHT * destination_score +
-            DETOUR_WEIGHT * detour_score
-        )
-        
-        # Ensure result is between 0-100
-        final_score = max(0, min(100, overlap_score))
-        
-        logger.debug(f"Route overlap calculation: direction={direction_score:.1f}, " +
-                   f"destination={destination_score:.1f}, detour={detour_score:.1f}, " +
-                   f"final={final_score:.1f}")
-        
-        return final_score
-        
-    except Exception as e:
-        logger.error(f"Error calculating route overlap: {str(e)}")
-        return 0.0
-
-def calculate_matching_score(overlap_percentage, time_diff, available_seats, seats_needed):
-    """
-    Calculate a matching score between driver and rider based on route overlap, 
-    time difference, and seat availability.
+    Calculate a simplified overlap score based on distance between key points.
     
     Parameters:
-    overlap_percentage (float): Percentage of route overlap between driver and rider
-    time_diff (int): Absolute time difference in minutes between driver and rider departure times
-    available_seats (int): Number of available seats in the driver's vehicle
-    seats_needed (int): Number of seats requested by the rider
+    driver_start (tuple): Driver's starting coordinates (longitude, latitude)
+    driver_end (tuple): Driver's destination coordinates (longitude, latitude)
+    rider_pickup (tuple): Rider's pickup coordinates (longitude, latitude)
+    rider_dropoff (tuple): Rider's dropoff coordinates (longitude, latitude)
     
     Returns:
-    float: A matching score between 0 and 100, higher is better
+    float: Overlap percentage between 0 and 100
     """
     try:
-        logger.debug(f"Calculating matching score with: overlap={overlap_percentage:.2f}%, " +
-                   f"time_diff={time_diff} mins, seats_available={available_seats}, " +
-                   f"seats_needed={seats_needed}")
+        # Calculate distances between key points
+        pickup_to_driver_start = calculate_distance(rider_pickup, driver_start)
+        pickup_to_driver_end = calculate_distance(rider_pickup, driver_end)
+        dropoff_to_driver_start = calculate_distance(rider_dropoff, driver_start)
+        dropoff_to_driver_end = calculate_distance(rider_dropoff, driver_end)
         
-        # Constants for weighting factors
-        OVERLAP_WEIGHT = 0.6  # Route overlap is the most important factor
-        TIME_WEIGHT = 0.3     # Time difference is second most important
-        SEAT_WEIGHT = 0.1     # Seat availability is least important but still matters
+        # Calculate driver's total route distance
+        driver_route_distance = calculate_distance(driver_start, driver_end)
         
-        # Calculate overlap score (0-100)
-        # We directly use the overlap percentage which is already on a 0-100 scale
-        overlap_score = overlap_percentage
+        # Calculate rider's total route distance
+        rider_route_distance = calculate_distance(rider_pickup, rider_dropoff)
         
-        # Calculate time score (0-100)
-        # Time difference of 0 minutes = 100 score
-        # Time difference of 30+ minutes = 0 score
-        # Linear scale in between
-        MAX_TIME_DIFF = 30  # minutes
-        time_score = max(0, 100 - (time_diff * 100 / MAX_TIME_DIFF))
-        
-        # Calculate seat score (0-100)
-        # If rider's seat needs can be met, score is 100
-        # Otherwise, score is 0
-        seat_score = 100 if available_seats >= seats_needed else 0
-        
-        # Calculate weighted score
-        weighted_score = (
-            OVERLAP_WEIGHT * overlap_score +
-            TIME_WEIGHT * time_score +
-            SEAT_WEIGHT * seat_score
+        # Calculate how close the pickup is to driver's route
+        # (smaller is better)
+        pickup_proximity = min(
+            pickup_to_driver_start,
+            pickup_to_driver_end
         )
         
-        # Ensure score is between 0 and 100
-        final_score = max(0, min(100, weighted_score))
+        # Calculate how close the dropoff is to driver's route
+        # (smaller is better)
+        dropoff_proximity = min(
+            dropoff_to_driver_start,
+            dropoff_to_driver_end
+        )
         
-        # Apply bonuses for perfect matches
-        # Perfect time match (within 5 minutes)
-        if time_diff <= 5:
-            final_score += 5
-            logger.debug("Bonus: Near-perfect time match (+5 points)")
-            
-        # Very high route overlap (over 70%)
-        if overlap_percentage >= 70:
-            final_score += 5
-            logger.debug("Bonus: Excellent route overlap (+5 points)")
-            
-        # Cap the final score at 100
-        final_score = min(100, final_score)
+        # Check if the driver and rider are going in roughly the same direction
+        # by comparing distances from pickup to both ends of driver's route
+        same_direction = pickup_to_driver_start > pickup_to_driver_end
         
-        logger.debug(f"Scoring components: Overlap={overlap_score:.2f}, " +
-                   f"Time={time_score:.2f}, Seat={seat_score:.2f}")
-        logger.debug(f"Final matching score: {final_score:.2f}")
+        # Calculate a directional factor
+        if same_direction:
+            direction_factor = 1.0
+        else:
+            direction_factor = 0.5  # Penalty for opposite direction
         
-        return final_score
+        # Max acceptable distance (in km) for pickup and dropoff from driver's route
+        MAX_PICKUP_DISTANCE = 5.0
+        MAX_DROPOFF_DISTANCE = 5.0
+        
+        # Calculate pickup and dropoff proximity scores (0-100)
+        pickup_score = max(0, 100 - (pickup_proximity / MAX_PICKUP_DISTANCE) * 100)
+        dropoff_score = max(0, 100 - (dropoff_proximity / MAX_DROPOFF_DISTANCE) * 100)
+        
+        # Calculate overall overlap percentage with direction factor
+        overlap_percentage = (pickup_score * 0.4 + dropoff_score * 0.6) * direction_factor
+        
+        logger.info(f"Calculated overlap: {overlap_percentage:.2f}%")
+        logger.info(f"Pickup proximity: {pickup_proximity:.2f} km, score: {pickup_score:.2f}")
+        logger.info(f"Dropoff proximity: {dropoff_proximity:.2f} km, score: {dropoff_score:.2f}")
+        logger.info(f"Same direction: {same_direction}, factor: {direction_factor}")
+        
+        return overlap_percentage
         
     except Exception as e:
-        logger.error(f"Error calculating matching score: {str(e)}")
+        logger.error(f"Error calculating overlap: {str(e)}")
         return 0.0
 
-def find_nearest_dropoff(driver_start, driver_end, rider_dropoff):
-    """Find the nearest point on driver's route to rider's dropoff location"""
-    # For simplicity, we'll just return the driver's end point as the nearest dropoff
-    # A more sophisticated implementation would find the closest point on the driver's
-    # route to the rider's requested dropoff
-    return driver_end
+def calculate_distance(point1, point2):
+    """Calculate the distance between two points in kilometers."""
+    try:
+        # Convert to radians
+        lon1, lat1 = map(float, point1)
+        lon2, lat2 = map(float, point2)
+        
+        lon1_rad, lat1_rad = math.radians(lon1), math.radians(lat1)
+        lon2_rad, lat2_rad = math.radians(lon2), math.radians(lat2)
+        
+        # Haversine formula
+        dlon = lon2_rad - lon1_rad
+        dlat = lat2_rad - lat1_rad
+        a = math.sin(dlat/2)**2 + math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(dlon/2)**2
+        c = 2 * math.asin(math.sqrt(a))
+        r = 6371  # Radius of Earth in kilometers
+        return c * r
+    except Exception as e:
+        logger.error(f"Error calculating distance: {str(e)}")
+        return float('inf')  # Return infinitely large distance on error
 
-def find_optimal_pickup(driver_start, driver_end, rider_pickup):
-    """Find the optimal pickup point along driver's route for the rider"""
-    # For simplicity, we'll just return the rider's pickup point
-    # A more sophisticated implementation would find the closest point on the driver's
-    # route to the rider's requested pickup
-    return rider_pickup
+def update_existing_ride_requests_with_optimal_pickup():
+    """
+    Update all existing ride requests that have status='ACCEPTED' and 
+    don't have an optimal_pickup_point with calculated values.
+    """
+    with transaction.atomic():
+        # Get all accepted ride requests without optimal pickup points
+        ride_requests = RideRequest.objects.filter(
+            status='ACCEPTED',
+            optimal_pickup_point__isnull=True
+        )
+        
+        logger.info(f"Found {ride_requests.count()} ride requests without optimal pickup points")
+        
+        success_count = 0
+        error_count = 0
+        
+        for request in ride_requests:
+            try:
+                if not request.ride:
+                    logger.warning(f"Ride request {request.id} has no associated ride, skipping")
+                    continue
+                    
+                optimal_pickup = calculate_optimal_pickup_point(request.ride, request)
+                request.optimal_pickup_point = optimal_pickup
+                request.save(update_fields=['optimal_pickup_point'])
+                success_count += 1
+                
+            except Exception as e:
+                logger.error(f"Error updating ride request {request.id}: {str(e)}")
+                error_count += 1
+        
+        logger.info(f"Completed: {success_count} successes, {error_count} errors out of {ride_requests.count()} total")
+        return success_count, error_count, ride_requests.count()
+
+def send_ride_notification_email(recipient_email, subject, message, html_message=None):
+    """
+    Generic function to send email notifications
+    """
+    try:
+        logger.info(f"Attempting to send email to {recipient_email}")
+        logger.info(f"Email settings: HOST={settings.EMAIL_HOST}, PORT={settings.EMAIL_PORT}, TLS={settings.EMAIL_USE_TLS}, SSL={settings.EMAIL_USE_SSL}")
+        logger.info(f"Subject: {subject}")
+        logger.info(f"From: {settings.DEFAULT_FROM_EMAIL}")
+        
+        send_mail(
+            subject=subject,
+            message=message,
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[recipient_email],
+            html_message=html_message,
+            fail_silently=False,
+        )
+        logger.info(f"Successfully sent email to {recipient_email}")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to send email to {recipient_email}: {str(e)}")
+        logger.exception("Email sending exception details:")
+        return False
+
+def send_ride_match_notification(recipient, ride_request, ride):
+    """
+    Create a notification for a ride match.
+    
+    Parameters:
+    recipient: The user who will receive the notification
+    ride_request: The ride request that was matched
+    ride: The ride that matches the request
+    """
+    # Create the notification
+    notification = Notification.objects.create(
+        recipient=recipient,
+        sender=ride.driver,
+        message=f"We found a ride match from {ride.start_location} to {ride.end_location}!",
+        ride=ride,
+        ride_request=ride_request,
+        notification_type='RIDE_MATCH'
+    )
+    return notification
+
+def send_ride_accepted_notification(ride_request):
+    """
+    Create a notification when a ride request is accepted.
+    
+    Parameters:
+    ride_request: The accepted ride request
+    """
+    # Create notification for the rider
+    Notification.objects.create(
+        recipient=ride_request.rider,
+        sender=ride_request.ride.driver,
+        message=f"Your ride request to {ride_request.ride.end_location} was accepted!",
+        ride=ride_request.ride,
+        ride_request=ride_request,
+        notification_type='REQUEST_ACCEPTED'
+    )
+    
+    # Create notification for the driver
+    Notification.objects.create(
+        recipient=ride_request.ride.driver,
+        sender=ride_request.rider,
+        message=f"New passenger for your ride to {ride_request.ride.end_location}",
+        ride=ride_request.ride,
+        ride_request=ride_request,
+        notification_type='REQUEST_ACCEPTED'
+    )
 
 def calculate_optimal_pickup_point(ride, ride_request):
     """
@@ -389,15 +459,6 @@ def find_closest_point_on_route(route_points, point):
     
     return closest_point or point
 
-def calculate_distance(point1, point2):
-    """
-    Calculate the Euclidean distance between two points.
-    In a real-world app, you would use a proper distance calculation
-    like Haversine formula for GPS coordinates.
-    """
-    from math import sqrt
-    return sqrt((point1[0] - point2[0])**2 + (point1[1] - point2[1])**2)
-
 def get_address_from_coordinates(longitude, latitude):
     """
     Get an address from coordinates using reverse geocoding
@@ -414,184 +475,4 @@ def get_address_from_coordinates(longitude, latitude):
         return None
     except Exception as e:
         logger.error(f"Error in reverse geocoding: {str(e)}")
-        return None
-
-def update_existing_ride_requests_with_optimal_pickup():
-    """
-    Update all existing ride requests that have status='ACCEPTED' and 
-    don't have an optimal_pickup_point with calculated values.
-    """
-    with transaction.atomic():
-        # Get all accepted ride requests without optimal pickup points
-        ride_requests = RideRequest.objects.filter(
-            status='ACCEPTED',
-            optimal_pickup_point__isnull=True
-        )
-        
-        logger.info(f"Found {ride_requests.count()} ride requests without optimal pickup points")
-        
-        success_count = 0
-        error_count = 0
-        
-        for request in ride_requests:
-            try:
-                if not request.ride:
-                    logger.warning(f"Ride request {request.id} has no associated ride, skipping")
-                    continue
-                    
-                optimal_pickup = calculate_optimal_pickup_point(request.ride, request)
-                request.optimal_pickup_point = optimal_pickup
-                request.save(update_fields=['optimal_pickup_point'])
-                success_count += 1
-                
-            except Exception as e:
-                logger.error(f"Error updating ride request {request.id}: {str(e)}")
-                error_count += 1
-        
-        logger.info(f"Completed: {success_count} successes, {error_count} errors out of {ride_requests.count()} total")
-        return success_count, error_count, ride_requests.count()
-
-def send_ride_notification_email(recipient_email, subject, message, html_message=None):
-    """
-    Generic function to send email notifications
-    """
-    try:
-        logger.info(f"Attempting to send email to {recipient_email}")
-        logger.info(f"Email settings: HOST={settings.EMAIL_HOST}, PORT={settings.EMAIL_PORT}, TLS={settings.EMAIL_USE_TLS}, SSL={settings.EMAIL_USE_SSL}")
-        logger.info(f"Subject: {subject}")
-        logger.info(f"From: {settings.DEFAULT_FROM_EMAIL}")
-        
-        send_mail(
-            subject=subject,
-            message=message,
-            from_email=settings.DEFAULT_FROM_EMAIL,
-            recipient_list=[recipient_email],
-            html_message=html_message,
-            fail_silently=False,
-        )
-        logger.info(f"Successfully sent email to {recipient_email}")
-        return True
-    except Exception as e:
-        logger.error(f"Failed to send email to {recipient_email}: {str(e)}")
-        logger.exception("Email sending exception details:")
-        return False
-
-def send_ride_match_notification(ride_request, notify_driver=True):
-    """
-    Send notification when a ride request is matched with a driver
-    """
-    driver = ride_request.ride.driver
-    
-    # Get vehicle info directly from driver model fields
-    vehicle_make = getattr(driver, 'vehicle_make', '')
-    vehicle_model = getattr(driver, 'vehicle_model', '')
-    vehicle_year = getattr(driver, 'vehicle_year', '')
-    vehicle_color = getattr(driver, 'vehicle_color', '')
-    license_plate = getattr(driver, 'license_plate', '')
-    
-    # Format vehicle info
-    vehicle_parts = []
-    if vehicle_year:
-        vehicle_parts.append(str(vehicle_year))
-    if vehicle_make:
-        vehicle_parts.append(vehicle_make)
-    if vehicle_model:
-        vehicle_parts.append(vehicle_model)
-    
-    # Add color in parentheses if available
-    vehicle_info = " ".join(vehicle_parts)
-    if vehicle_color and vehicle_info:
-        vehicle_info += f" ({vehicle_color})"
-    
-    # Use fallback if no vehicle info is available
-    if not vehicle_info.strip():
-        vehicle_info = "Not provided"
-    
-    # Send notification to rider
-    rider_subject = "ChalBeyy: Your Ride Request Has Been Matched!"
-    rider_message = f"""
-    Hello {ride_request.rider.first_name},
-
-    Great news! Your ride request has been matched with a driver.
-
-    Ride Details:
-    - From: {ride_request.pickup_location}
-    - To: {ride_request.dropoff_location}
-    - Departure Time: {ride_request.departure_time}
-    - Driver: {driver.first_name} {driver.last_name}
-    - Vehicle: {vehicle_info}
-    - License Plate: {license_plate or "Not provided"}
-    - Driver's Phone: {driver.phone_number if hasattr(driver, 'phone_number') else "Not provided"}
-
-    Please log in to your ChalBeyy account to accept the ride.
-
-    Best regards,
-    The ChalBeyy Team
-    """
-
-    # Create email template directory if it doesn't exist
-    os.makedirs('rides/templates/rides/email', exist_ok=True)
-    
-    try:
-        rider_html = render_to_string('rides/email/notification.html', {
-            'subject': rider_subject,
-            'message': rider_message.replace('\n', '<br>'),
-        })
-    except Exception as e:
-        logger.error(f"Failed to render email template: {str(e)}")
-        rider_html = None
-
-    # Send email to rider
-    send_ride_notification_email(
-        ride_request.rider.email,
-        rider_subject,
-        rider_message,
-        rider_html
-    )
-
-    # Only send notification to driver if requested
-    if notify_driver:
-        # Send notification to driver
-        driver_subject = "ChalBeyy: New Ride Match Available!"
-        driver_message = f"""
-        Hello {driver.first_name},
-
-        A new ride request has been matched with your route.
-
-        Ride Details:
-        - From: {ride_request.pickup_location}
-        - To: {ride_request.dropoff_location}
-        - Departure Time: {ride_request.departure_time}
-        - Rider: {ride_request.rider.first_name} {ride_request.rider.last_name}
-        - Seats Needed: {ride_request.seats_needed}
-        - Rider's Phone: {ride_request.rider.phone_number if hasattr(ride_request.rider, 'phone_number') else "Not provided"}
-
-        The rider will be notified and can accept the match.
-
-        Best regards,
-        The ChalBeyy Team
-        """
-
-        try:
-            driver_html = render_to_string('rides/email/notification.html', {
-                'subject': driver_subject,
-                'message': driver_message.replace('\n', '<br>'),
-            })
-        except Exception as e:
-            logger.error(f"Failed to render email template: {str(e)}")
-            driver_html = None
-
-        send_ride_notification_email(
-            driver.email,
-            driver_subject,
-            driver_message,
-            driver_html
-        )
-
-def send_ride_accepted_notification(ride_request):
-    """
-    Send email notification for ride acceptance
-    """
-    # Mock implementation - in a real app, this would send emails
-    logger.info(f"Would send email notification for ride request {ride_request.id}")
-    return True 
+        return None 
