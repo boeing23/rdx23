@@ -1537,7 +1537,7 @@ class RideRequestViewSet(viewsets.ModelViewSet):
                 if settings.DEBUG:
                     logging.info("DEBUG mode active: Returning a mock ride match response for testing")
                     from django.contrib.auth import get_user_model
-                    from .models import Ride
+                    # Ride is already imported at the top level
                     
                     # Get a driver (any user will do for testing)
                     User = get_user_model()
