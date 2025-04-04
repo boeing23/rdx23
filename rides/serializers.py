@@ -196,6 +196,12 @@ class RideSerializer(serializers.ModelSerializer):
 
 class RideRequestSerializer(serializers.ModelSerializer):
     rider = serializers.SerializerMethodField()
+    rider_id = serializers.PrimaryKeyRelatedField(
+        source='rider',
+        queryset=User.objects.all(),
+        write_only=True,
+        required=False
+    )
     ride_details = serializers.SerializerMethodField()
     nearest_dropoff_info = serializers.SerializerMethodField()
     optimal_pickup_info = serializers.SerializerMethodField()
@@ -204,7 +210,7 @@ class RideRequestSerializer(serializers.ModelSerializer):
     class Meta:
         model = RideRequest
         fields = [
-            'id', 'rider', 'ride', 'ride_details', 'pickup_location', 'dropoff_location',
+            'id', 'rider', 'rider_id', 'ride', 'ride_details', 'pickup_location', 'dropoff_location',
             'pickup_latitude', 'pickup_longitude', 'dropoff_latitude',
             'dropoff_longitude', 'departure_time', 'seats_needed',
             'status', 'created_at', 'updated_at', 'nearest_dropoff_point', 

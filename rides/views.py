@@ -1563,7 +1563,8 @@ class RideRequestViewSet(viewsets.ModelViewSet):
                         
                         # Use this mock ride
                         request_data['ride'] = mock_ride.id
-                        request_data['rider'] = rider.id
+                        # Set rider_id instead of rider for the serializer
+                        request_data['rider_id'] = rider.id
                         
                         logging.info(f"Created mock ride #{mock_ride.id} for testing")
                         
@@ -1620,7 +1621,8 @@ class RideRequestViewSet(viewsets.ModelViewSet):
             
             # Add the ride ID to the request data
             request_data['ride'] = best_match.id
-            request_data['rider'] = rider.id
+            # Set rider_id instead of rider for the serializer
+            request_data['rider_id'] = rider.id
             
             # Create a serializer with the updated data
             serializer = self.get_serializer(data=request_data)
@@ -1641,9 +1643,14 @@ class RideRequestViewSet(viewsets.ModelViewSet):
                 },
                 "ride_request": serializer.data
             }, status=status.HTTP_201_CREATED)
-            
+        
         # If a ride is specified, proceed with the normal creation process
-        serializer = self.get_serializer(data=request.data)
+        # Ensure rider_id is set if not in the request data
+        request_data = request.data.copy()
+        if 'rider_id' not in request_data and 'rider' not in request_data:
+            request_data['rider_id'] = request.user.id
+            
+        serializer = self.get_serializer(data=request_data)
         serializer.is_valid(raise_exception=True)
         self.perform_create(serializer)
         
@@ -1656,9 +1663,17 @@ class RideRequestViewSet(viewsets.ModelViewSet):
     
     def perform_create(self, serializer):
         logging.info(f"Performing RideRequest creation with data: {serializer.validated_data}")
+        # Ensure the rider is set to the current user if not specified
+        if 'rider' not in serializer.validated_data:
+            logging.info(f"Setting rider to current user: {self.request.user.username} (ID: {self.request.user.id})")
+            rider = self.request.user
+        else:
+            rider = serializer.validated_data['rider']
+            logging.info(f"Using specified rider: {rider.username} (ID: {rider.id})")
+            
         # Log before saving to database
         logging.info(f"TRACKING: About to save ride request to database")
-        serializer.save()
+        serializer.save(rider=rider)
         # Log after saving to database
         logging.info(f"TRACKING: Successfully saved ride request to database with ID: {serializer.instance.id}")
 
