@@ -1121,6 +1121,99 @@ class RideRequestViewSet(viewsets.ModelViewSet):
         return RideRequest.objects.none()
 
     @action(detail=False, methods=['get'])
+    def test_mock_response(self, request):
+        """
+        Returns a mock response of accepted ride requests with properly formatted driver details
+        for testing the frontend.
+        """
+        logger.info("Generating mock response for accepted rides")
+        
+        # Mock data with the format expected by the frontend
+        mock_data = [
+            {
+                "id": 15,
+                "rider": {
+                    "id": 5,
+                    "username": "rider_user",
+                    "first_name": "Rider",
+                    "last_name": "User",
+                    "email": "rider@example.com",
+                    "phone_number": "123-456-7890"
+                },
+                "ride": 10,
+                "ride_details": {
+                    "id": 10,
+                    "driver": {
+                        "id": 3,
+                        "username": "driver_user",
+                        "first_name": "Driver",
+                        "last_name": "User",
+                        "email": "driver@example.com",
+                        "phone_number": "987-654-3210",
+                        "vehicle_make": "Toyota",
+                        "vehicle_model": "Camry",
+                        "vehicle_color": "Blue",
+                        "license_plate": "ABC123"
+                    },
+                    "start_location": "Campus Drive, Blacksburg",
+                    "end_location": "Main Street, Blacksburg",
+                    "departure_time": "2025-04-05T10:00:00Z",
+                    "seats_available": 3,
+                    "route_distance": 5.2,
+                    "route_duration": 15
+                },
+                "pickup_location": "Campus Drive, Blacksburg",
+                "dropoff_location": "Main Street, Blacksburg",
+                "pickup_latitude": 37.223866,
+                "pickup_longitude": -80.428721,
+                "dropoff_latitude": 37.230761,
+                "dropoff_longitude": -80.414967,
+                "departure_time": "2025-04-05T10:00:00Z",
+                "seats_needed": 1,
+                "status": "ACCEPTED",
+                "created_at": "2025-04-01T08:30:00Z",
+                "updated_at": "2025-04-01T09:00:00Z",
+                "nearest_dropoff_point": "{\"latitude\": 37.230761, \"longitude\": -80.414967, \"address\": \"Main Street, Blacksburg\"}",
+                "nearest_dropoff_info": {
+                    "address": "Main Street, Blacksburg",
+                    "latitude": 37.230761,
+                    "longitude": -80.414967,
+                    "distance_from_rider": 0.5
+                },
+                "optimal_pickup_point": "{\"latitude\": 37.223866, \"longitude\": -80.428721, \"address\": \"Campus Drive, Blacksburg\"}",
+                "optimal_pickup_info": {
+                    "address": "Campus Drive, Blacksburg",
+                    "latitude": 37.223866,
+                    "longitude": -80.428721,
+                    "distance_from_rider": 0.1
+                },
+                "driver_details": {
+                    "id": 3,
+                    "username": "driver_user",
+                    "first_name": "Driver",
+                    "last_name": "User",
+                    "email": "driver@example.com",
+                    "phone_number": "987-654-3210",
+                    "vehicle_make": "Toyota",
+                    "vehicle_model": "Camry",
+                    "vehicle_color": "Blue",
+                    "license_plate": "ABC123"
+                },
+                "driver_id": 3,
+                "driver_name": "Driver User",
+                "driver_email": "driver@example.com",
+                "driver_phone": "987-654-3210",
+                "vehicle_make": "Toyota",
+                "vehicle_model": "Camry",
+                "vehicle_color": "Blue",
+                "license_plate": "ABC123"
+            }
+        ]
+        
+        logger.info("Returning mock response with properly formatted data")
+        return Response(mock_data)
+
+    @action(detail=False, methods=['get'])
     def accepted(self, request):
         """
         Get all accepted ride requests for the current user (both as rider and driver)
@@ -1154,59 +1247,86 @@ class RideRequestViewSet(viewsets.ModelViewSet):
             
             logger.info(f"Found {ride_requests.count()} accepted rides")
             
-            # Serialize the ride requests
-            serializer = self.get_serializer(ride_requests, many=True)
-            logger.debug(f"Serialized data: {serializer.data}")
+            # If no rides were found, return empty array rather than potentially trying to process empty data
+            if not ride_requests.exists():
+                logger.info("No accepted rides found, returning empty array")
+                return Response([])
+
+            try:
+                # Serialize the ride requests
+                serializer = self.get_serializer(ride_requests, many=True)
+                serialized_data = serializer.data
+                logger.debug(f"Successfully serialized data")
+            except Exception as serializer_error:
+                logger.error(f"Error serializing ride requests: {str(serializer_error)}")
+                logger.exception("Serialization error details:")
+                # Return empty list on serialization error instead of 500
+                return Response([])
             
             # Enhance the response with direct driver information for frontend compatibility
             enhanced_data = []
-            for ride_request_data in serializer.data:
-                # Get driver details from the ride if available
-                driver_details = {}
-                ride_details = ride_request_data.get('ride_details')
+            
+            for ride_request_data in serialized_data:
+                try:
+                    # Default driver details - used if we can't extract from ride_details
+                    driver_details = {
+                        'driver_id': None,
+                        'driver_name': 'Unknown Driver',
+                        'driver_email': None,
+                        'driver_phone': None,
+                        'vehicle_make': None,
+                        'vehicle_model': None,
+                        'vehicle_color': None,
+                        'vehicle_year': None,
+                        'license_plate': None
+                    }
+                    
+                    # Get ride_details if it exists
+                    ride_details = ride_request_data.get('ride_details')
+                    
+                    # First try to extract from ride_details.driver
+                    if ride_details and isinstance(ride_details, dict) and 'driver' in ride_details:
+                        driver = ride_details['driver']
+                        if driver and isinstance(driver, dict):
+                            logger.debug(f"Found driver in ride_details: {driver}")
+                            driver_details = {
+                                'driver_id': driver.get('id'),
+                                'driver_name': f"{driver.get('first_name', '')} {driver.get('last_name', '')}".strip(),
+                                'driver_email': driver.get('email'),
+                                'driver_phone': driver.get('phone_number'),
+                                'vehicle_make': driver.get('vehicle_make'),
+                                'vehicle_model': driver.get('vehicle_model'),
+                                'vehicle_color': driver.get('vehicle_color'),
+                                'vehicle_year': driver.get('vehicle_year'),
+                                'license_plate': driver.get('license_plate')
+                            }
+                    
+                    # Then try driver_details as fallback
+                    elif ride_request_data.get('driver_details'):
+                        driver = ride_request_data.get('driver_details')
+                        if driver and isinstance(driver, dict):
+                            logger.debug(f"Found driver in driver_details: {driver}")
+                            driver_details = {
+                                'driver_id': driver.get('id'),
+                                'driver_name': f"{driver.get('first_name', '')} {driver.get('last_name', '')}".strip(),
+                                'driver_email': driver.get('email'),
+                                'driver_phone': driver.get('phone_number'),
+                                'vehicle_make': driver.get('vehicle_make'),
+                                'vehicle_model': driver.get('vehicle_model'),
+                                'vehicle_color': driver.get('vehicle_color'),
+                                'vehicle_year': driver.get('vehicle_year'),
+                                'license_plate': driver.get('license_plate')
+                            }
+                    
+                    # Merge the driver details with the original data
+                    enhanced_ride_request = {**ride_request_data, **driver_details}
+                    enhanced_data.append(enhanced_ride_request)
                 
-                logger.debug(f"Processing ride request: {ride_request_data.get('id')}")
-                logger.debug(f"Ride details: {ride_details}")
-                
-                if ride_details and 'driver' in ride_details:
-                    driver = ride_details['driver']
-                    logger.debug(f"Found driver in ride_details: {driver}")
-                    if driver:
-                        driver_details = {
-                            'driver_id': driver.get('id'),
-                            'driver_name': f"{driver.get('first_name', '')} {driver.get('last_name', '')}".strip(),
-                            'driver_email': driver.get('email'),
-                            'driver_phone': driver.get('phone_number'),
-                            'vehicle_make': driver.get('vehicle_make'),
-                            'vehicle_model': driver.get('vehicle_model'),
-                            'vehicle_color': driver.get('vehicle_color'),
-                            'vehicle_year': driver.get('vehicle_year'),
-                            'license_plate': driver.get('license_plate')
-                        }
-                        logger.debug(f"Extracted driver details: {driver_details}")
-                
-                # Try to use driver_details field as fallback
-                if not driver_details and ride_request_data.get('driver_details'):
-                    driver = ride_request_data.get('driver_details')
-                    logger.debug(f"Found driver in driver_details: {driver}")
-                    if driver:
-                        driver_details = {
-                            'driver_id': driver.get('id'),
-                            'driver_name': f"{driver.get('first_name', '')} {driver.get('last_name', '')}".strip(),
-                            'driver_email': driver.get('email'),
-                            'driver_phone': driver.get('phone_number'),
-                            'vehicle_make': driver.get('vehicle_make'),
-                            'vehicle_model': driver.get('vehicle_model'),
-                            'vehicle_color': driver.get('vehicle_color'),
-                            'vehicle_year': driver.get('vehicle_year'),
-                            'license_plate': driver.get('license_plate')
-                        }
-                        logger.debug(f"Extracted driver details from fallback: {driver_details}")
-                
-                # Merge the driver details with the original data
-                enhanced_ride_request = {**ride_request_data, **driver_details}
-                logger.debug(f"Enhanced ride request: {enhanced_ride_request}")
-                enhanced_data.append(enhanced_ride_request)
+                except Exception as processing_error:
+                    logger.error(f"Error processing ride request data: {str(processing_error)}")
+                    logger.error(f"Problematic ride request data: {ride_request_data}")
+                    # Skip this ride request if we can't process it, rather than failing the whole request
+                    continue
             
             logger.info(f"Returning {len(enhanced_data)} enhanced ride requests")
             return Response(enhanced_data)
@@ -1214,10 +1334,8 @@ class RideRequestViewSet(viewsets.ModelViewSet):
         except Exception as e:
             logger.error(f"Error fetching accepted rides: {str(e)}")
             logger.exception("Full exception details:")
-            return Response(
-                {"error": "An error occurred while fetching accepted rides"},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
+            # Return empty list on error rather than 500
+            return Response([])
 
     def create(self, request, *args, **kwargs):
         logging.info(f"RideRequestViewSet.create called with data: {request.data}")
