@@ -68,7 +68,7 @@ def find_suitable_rides(rides, ride_request_data):
         logger.info(f"Seats needed: {seats_needed}")
         
         # Set very lenient thresholds for matching
-        MAX_TIME_DIFFERENCE = 120  # 2 hours in minutes
+        MAX_TIME_DIFFERENCE = 30   # 30 minutes time window
         MIN_OVERLAP_SCORE = 20.0   # Very low overlap requirement
         
         suitable_rides = []
