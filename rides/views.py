@@ -1018,85 +1018,60 @@ class RideViewSet(viewsets.ModelViewSet):
             logger.info(f"Found {available_rides.count()} available rides")
             return available_rides
 
-    def check_pending_requests(self, ride):
+    @staticmethod
+    def check_pending_requests(ride):
         """
-        Check for pending ride requests that might match the new ride
-        
-        Parameters:
-        - ride: The newly created ride object
-        
-        Side effects:
-        - Creates RideRequest objects for matching pending requests
-        - Updates PendingRideRequest status
-        - Creates notifications for matched riders
+        Side effect: Checks for pending ride requests that might match this new ride.
+        If matches are found, proposes them to the rider by updating the pending request status 
+        to MATCH_PROPOSED and storing the proposed ride.
         """
-        from .models import PendingRideRequest, Notification, RideRequest
-        from rides.services import find_suitable_rides
-        
-        logger.info(f"Checking pending requests for ride {ride.id}")
-        
-        # Get ride details
-        driver_start = (ride.start_longitude, ride.start_latitude)
-        driver_end = (ride.end_longitude, ride.end_latitude)
-        
-        # Get all pending requests
-        pending_requests = PendingRideRequest.objects.filter(status='PENDING')
-        logger.info(f"Found {pending_requests.count()} pending ride requests")
-        
-        for pending_request in pending_requests:
-            try:
-                # Create ride request data format for matching algorithm
-                ride_request_data = {
-                    'pickup_location_coordinates': (pending_request.pickup_longitude, pending_request.pickup_latitude),
-                    'dropoff_location_coordinates': (pending_request.dropoff_longitude, pending_request.dropoff_latitude),
-                    'departure_time': pending_request.departure_time,
-                    'seats_needed': pending_request.seats_needed
-                }
-                
-                # Check if this ride is suitable for this request
-                # Use the find_suitable_rides function with a list containing only this ride
-                suitable_rides = find_suitable_rides([ride], ride_request_data)
-                
-                if suitable_rides:
-                    logger.info(f"Found matching ride for pending request {pending_request.id}")
-                    match_details = suitable_rides[0]
+        try:
+            from .models import PendingRideRequest, Notification
+            from .utils import find_suitable_rides
+
+            # Find pending ride requests that could be matched with this ride
+            pending_requests = PendingRideRequest.objects.filter(status='PENDING')
+            
+            # Filter out expired requests
+            non_expired_requests = [req for req in pending_requests if not req.is_expired]
+            
+            for pending_request in non_expired_requests:
+                # Skip requests that need more seats than available
+                if pending_request.seats_needed > ride.available_seats:
+                    continue
                     
-                    # Create a ride request for this match
-                    ride_request = RideRequest.objects.create(
-                        rider=pending_request.rider,
-                        ride=ride,
-                        pickup_location=pending_request.pickup_location,
-                        dropoff_location=pending_request.dropoff_location,
-                        pickup_latitude=pending_request.pickup_latitude,
-                        pickup_longitude=pending_request.pickup_longitude,
-                        dropoff_latitude=pending_request.dropoff_latitude,
-                        dropoff_longitude=pending_request.dropoff_longitude,
-                        departure_time=ride.departure_time,
-                        seats_needed=pending_request.seats_needed,
-                        status='PENDING',
-                        nearest_dropoff_point=match_details.get('nearest_dropoff_point'),
-                        optimal_pickup_point=match_details.get('optimal_pickup_point')
-                    )
-                    
-                    # Update the pending request
-                    pending_request.status = 'MATCHED'
-                    pending_request.matched_ride_request = ride_request
+                # Check if the ride is suitable (using the existing utility function)
+                suitable_rides = find_suitable_rides(
+                    start_lat=pending_request.pickup_latitude,
+                    start_lng=pending_request.pickup_longitude,
+                    end_lat=pending_request.dropoff_latitude,
+                    end_lng=pending_request.dropoff_longitude,
+                    departure_time=pending_request.departure_time,
+                    seats_needed=pending_request.seats_needed
+                )
+                
+                # If the new ride is in the list of suitable rides
+                ride_ids = [r.id for r in suitable_rides]
+                if ride.id in ride_ids:
+                    # Propose this match to the rider
+                    pending_request.status = 'MATCH_PROPOSED'
+                    pending_request.proposed_ride = ride
                     pending_request.save()
                     
-                    # Create notification for the rider
+                    # Create a notification for the rider
                     Notification.objects.create(
                         recipient=pending_request.rider,
                         sender=ride.driver,
-                        message=f"A ride match has been found for your request from {pending_request.pickup_location} to {pending_request.dropoff_location}",
+                        message=f"A ride match from {ride.start_location} to {ride.end_location} has been proposed! Tap to view and accept.",
                         ride=ride,
-                        ride_request=ride_request,
-                        notification_type='RIDE_MATCH'
+                        notification_type='MATCH_PROPOSED'
                     )
                     
-                    logger.info(f"Created ride request {ride_request.id} for pending request {pending_request.id}")
-            except Exception as e:
-                logger.error(f"Error matching pending request {pending_request.id}: {str(e)}")
-                logger.exception("Full exception details:")
+                    logger.info(f"Match proposed for pending request {pending_request.id} with ride {ride.id}")
+        
+        except Exception as e:
+            logger.error(f"Error in check_pending_requests: {str(e)}")
+            logger.exception("Full exception details:")
 
     def create(self, request, *args, **kwargs):
         """
@@ -1190,6 +1165,104 @@ class RideViewSet(viewsets.ModelViewSet):
             'available_to_user': user_rides.count(),
             'ride_details': ride_data
         })
+
+    @action(detail=False, methods=['get'])
+    def pending_status(self, request):
+        """
+        Check if a pending ride request has been matched with a ride.
+        Returns the pending ride request status, match details if any,
+        and any new notifications for the user.
+        
+        Query Parameters:
+        - pending_id: ID of the pending ride request
+        """
+        try:
+            pending_id = request.query_params.get('pending_id')
+            if not pending_id:
+                return Response({"error": "Missing pending_id parameter"}, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Get the pending ride request
+            from .models import PendingRideRequest, Notification
+            try:
+                pending_request = PendingRideRequest.objects.get(
+                    id=pending_id, 
+                    rider=request.user
+                )
+            except PendingRideRequest.DoesNotExist:
+                return Response({"error": "Pending ride request not found"}, status=status.HTTP_404_NOT_FOUND)
+            
+            # Get any new notifications for this pending request
+            notifications = Notification.objects.filter(
+                recipient=request.user,
+                is_read=False,
+                created_at__gte=pending_request.created_at
+            ).order_by('-created_at')[:5]
+            
+            # Prepare notification data
+            notification_data = []
+            for notification in notifications:
+                notification_data.append({
+                    'id': notification.id,
+                    'message': notification.message,
+                    'type': notification.notification_type,
+                    'created_at': notification.created_at
+                })
+            
+            # Prepare response based on status
+            response_data = {
+                'id': pending_request.id,
+                'status': pending_request.status,
+                'notifications': notification_data,
+                'created_at': pending_request.created_at,
+                'departure_time': pending_request.departure_time,
+            }
+            
+            # If the request has a match proposed, include ride details
+            if pending_request.status == 'MATCH_PROPOSED' and pending_request.proposed_ride:
+                ride = pending_request.proposed_ride
+                response_data['proposed_ride'] = {
+                    'id': ride.id,
+                    'driver': {
+                        'id': ride.driver.id,
+                        'username': ride.driver.username,
+                        'first_name': ride.driver.first_name,
+                        'last_name': ride.driver.last_name,
+                    },
+                    'start_location': ride.start_location,
+                    'end_location': ride.end_location,
+                    'departure_time': ride.departure_time,
+                    'route_distance': ride.get_formatted_distance(),
+                    'route_duration': ride.get_formatted_duration()
+                }
+            
+            # If the request is matched, include the ride_request
+            elif pending_request.status == 'MATCHED' and pending_request.matched_ride_request:
+                ride_request = pending_request.matched_ride_request
+                ride = ride_request.ride
+                response_data['matched_ride'] = {
+                    'ride_request_id': ride_request.id,
+                    'ride_id': ride.id,
+                    'driver': {
+                        'id': ride.driver.id,
+                        'username': ride.driver.username,
+                        'first_name': ride.driver.first_name,
+                        'last_name': ride.driver.last_name,
+                    },
+                    'start_location': ride.start_location,
+                    'end_location': ride.end_location,
+                    'departure_time': ride.departure_time,
+                    'status': ride_request.status
+                }
+            
+            # Mark notifications as read
+            notifications.update(is_read=True)
+            
+            return Response(response_data)
+            
+        except Exception as e:
+            logger.error(f"Error checking pending request status: {str(e)}")
+            logger.exception("Full exception details:")
+            return Response({"error": "An error occurred"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class RideRequestViewSet(viewsets.ModelViewSet):
     serializer_class = RideRequestSerializer
@@ -1826,6 +1899,147 @@ class RideRequestViewSet(viewsets.ModelViewSet):
         serializer.save(rider=rider)
         # Log after saving to database
         logging.info(f"TRACKING: Successfully saved ride request to database with ID: {serializer.instance.id}")
+
+    @action(detail=False, methods=['post'])
+    def accept_match(self, request):
+        """
+        Accept a proposed ride match.
+        Creates a RideRequest and updates the PendingRideRequest status.
+        """
+        try:
+            pending_id = request.data.get('pending_id')
+            if not pending_id:
+                return Response({"error": "Missing pending_id parameter"}, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Get the pending ride request
+            from .models import PendingRideRequest, Notification
+            try:
+                pending_request = PendingRideRequest.objects.get(
+                    id=pending_id, 
+                    rider=request.user,
+                    status='MATCH_PROPOSED'
+                )
+            except PendingRideRequest.DoesNotExist:
+                return Response({"error": "Proposed match not found"}, status=status.HTTP_404_NOT_FOUND)
+            
+            # Check if the proposed ride still exists and has available seats
+            ride = pending_request.proposed_ride
+            if not ride or ride.available_seats < pending_request.seats_needed:
+                pending_request.status = 'PENDING'  # Reset to pending to try again
+                pending_request.proposed_ride = None
+                pending_request.save()
+                return Response({
+                    "error": "The proposed ride is no longer available",
+                    "status": "PENDING"
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Create a ride request for this match
+            ride_request = RideRequest.objects.create(
+                rider=pending_request.rider,
+                ride=ride,
+                pickup_location=pending_request.pickup_location,
+                dropoff_location=pending_request.dropoff_location,
+                pickup_latitude=pending_request.pickup_latitude,
+                pickup_longitude=pending_request.pickup_longitude,
+                dropoff_latitude=pending_request.dropoff_latitude,
+                dropoff_longitude=pending_request.dropoff_longitude,
+                departure_time=ride.departure_time,
+                seats_needed=pending_request.seats_needed,
+                status='PENDING'
+                # We don't have dropoff/pickup point information here, but that's okay
+            )
+            
+            # Update the pending request
+            pending_request.status = 'MATCHED'
+            pending_request.matched_ride_request = ride_request
+            pending_request.save()
+            
+            # Create notifications for both rider and driver
+            # Notify rider
+            Notification.objects.create(
+                recipient=pending_request.rider,
+                sender=ride.driver,
+                message=f"You have accepted the ride match from {ride.start_location} to {ride.end_location}",
+                ride=ride,
+                ride_request=ride_request,
+                notification_type='RIDE_MATCH'
+            )
+            
+            # Notify driver
+            Notification.objects.create(
+                recipient=ride.driver,
+                sender=pending_request.rider,
+                message=f"A rider has requested to join your ride from {ride.start_location} to {ride.end_location}",
+                ride=ride,
+                ride_request=ride_request,
+                notification_type='RIDE_REQUEST'
+            )
+            
+            # Update available seats if needed
+            ride.available_seats -= pending_request.seats_needed
+            ride.save()
+            
+            # Return success
+            return Response({
+                "status": "success",
+                "message": "Match accepted successfully",
+                "ride_request_id": ride_request.id
+            })
+            
+        except Exception as e:
+            logger.error(f"Error accepting match: {str(e)}")
+            logger.exception("Full exception details:")
+            return Response({"error": "An error occurred"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @action(detail=False, methods=['post'])
+    def reject_match(self, request):
+        """
+        Reject a proposed ride match.
+        Updates the PendingRideRequest status.
+        """
+        try:
+            pending_id = request.data.get('pending_id')
+            if not pending_id:
+                return Response({"error": "Missing pending_id parameter"}, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Get the pending ride request
+            from .models import PendingRideRequest, Notification
+            try:
+                pending_request = PendingRideRequest.objects.get(
+                    id=pending_id, 
+                    rider=request.user,
+                    status='MATCH_PROPOSED'
+                )
+            except PendingRideRequest.DoesNotExist:
+                return Response({"error": "Proposed match not found"}, status=status.HTTP_404_NOT_FOUND)
+            
+            # Get the ride before updating
+            ride = pending_request.proposed_ride
+            
+            # Update the pending request
+            pending_request.status = 'REJECTED'
+            pending_request.save()
+            
+            # Create notification for the driver
+            if ride:
+                Notification.objects.create(
+                    recipient=ride.driver,
+                    sender=pending_request.rider,
+                    message=f"A rider has rejected your ride from {ride.start_location} to {ride.end_location}",
+                    ride=ride,
+                    notification_type='RIDE_REJECTED'
+                )
+            
+            # Return success
+            return Response({
+                "status": "success",
+                "message": "Match rejected successfully"
+            })
+            
+        except Exception as e:
+            logger.error(f"Error rejecting match: {str(e)}")
+            logger.exception("Full exception details:")
+            return Response({"error": "An error occurred"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class NotificationViewSet(viewsets.ModelViewSet):
     serializer_class = NotificationSerializer
