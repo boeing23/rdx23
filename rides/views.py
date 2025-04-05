@@ -1354,16 +1354,35 @@ class RideRequestViewSet(viewsets.ModelViewSet):
                 logger.info("No accepted rides found, returning empty array")
                 return Response([])
 
-            try:
-                # Serialize the ride requests
-                serializer = self.get_serializer(ride_requests, many=True)
-                serialized_data = serializer.data
-                logger.debug(f"Successfully serialized data")
-            except Exception as serializer_error:
-                logger.error(f"Error serializing ride requests: {str(serializer_error)}")
-                logger.exception("Serialization error details:")
-                # Return empty list on serialization error instead of 500
-                return Response([])
+            # Serialize ride requests one by one to identify and handle problematic records
+            serialized_data = []
+            for request_obj in ride_requests:
+                try:
+                    # Serialize each ride request individually
+                    serializer = self.get_serializer(request_obj)
+                    ride_data = serializer.data
+                    
+                    # Validate and sanitize JSON data to prevent issues
+                    # Handle nearest_dropoff_point and optimal_pickup_point separately if they're causing issues
+                    if 'nearest_dropoff_point' in ride_data and ride_data['nearest_dropoff_point'] is not None:
+                        # Ensure it's a valid JSON-serializable value
+                        if not isinstance(ride_data['nearest_dropoff_point'], (dict, list, str, int, float, bool)) or ride_data['nearest_dropoff_point'] == '':
+                            logger.warning(f"Invalid nearest_dropoff_point for ride {request_obj.id}: {type(ride_data['nearest_dropoff_point'])}")
+                            ride_data['nearest_dropoff_point'] = None
+                    
+                    if 'optimal_pickup_point' in ride_data and ride_data['optimal_pickup_point'] is not None:
+                        # Ensure it's a valid JSON-serializable value
+                        if not isinstance(ride_data['optimal_pickup_point'], (dict, list, str, int, float, bool)) or ride_data['optimal_pickup_point'] == '':
+                            logger.warning(f"Invalid optimal_pickup_point for ride {request_obj.id}: {type(ride_data['optimal_pickup_point'])}")
+                            ride_data['optimal_pickup_point'] = None
+                    
+                    serialized_data.append(ride_data)
+                    
+                except Exception as e:
+                    logger.error(f"Error serializing ride request {request_obj.id}: {str(e)}")
+                    logger.exception("Serialization error details:")
+                    # Skip this problematic ride rather than failing the entire request
+                    continue
             
             # Enhance the response with direct driver information for frontend compatibility
             enhanced_data = []
@@ -1393,7 +1412,7 @@ class RideRequestViewSet(viewsets.ModelViewSet):
                             logger.debug(f"Found driver in ride_details: {driver}")
                             driver_details = {
                                 'driver_id': driver.get('id'),
-                                'driver_name': f"{driver.get('first_name', '')} {driver.get('last_name', '')}".strip(),
+                                'driver_name': f"{driver.get('first_name', '')} {driver.get('last_name', '')}".strip() or 'Unknown Driver',
                                 'driver_email': driver.get('email'),
                                 'driver_phone': driver.get('phone_number'),
                                 'vehicle_make': driver.get('vehicle_make'),
@@ -1410,7 +1429,7 @@ class RideRequestViewSet(viewsets.ModelViewSet):
                             logger.debug(f"Found driver in driver_details: {driver}")
                             driver_details = {
                                 'driver_id': driver.get('id'),
-                                'driver_name': f"{driver.get('first_name', '')} {driver.get('last_name', '')}".strip(),
+                                'driver_name': f"{driver.get('first_name', '')} {driver.get('last_name', '')}".strip() or 'Unknown Driver',
                                 'driver_email': driver.get('email'),
                                 'driver_phone': driver.get('phone_number'),
                                 'vehicle_make': driver.get('vehicle_make'),
@@ -1422,6 +1441,13 @@ class RideRequestViewSet(viewsets.ModelViewSet):
                     
                     # Merge the driver details with the original data
                     enhanced_ride_request = {**ride_request_data, **driver_details}
+                    
+                    # Ensure all values are JSON-serializable
+                    for key, value in enhanced_ride_request.items():
+                        if not isinstance(value, (dict, list, str, int, float, bool, type(None))):
+                            logger.warning(f"Non-serializable value for key {key}: {type(value)}")
+                            enhanced_ride_request[key] = str(value) if value is not None else None
+                    
                     enhanced_data.append(enhanced_ride_request)
                 
                 except Exception as processing_error:

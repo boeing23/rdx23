@@ -302,7 +302,13 @@ class RideRequestSerializer(serializers.ModelSerializer):
                         'distance_from_rider': None
                     }
                 except (ValueError, TypeError):
-                    pass
+                    # If conversion to float fails, return a safe default
+                    return {
+                        'address': 'Location coordinates (format error)',
+                        'latitude': None,
+                        'longitude': None,
+                        'distance_from_rider': None
+                    }
                 
             # Handle dictionary format
             if isinstance(dropoff_data, dict):
@@ -310,21 +316,37 @@ class RideRequestSerializer(serializers.ModelSerializer):
                     'address': dropoff_data.get('address', 'Unknown location'),
                     'latitude': None,
                     'longitude': None,
-                    'distance_from_rider': dropoff_data.get('distance_from_rider')
+                    'distance_from_rider': None
                 }
                 
                 # Try to extract coordinates from various possible formats
                 if 'latitude' in dropoff_data and 'longitude' in dropoff_data:
-                    result['latitude'] = dropoff_data.get('latitude')
-                    result['longitude'] = dropoff_data.get('longitude')
+                    try:
+                        result['latitude'] = float(dropoff_data.get('latitude'))
+                        result['longitude'] = float(dropoff_data.get('longitude'))
+                    except (ValueError, TypeError):
+                        pass
                 elif 'lat' in dropoff_data and 'lng' in dropoff_data:
-                    result['latitude'] = dropoff_data.get('lat')
-                    result['longitude'] = dropoff_data.get('lng')
+                    try:
+                        result['latitude'] = float(dropoff_data.get('lat'))
+                        result['longitude'] = float(dropoff_data.get('lng'))
+                    except (ValueError, TypeError):
+                        pass
                 elif 'coordinates' in dropoff_data:
                     coords = dropoff_data.get('coordinates')
                     if isinstance(coords, (list, tuple)) and len(coords) >= 2:
-                        result['latitude'] = coords[0]
-                        result['longitude'] = coords[1]
+                        try:
+                            result['latitude'] = float(coords[0])
+                            result['longitude'] = float(coords[1])
+                        except (ValueError, TypeError):
+                            pass
+                
+                # Handle distance field if present
+                if 'distance_from_rider' in dropoff_data:
+                    try:
+                        result['distance_from_rider'] = float(dropoff_data.get('distance_from_rider'))
+                    except (ValueError, TypeError):
+                        pass
                     
                 return result
                 
@@ -381,7 +403,13 @@ class RideRequestSerializer(serializers.ModelSerializer):
                         'distance_from_rider': None
                     }
                 except (ValueError, TypeError):
-                    pass
+                    # If conversion to float fails, return a safe default
+                    return {
+                        'address': 'Location coordinates (format error)',
+                        'latitude': None,
+                        'longitude': None,
+                        'distance_from_rider': None
+                    }
                 
             # Handle dictionary format
             if isinstance(pickup_data, dict):
@@ -389,21 +417,37 @@ class RideRequestSerializer(serializers.ModelSerializer):
                     'address': pickup_data.get('address', 'Unknown location'),
                     'latitude': None,
                     'longitude': None,
-                    'distance_from_rider': pickup_data.get('distance_from_rider')
+                    'distance_from_rider': None
                 }
                 
                 # Try to extract coordinates from various possible formats
                 if 'latitude' in pickup_data and 'longitude' in pickup_data:
-                    result['latitude'] = pickup_data.get('latitude')
-                    result['longitude'] = pickup_data.get('longitude')
+                    try:
+                        result['latitude'] = float(pickup_data.get('latitude'))
+                        result['longitude'] = float(pickup_data.get('longitude'))
+                    except (ValueError, TypeError):
+                        pass
                 elif 'lat' in pickup_data and 'lng' in pickup_data:
-                    result['latitude'] = pickup_data.get('lat')
-                    result['longitude'] = pickup_data.get('lng')
+                    try:
+                        result['latitude'] = float(pickup_data.get('lat'))
+                        result['longitude'] = float(pickup_data.get('lng'))
+                    except (ValueError, TypeError):
+                        pass
                 elif 'coordinates' in pickup_data:
                     coords = pickup_data.get('coordinates')
                     if isinstance(coords, (list, tuple)) and len(coords) >= 2:
-                        result['latitude'] = coords[0]
-                        result['longitude'] = coords[1]
+                        try:
+                            result['latitude'] = float(coords[0])
+                            result['longitude'] = float(coords[1])
+                        except (ValueError, TypeError):
+                            pass
+                
+                # Handle distance field if present
+                if 'distance_from_rider' in pickup_data:
+                    try:
+                        result['distance_from_rider'] = float(pickup_data.get('distance_from_rider'))
+                    except (ValueError, TypeError):
+                        pass
                     
                 return result
                 
