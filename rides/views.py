@@ -1685,6 +1685,7 @@ class RideRequestViewSet(viewsets.ModelViewSet):
             # Get available rides that match the rider's criteria
             available_rides = Ride.objects.filter(
                 status__in=['available', 'AVAILABLE', 'SCHEDULED', 'scheduled'],
+                available_seats__gte=1,  # Use available_seats instead of seats_available
                 departure_time__gte=timezone.now()
             ).select_related('driver')
             
@@ -1696,7 +1697,7 @@ class RideRequestViewSet(viewsets.ModelViewSet):
             else:
                 for index, ride in enumerate(available_rides):
                     logging.info(f"Available ride #{index+1}: ID={ride.id}, from={ride.start_location} to={ride.end_location}, " +
-                               f"status={ride.status}, seats={ride.available_seats}, " +
+                               f"status={ride.status}, seats={ride.available_seats}, " +  # Use available_seats instead of seats_available
                                f"departure={ride.departure_time}")
             
             # Find suitable rides using our service function
@@ -1781,7 +1782,7 @@ class RideRequestViewSet(viewsets.ModelViewSet):
                             end_latitude=float(request_data.get('dropoff_lat', 0)),
                             end_longitude=float(request_data.get('dropoff_lng', 0)),
                             departure_time=timezone.now() + timezone.timedelta(minutes=15),
-                            available_seats=4,
+                            available_seats=4,  # Use available_seats
                             status='SCHEDULED'
                         )
                         

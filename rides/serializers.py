@@ -256,7 +256,7 @@ class RideRequestSerializer(serializers.ModelSerializer):
             'start_location': ride.start_location,
             'end_location': ride.end_location,
             'departure_time': ride.departure_time,
-            'seats_available': ride.seats_available,
+            'seats_available': ride.available_seats,
             'route_distance': ride.route_distance,
             'route_duration': ride.route_duration
         }
