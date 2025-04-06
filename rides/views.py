@@ -1678,6 +1678,63 @@ class RideRequestViewSet(viewsets.ModelViewSet):
             # Store coordinates for ride matching
             request_data['pickup_location_coordinates'] = pickup_coords 
             request_data['dropoff_location_coordinates'] = dropoff_coords
+            
+            # Get departure time from request data
+            departure_time = request_data.get('departure_time')
+            if isinstance(departure_time, str):
+                try:
+                    departure_time = datetime.fromisoformat(departure_time.replace('Z', '+00:00'))
+                except Exception:
+                    departure_time = timezone.now() + timezone.timedelta(hours=1)
+            elif not departure_time:
+                departure_time = timezone.now() + timezone.timedelta(hours=1)
+                
+            # Check for existing pending requests with similar parameters
+            from .models import PendingRideRequest
+            
+            # Define a time window (e.g., 30 minutes) for considering requests as duplicates
+            time_window = timezone.timedelta(minutes=30)
+            
+            # Check for existing pending requests
+            existing_requests = PendingRideRequest.objects.filter(
+                rider=rider,
+                status__in=['PENDING', 'MATCH_PROPOSED'],
+                # Check if departure time is within a reasonable window
+                departure_time__gte=departure_time - time_window,
+                departure_time__lte=departure_time + time_window
+            )
+            
+            # Add distance filter for pickup/dropoff locations
+            # We'll check if any existing request has similar coordinates
+            existing_request_found = False
+            seats_needed = int(request_data.get('seats_needed', 1))
+            
+            for existing_req in existing_requests:
+                # Calculate distance between pickup points
+                pickup_distance = great_circle(
+                    (float(request_data.get('pickup_lat')), float(request_data.get('pickup_lng'))),
+                    (existing_req.pickup_latitude, existing_req.pickup_longitude)
+                ).kilometers
+                
+                # Calculate distance between dropoff points
+                dropoff_distance = great_circle(
+                    (float(request_data.get('dropoff_lat')), float(request_data.get('dropoff_lng'))),
+                    (existing_req.dropoff_latitude, existing_req.dropoff_longitude)
+                ).kilometers
+                
+                # If both pickup and dropoff are within 0.5km, consider it a duplicate
+                if pickup_distance < 0.5 and dropoff_distance < 0.5 and existing_req.seats_needed == seats_needed:
+                    existing_request_found = True
+                    logging.info(f"Found existing similar request (ID: {existing_req.id})")
+                    
+                    # Return the existing request ID instead of creating a new one
+                    return Response({
+                        "status": "pending",
+                        "has_match": False,
+                        "pending_request_id": existing_req.id,
+                        "message": "You already have a similar ride request. We'll notify you when a matching ride becomes available.",
+                        "is_duplicate": True
+                    }, status=status.HTTP_200_OK)
                 
             # Import the service function
             from rides.services import find_suitable_rides
@@ -1852,7 +1909,32 @@ class RideRequestViewSet(viewsets.ModelViewSet):
             # Create a serializer with the updated data
             serializer = self.get_serializer(data=request_data)
             serializer.is_valid(raise_exception=True)
-            self.perform_create(serializer)
+            ride_request = self.perform_create(serializer)
+            
+            # Create notifications for both the rider and driver
+            from .models import Notification
+            
+            # Notify rider about the match
+            rider_notification = Notification.objects.create(
+                recipient=rider,
+                sender=best_match.driver,
+                message=f"You've been matched with a ride from {best_match.start_location} to {best_match.end_location}",
+                ride=best_match,
+                ride_request=ride_request,
+                notification_type='RIDE_MATCH'
+            )
+            
+            # Notify driver about the new ride request
+            driver_notification = Notification.objects.create(
+                recipient=best_match.driver,
+                sender=rider,
+                message=f"A rider has requested to join your ride from {best_match.start_location} to {best_match.end_location}",
+                ride=best_match,
+                ride_request=ride_request,
+                notification_type='RIDE_REQUEST'
+            )
+            
+            logging.info(f"Created notifications for rider (ID: {rider_notification.id}) and driver (ID: {driver_notification.id})")
             
             # Return success response with the matched ride
             return Response({
@@ -1877,7 +1959,23 @@ class RideRequestViewSet(viewsets.ModelViewSet):
             
         serializer = self.get_serializer(data=request_data)
         serializer.is_valid(raise_exception=True)
-        self.perform_create(serializer)
+        ride_request = self.perform_create(serializer)
+        
+        # Create notifications for the newly created ride request
+        from .models import Notification
+        
+        # Get the ride
+        ride = ride_request.ride
+        
+        # Notify driver about the new ride request
+        Notification.objects.create(
+            recipient=ride.driver,
+            sender=request.user,
+            message=f"A rider has requested to join your ride from {ride.start_location} to {ride.end_location}",
+            ride=ride,
+            ride_request=ride_request,
+            notification_type='RIDE_REQUEST'
+        )
         
         headers = self.get_success_headers(serializer.data)
         return Response({
@@ -1885,7 +1983,7 @@ class RideRequestViewSet(viewsets.ModelViewSet):
             "has_match": True,
             "ride_request": serializer.data
         }, status=status.HTTP_201_CREATED, headers=headers)
-    
+        
     def perform_create(self, serializer):
         logging.info(f"Performing RideRequest creation with data: {serializer.validated_data}")
         # Ensure the rider is set to the current user if not specified
@@ -1898,9 +1996,11 @@ class RideRequestViewSet(viewsets.ModelViewSet):
             
         # Log before saving to database
         logging.info(f"TRACKING: About to save ride request to database")
-        serializer.save(rider=rider)
+        ride_request = serializer.save(rider=rider)
         # Log after saving to database
         logging.info(f"TRACKING: Successfully saved ride request to database with ID: {serializer.instance.id}")
+        
+        return ride_request
 
     @action(detail=False, methods=['post'])
     def accept_match(self, request):
