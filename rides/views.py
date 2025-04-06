@@ -17,11 +17,12 @@ from django.utils import timezone
 import requests
 from geopy.geocoders import Nominatim
 from geopy.distance import great_circle
-from .services import send_ride_match_notification, send_ride_accepted_notification
+from .services import send_ride_match_notification, send_ride_accepted_notification, create_match_notifications
 import math
 import random
 import pytz
 from django.conf import settings
+from django.db import DatabaseError
 
 logger = logging.getLogger(__name__)
 
@@ -1946,7 +1947,6 @@ class RideRequestViewSet(viewsets.ModelViewSet):
                 departure_time=ride.departure_time,
                 seats_needed=pending_request.seats_needed,
                 status='PENDING'
-                # We don't have dropoff/pickup point information here, but that's okay
             )
             
             # Update the pending request
@@ -1954,26 +1954,9 @@ class RideRequestViewSet(viewsets.ModelViewSet):
             pending_request.matched_ride_request = ride_request
             pending_request.save()
             
-            # Create notifications for both rider and driver
-            # Notify rider
-            Notification.objects.create(
-                recipient=pending_request.rider,
-                sender=ride.driver,
-                message=f"You have accepted the ride match from {ride.start_location} to {ride.end_location}",
-                ride=ride,
-                ride_request=ride_request,
-                notification_type='RIDE_MATCH'
-            )
-            
-            # Notify driver
-            Notification.objects.create(
-                recipient=ride.driver,
-                sender=pending_request.rider,
-                message=f"A rider has requested to join your ride from {ride.start_location} to {ride.end_location}",
-                ride=ride,
-                ride_request=ride_request,
-                notification_type='RIDE_REQUEST'
-            )
+            # Create notifications for rider and driver
+            from .services import create_match_notifications
+            create_match_notifications(pending_request, ride_request)
             
             # Update available seats if needed
             ride.available_seats -= pending_request.seats_needed
@@ -2100,3 +2083,71 @@ def mark_past_rides_complete():
             ride_request=ride_request,
             notification_type='RIDE_COMPLETED'
         )
+
+def mark_expired_pending_requests():
+    """
+    Automatically mark pending ride requests as expired if their departure time has passed.
+    """
+    try:
+        from .models import PendingRideRequest, Notification
+        import logging
+        from django.utils import timezone
+        from django.db import DatabaseError
+        
+        logger = logging.getLogger(__name__)
+        current_time = timezone.now()
+        
+        try:
+            # Get all pending or match proposed requests with departure time in the past
+            expired_requests = PendingRideRequest.objects.filter(
+                status__in=['PENDING', 'MATCH_PROPOSED'],
+                departure_time__lt=current_time - timezone.timedelta(minutes=30)  # 30 minutes after departure time
+            )
+            
+            count = expired_requests.count()
+            logger.info(f"Found {count} expired pending ride requests")
+            
+            for request in expired_requests:
+                old_status = request.status
+                request.status = 'EXPIRED'
+                request.save(update_fields=['status'])
+                
+                # Notify the rider
+                Notification.objects.create(
+                    recipient=request.rider,
+                    message=f"Your ride request from {request.pickup_location} to {request.dropoff_location} has expired.",
+                    notification_type='RIDE_CANCELLED'
+                )
+                
+                logger.info(f"Marked pending request {request.id} as expired (was {old_status})")
+        
+        except DatabaseError as db_error:
+            # If there's a database error (like missing columns), log it but don't crash
+            logger.error(f"Database error in mark_expired_pending_requests: {str(db_error)}")
+            logger.info("Trying alternative approach with minimal fields...")
+            
+            # Alternative approach using only fields that must exist
+            expired_requests = PendingRideRequest.objects.filter(
+                status='PENDING',  # Only check PENDING to avoid proposed_ride field
+                departure_time__lt=current_time - timezone.timedelta(minutes=30)
+            ).values('id', 'status', 'rider_id', 'pickup_location', 'dropoff_location')
+            
+            count = expired_requests.count()
+            logger.info(f"Found {count} expired pending ride requests (alternative approach)")
+            
+            for request in expired_requests:
+                # Update just the status field
+                PendingRideRequest.objects.filter(id=request['id']).update(status='EXPIRED')
+                
+                # Notify the rider
+                Notification.objects.create(
+                    recipient_id=request['rider_id'],
+                    message=f"Your ride request from {request['pickup_location']} to {request['dropoff_location']} has expired.",
+                    notification_type='RIDE_CANCELLED'
+                )
+                
+                logger.info(f"Marked pending request {request['id']} as expired (was {request['status']})")
+            
+    except Exception as e:
+        logger.error(f"Error marking expired pending requests: {str(e)}")
+        logger.exception("Full exception details:")

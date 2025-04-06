@@ -475,4 +475,43 @@ def get_address_from_coordinates(longitude, latitude):
         return None
     except Exception as e:
         logger.error(f"Error in reverse geocoding: {str(e)}")
-        return None 
+        return None
+
+def create_match_notifications(pending_request, ride_request):
+    """
+    Create notifications for both rider and driver when a pending request is matched with a ride.
+    
+    Args:
+        pending_request: The PendingRideRequest that has been matched
+        ride_request: The created RideRequest for the match
+    
+    Returns:
+        None
+    """
+    try:
+        ride = ride_request.ride
+        
+        # Notify rider
+        Notification.objects.create(
+            recipient=pending_request.rider,
+            sender=ride.driver,
+            message=f"Your ride request from {pending_request.pickup_location} to {pending_request.dropoff_location} has been matched with a ride",
+            ride=ride,
+            ride_request=ride_request,
+            notification_type='RIDE_MATCH'
+        )
+        
+        # Notify driver
+        Notification.objects.create(
+            recipient=ride.driver,
+            sender=pending_request.rider,
+            message=f"A rider has been matched with your ride from {ride.start_location} to {ride.end_location}",
+            ride=ride,
+            ride_request=ride_request,
+            notification_type='RIDE_REQUEST'
+        )
+        
+        logger.info(f"Created match notifications for pending request {pending_request.id} and ride request {ride_request.id}")
+    except Exception as e:
+        logger.error(f"Error creating match notifications: {str(e)}")
+        logger.exception("Full exception details:") 

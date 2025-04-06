@@ -113,4 +113,32 @@ The API will be available at `http://localhost:8002/api/`
 
 ## License
 
-This project is licensed under the MIT License. 
+This project is licensed under the MIT License.
+
+## Scheduled Tasks
+
+To ensure that ride statuses are updated automatically (marking expired pending requests and completed rides), you should set up a cron job or a scheduled task to run the following command at regular intervals (e.g., every 15 minutes):
+
+```
+python manage.py process_ride_statuses
+```
+
+### Using Crontab (Linux/macOS)
+
+Add this to your crontab by running `crontab -e` and adding:
+
+```
+*/15 * * * * cd /path/to/your/project && /path/to/your/venv/bin/python manage.py process_ride_statuses >> /path/to/logfile.log 2>&1
+```
+
+### Using Windows Task Scheduler
+
+Create a batch file with:
+
+```batch
+@echo off
+cd C:\path\to\your\project
+C:\path\to\your\venv\Scripts\python.exe manage.py process_ride_statuses
+```
+
+Then set up a scheduled task to run this batch file every 15 minutes. 
