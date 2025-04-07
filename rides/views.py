@@ -1950,7 +1950,8 @@ class RideRequestViewSet(viewsets.ModelViewSet):
                     "driver": best_match.driver.get_full_name(),
                     "start_location": best_match.start_location,
                     "end_location": best_match.end_location,
-                    "departure_time": best_match.departure_time.isoformat()
+                    "departure_time": best_match.departure_time.isoformat() if best_match.departure_time else None,
+                    "created_at": timezone.now().isoformat()
                 },
                 "match_details": {  # Add this specific field for the frontend
                     "ride_id": best_match.id,
@@ -1958,12 +1959,14 @@ class RideRequestViewSet(viewsets.ModelViewSet):
                     "driver_id": best_match.driver.id,
                     "pickup": best_match.start_location,
                     "dropoff": best_match.end_location,
-                    "departure_time": best_match.departure_time.isoformat(),
+                    "departure_time": best_match.departure_time.isoformat() if best_match.departure_time else None,
+                    "created_at": timezone.now().isoformat(),
                     "overlap_percentage": best_match_details.get('overlap_percentage', 0),
                     "matching_score": best_match_details.get('matching_score', 0),
                     "vehicle_make": getattr(best_match.driver, 'vehicle_make', ''),
                     "vehicle_model": getattr(best_match.driver, 'vehicle_model', ''),
                     "vehicle_color": getattr(best_match.driver, 'vehicle_color', ''),
+                    "vehicle_year": getattr(best_match.driver, 'vehicle_year', ''),  # Add vehicle year
                     "license_plate": getattr(best_match.driver, 'license_plate', '')
                 },
                 "ride_request": serializer.data,
@@ -2012,10 +2015,12 @@ class RideRequestViewSet(viewsets.ModelViewSet):
                 "driver_id": ride.driver.id,
                 "pickup": ride.start_location,
                 "dropoff": ride.end_location,
-                "departure_time": ride.departure_time.isoformat(),
+                "departure_time": ride.departure_time.isoformat() if ride.departure_time else None,
+                "created_at": timezone.now().isoformat(),
                 "vehicle_make": getattr(ride.driver, 'vehicle_make', ''),
                 "vehicle_model": getattr(ride.driver, 'vehicle_model', ''),
                 "vehicle_color": getattr(ride.driver, 'vehicle_color', ''),
+                "vehicle_year": getattr(ride.driver, 'vehicle_year', ''),  # Add vehicle year
                 "license_plate": getattr(ride.driver, 'license_plate', '')
             },
             "ride_request": serializer.data,
