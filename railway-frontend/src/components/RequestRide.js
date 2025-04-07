@@ -131,51 +131,57 @@ const RequestRide = () => {
     setError('');
     setSuccess('');
     setLoading(true);
-
+    
     try {
       // Validation
       if (!pickupLocation || !dropoffLocation || !departureTime || !seatsNeeded) {
         setError('Please fill in all required fields');
+        setLoading(false);
+        isSubmitting.current = false;
         return;
       }
 
       const token = localStorage.getItem('token');
       if (!token) {
         setError('Please log in to request a ride');
-        return;
-      }
-      
-      // Get the first available ride for testing
-      let rideId = null;
-      
-      try {
-        const ridesResponse = await fetch(`${API_BASE_URL}/api/rides/rides/`, {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        });
-        
-        if (ridesResponse.ok) {
-          const rides = await ridesResponse.json();
-          if (rides && rides.length > 0) {
-            rideId = rides[0].id;
-            console.log('Selected ride ID for request:', rideId);
-          }
-        }
-      } catch (rideError) {
-        console.error('Error fetching rides:', rideError);
-      }
-      
-      if (!rideId) {
-        setError('No available rides found. Please try again later.');
         setLoading(false);
         isSubmitting.current = false;
         return;
       }
-
+      
+      // First, find available rides to get a ride ID
+      console.log('Searching for available rides...');
+      const ridesResponse = await fetch(`${API_BASE_URL}/api/rides/rides/`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      let rideId = null;
+      
+      if (ridesResponse.ok) {
+        const ridesData = await ridesResponse.json();
+        console.log('Available rides found:', ridesData.length);
+        
+        if (ridesData.length > 0) {
+          // Select the first available ride
+          rideId = ridesData[0].id;
+          console.log('Selected ride ID:', rideId);
+        } else {
+          console.log('No available rides found');
+          setError('No available rides found. Please try again later.');
+          setLoading(false);
+          isSubmitting.current = false;
+          return;
+        }
+      } else {
+        console.log('Failed to fetch rides');
+        // Continue anyway, but log the issue
+      }
+      
+      // Prepare request data with the ride ID if found
       const requestData = {
-        ride: rideId, // Use the fetched ride ID
         pickup_location: pickupLocation,
         dropoff_location: dropoffLocation,
         pickup_latitude: pickupCoordinates.lat,
@@ -185,6 +191,11 @@ const RequestRide = () => {
         departure_time: departureTime.toISOString(),
         seats_needed: parseInt(seatsNeeded)
       };
+      
+      // Add ride ID if we found one
+      if (rideId) {
+        requestData.ride = rideId;
+      }
 
       console.log('Submitting ride request with data:', requestData);
 
