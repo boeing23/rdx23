@@ -45,7 +45,7 @@ urlpatterns = [
     path('', api_root, name='api-root'),
     path('admin/', admin.site.urls),
     path('api/users/', include('users.urls')),
-    path('api/rides/', include('rides.urls')),
+    path('api/rides/', include('rides.urls_fixed')),
     # Add the railway status endpoint
     path('railway-status/', status_check, name='railway_status'),
 ]
