@@ -344,15 +344,42 @@ const RequestRide = () => {
     try {
       const token = localStorage.getItem('token');
       
-      // Safely parse the JSON from localStorage with error handling
+      // Safely parse the JSON from localStorage with improved error handling
       let currentMatch;
       try {
         const storedMatch = localStorage.getItem('currentMatch');
-        currentMatch = storedMatch ? JSON.parse(storedMatch) : null;
+        console.log('Raw stored match from localStorage:', storedMatch);
+        
+        if (!storedMatch) {
+          throw new Error('No match data found in localStorage');
+        }
+        
+        // Check if it's already an object (improperly stored)
+        if (typeof storedMatch === 'object') {
+          console.warn('Match data already an object, not a string. Using directly.');
+          currentMatch = storedMatch;
+        } else {
+          // Normal case - parse the JSON string
+          currentMatch = JSON.parse(storedMatch);
+        }
       } catch (err) {
         console.error('Error parsing currentMatch from localStorage:', err);
-        setError('Invalid ride data. Please try requesting a new ride.');
-        return;
+        
+        // Try to save a valid JSON string (recovery attempt)
+        try {
+          if (matchDetails) {
+            console.log('Attempting recovery using matchDetails from state');
+            currentMatch = matchDetails;
+            localStorage.setItem('currentMatch', JSON.stringify(matchDetails));
+          }
+        } catch (recoveryErr) {
+          console.error('Recovery attempt failed:', recoveryErr);
+        }
+        
+        if (!currentMatch) {
+          setError('Invalid ride data. Please try requesting a new ride.');
+          return;
+        }
       }
       
       console.log('Current match data:', currentMatch);
@@ -378,7 +405,13 @@ const RequestRide = () => {
 
       if (response.ok) {
         // Clear the current match from localStorage since it's been accepted
-        localStorage.removeItem('currentMatch');
+        try {
+          localStorage.removeItem('currentMatch');
+        } catch (err) {
+          console.error('Error removing currentMatch from localStorage:', err);
+          // Continue despite error
+        }
+        
         setShowMatchDialog(false);
         setSuccess('Ride accepted successfully!');
         
