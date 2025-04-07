@@ -1,10 +1,15 @@
+# Use a specific Python version for stability
 FROM python:3.10-slim
 
+# Set working directory
 WORKDIR /app
 
+# Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV PRODUCTION=True
+ENV RAILWAY_ENVIRONMENT=True
+ENV DISABLE_DATABASE_OPERATIONS=True
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -30,11 +35,11 @@ RUN echo "=== Files in /app ===" && ls -la
 RUN python manage.py collectstatic --noinput || echo "Static collection failed but continuing"
 
 # Health check - using shell form to ensure PORT gets expanded and using railway-status endpoint
-HEALTHCHECK --interval=10s --timeout=5s --start-period=30s --retries=3 \
+HEALTHCHECK --interval=15s --timeout=10s --start-period=60s --retries=5 \
   CMD curl -f http://localhost:${PORT:-8000}/railway-status/ || exit 1
 
 # Set the default port
 ENV PORT=8000
 
-# Using startup script with enhanced logging
+# Run startup script
 CMD ["./startup.sh"] 

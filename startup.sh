@@ -40,8 +40,8 @@ echo "=== STARTING GUNICORN ==="
 export PORT=${PORT:-8000}
 echo "Using PORT: $PORT"
 
-# Execute gunicorn with increased timeout and retries
-exec gunicorn carpool_project.wsgi:application \
+# Use our custom railway_wsgi.py file for better error handling
+exec gunicorn railway_wsgi:application \
     --bind 0.0.0.0:$PORT \
     --timeout 120 \
     --workers 1 \
