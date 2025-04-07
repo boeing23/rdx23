@@ -741,8 +741,8 @@ const RequestRide = () => {
                     <strong>Requested Pickup:</strong> {matchDetails.pickup || 'Not provided'}
                   </Typography>
                   <Typography variant="body1">
-                    <strong>Optimal Pickup:</strong> {matchDetails.optimal_pickup_point ? 
-                      `${matchDetails.optimal_pickup_point.lat.toFixed(6)}, ${matchDetails.optimal_pickup_point.lng.toFixed(6)}` : 
+                    <strong>Optimal Pickup:</strong> {matchDetails.ride_request?.optimal_pickup_point ? 
+                      `${matchDetails.ride_request.optimal_pickup_point.latitude.toFixed(6)}, ${matchDetails.ride_request.optimal_pickup_point.longitude.toFixed(6)}` : 
                       'Not available'}
                   </Typography>
                 </Grid>
@@ -751,8 +751,8 @@ const RequestRide = () => {
                     <strong>Requested Dropoff:</strong> {matchDetails.dropoff || 'Not provided'}
                   </Typography>
                   <Typography variant="body1">
-                    <strong>Optimal Dropoff:</strong> {matchDetails.optimal_dropoff_point ? 
-                      `${matchDetails.optimal_dropoff_point.lat.toFixed(6)}, ${matchDetails.optimal_dropoff_point.lng.toFixed(6)}` : 
+                    <strong>Optimal Dropoff:</strong> {matchDetails.ride_request?.nearest_dropoff_point ? 
+                      `${matchDetails.ride_request.nearest_dropoff_point.latitude.toFixed(6)}, ${matchDetails.ride_request.nearest_dropoff_point.longitude.toFixed(6)}` : 
                       'Not available'}
                   </Typography>
                 </Grid>
