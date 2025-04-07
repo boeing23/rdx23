@@ -22,7 +22,8 @@ import {
   DialogContent,
   DialogActions,
   CircularProgress,
-  
+  AlertTitle,
+  LinearProgress,
 } from '@mui/material';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
@@ -806,105 +807,109 @@ const RequestRide = () => {
           {matchDetails ? (
             <>
               <Typography variant="h6" gutterBottom>
-                Driver Details
+                Driver & Vehicle
               </Typography>
               <Grid container spacing={2}>
                 <Grid item xs={12} sm={6}>
                   <Typography variant="body1">
-                    <strong>Name:</strong> {matchDetails.driver_name || 'Not provided'}
+                    <strong>Driver:</strong> {matchDetails.driver_name || 'Unknown'}
+                  </Typography>
+                  <Typography variant="body1">
+                    <strong>Vehicle:</strong> {matchDetails.vehicle_make || ''} {matchDetails.vehicle_model || ''}{matchDetails.vehicle_color ? `, ${matchDetails.vehicle_color}` : ''}
                   </Typography>
                 </Grid>
                 <Grid item xs={12} sm={6}>
                   <Typography variant="body1">
-                    <strong>Email:</strong> {matchDetails.driver_email || 'Not provided'}
+                    <strong>License Plate:</strong> {matchDetails.license_plate || 'Not provided'}
                   </Typography>
-                </Grid>
-                <Grid item xs={12} sm={6}>
                   <Typography variant="body1">
-                    <strong>Phone:</strong> {matchDetails.driver_phone || 'Not provided'}
+                    <strong>Departure Time:</strong> {matchDetails.departure_time ? formatDate(matchDetails.departure_time) : 'Not provided'}
                   </Typography>
                 </Grid>
               </Grid>
 
               <Typography variant="h6" sx={{ mt: 2 }} gutterBottom>
-                Vehicle Details
+                Route Information
               </Typography>
               <Grid container spacing={2}>
-                <Grid item xs={12} sm={6}>
-                  <Typography variant="body1">
-                    <strong>Make:</strong> {matchDetails.vehicle_details?.make || 'Not provided'}
-                  </Typography>
+                <Grid item xs={12}>
+                  <Alert severity="info" sx={{ mb: 2 }}>
+                    <AlertTitle>How Ride Matching Works</AlertTitle>
+                    You've been matched with a driver whose route overlaps with your requested journey. The app has calculated optimal pickup and dropoff points along the driver's route.
+                  </Alert>
                 </Grid>
-                <Grid item xs={12} sm={6}>
-                  <Typography variant="body1">
-                    <strong>Model:</strong> {matchDetails.vehicle_details?.model || 'Not provided'}
-                  </Typography>
+                <Grid item xs={12}>
+                  <Box sx={{ mb: 2, p: 1, backgroundColor: '#f5f5f5', borderRadius: 1 }}>
+                    <Typography variant="subtitle2" gutterBottom>
+                      Your Requested Route:
+                    </Typography>
+                    <Typography variant="body2">
+                      <strong>From:</strong> {matchDetails.ride_request?.pickup_location || 'Not available'}
+                    </Typography>
+                    <Typography variant="body2">
+                      <strong>To:</strong> {matchDetails.ride_request?.dropoff_location || 'Not available'}
+                    </Typography>
+                  </Box>
                 </Grid>
-                <Grid item xs={12} sm={6}>
-                  <Typography variant="body1">
-                    <strong>Color:</strong> {matchDetails.vehicle_details?.color || 'Not provided'}
-                  </Typography>
+                <Grid item xs={12}>
+                  <Box sx={{ mb: 2, p: 1, backgroundColor: '#e3f2fd', borderRadius: 1 }}>
+                    <Typography variant="subtitle2" gutterBottom>
+                      Driver's Route:
+                    </Typography>
+                    <Typography variant="body2">
+                      <strong>From:</strong> {matchDetails.pickup || 'Not available'}
+                    </Typography>
+                    <Typography variant="body2">
+                      <strong>To:</strong> {matchDetails.dropoff || 'Not available'}
+                    </Typography>
+                  </Box>
                 </Grid>
-                <Grid item xs={12} sm={6}>
-                  <Typography variant="body1">
-                    <strong>License Plate:</strong> {matchDetails.vehicle_details?.license_plate || 'Not provided'}
-                  </Typography>
+                <Grid item xs={12}>
+                  <Paper sx={{ p: 1, mb: 2, bgcolor: '#fcf8e3', borderLeft: '4px solid #f0ad4e', borderRadius: 1 }}>
+                    <Typography variant="subtitle2" gutterBottom>
+                      Match Compatibility Score
+                    </Typography>
+                    <Box display="flex" alignItems="center">
+                      <LinearProgress 
+                        variant="determinate" 
+                        value={matchDetails.compatibility_score || 60} 
+                        sx={{ 
+                          height: 10, 
+                          borderRadius: 5, 
+                          width: '100%',
+                          backgroundColor: '#eeeeee',
+                          '& .MuiLinearProgress-bar': {
+                            backgroundColor: matchDetails.compatibility_score >= 80 ? '#4caf50' : 
+                                             matchDetails.compatibility_score >= 60 ? '#ff9800' : '#f44336'
+                          }
+                        }}
+                      />
+                      <Typography variant="body2" color="text.secondary" ml={1}>
+                        {matchDetails.compatibility_score || 60}%
+                      </Typography>
+                    </Box>
+                    <Typography variant="caption" color="text.secondary" mt={1} display="block">
+                      This score represents how well this ride matches your needs, based on direction, route overlap, and minimal detour for the driver.
+                    </Typography>
+                  </Paper>
                 </Grid>
-              </Grid>
-
-              <Typography variant="h6" sx={{ mt: 2 }} gutterBottom>
-                Ride Details
-              </Typography>
-              <Grid container spacing={2}>
-                <Grid item xs={12} sm={6}>
-                  <Typography variant="body1">
-                    <strong>Pickup Location:</strong> {matchDetails.ride_details?.start_location || matchDetails.pickup || 'Not provided'}
-                  </Typography>
-                </Grid>
-                <Grid item xs={12} sm={6}>
-                  <Typography variant="body1">
-                    <strong>Dropoff Location:</strong> {matchDetails.ride_details?.end_location || matchDetails.dropoff || 'Not provided'}
-                  </Typography>
-                </Grid>
-                <Grid item xs={12} sm={6}>
-                  <Typography variant="body1">
-                    <strong>Departure Time:</strong> {new Date(matchDetails.ride_details?.departure_time || matchDetails.departure_time).toLocaleString()}
-                  </Typography>
-                </Grid>
-                <Grid item xs={12} sm={6}>
-                  <Typography variant="body1">
-                    <strong>Available Seats:</strong> {matchDetails.ride_details?.available_seats || 1}
-                  </Typography>
-                </Grid>
-              </Grid>
-
-              <Typography variant="h6" sx={{ mt: 2 }} gutterBottom>
-                Pickup & Drop-off Details
-              </Typography>
-              <Grid container spacing={2}>
                 <Grid item xs={12} sm={6}>
                   <Typography variant="body1" gutterBottom>
-                    <strong>Requested Pickup:</strong> {matchDetails.pickup || 'Not provided'}
+                    <strong>Optimal Pickup Point:</strong>
                   </Typography>
                   
                   {/* Enhanced Optimal Pickup Display */}
                   <Box sx={{ mt: 1, mb: 2, pl: 1, borderLeft: '2px solid #1976d2' }}>
-                    <Typography variant="body1" fontWeight="bold">
-                      Optimal Pickup:
-                    </Typography>
                     {getOptimalPickupDetails()}
                   </Box>
                 </Grid>
                 <Grid item xs={12} sm={6}>
                   <Typography variant="body1" gutterBottom>
-                    <strong>Requested Dropoff:</strong> {matchDetails.dropoff || 'Not provided'}
+                    <strong>Optimal Dropoff Point:</strong>
                   </Typography>
                   
                   {/* Enhanced Optimal Dropoff Display */}
                   <Box sx={{ mt: 1, mb: 2, pl: 1, borderLeft: '2px solid #1976d2' }}>
-                    <Typography variant="body1" fontWeight="bold">
-                      Optimal Dropoff:
-                    </Typography>
                     {getOptimalDropoffDetails()}
                   </Box>
                 </Grid>

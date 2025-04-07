@@ -510,7 +510,7 @@ def create_match_notifications(ride_request):
             from .views import calculate_route_overlap
             
             # Calculate route overlap which returns optimal points
-            overlap_percentage, optimal_dropoff_point, optimal_pickup_point = calculate_route_overlap(
+            compatibility_score, optimal_dropoff_point, optimal_pickup_point = calculate_route_overlap(
                 driver_start, driver_end, rider_pickup, rider_dropoff
             )
         except Exception as e:

@@ -340,16 +340,23 @@ def calculate_segment_overlap(route1, route2, threshold=200):
 
 def calculate_route_overlap(driver_start, driver_end, rider_pickup, rider_dropoff):
     """
-    Calculate the route overlap between driver and rider routes.
+    Calculate the route compatibility between driver and rider routes.
+    
+    This improved algorithm considers:
+    1. Directional compatibility (driver and rider must be going in similar directions)
+    2. Sequence compatibility (pickup must come before dropoff along driver's route)
+    3. Deviation from the driver's original route (minimize detour)
+    
     Returns:
-        tuple: (overlap_percentage, optimal_dropoff_point, optimal_pickup_point)
+        tuple: (compatibility_score, optimal_dropoff_point, optimal_pickup_point)
     """
     try:
-        # Generate driver's route
+        # Log input coordinates for debugging
         logger.info(f"Calculating route overlap with inputs:")
         logger.info(f"  Driver start: {driver_start}, Driver end: {driver_end}")
         logger.info(f"  Rider pickup: {rider_pickup}, Rider dropoff: {rider_dropoff}")
         
+        # Generate driver's route
         driver_route = generate_route(driver_start, driver_end)
         if not driver_route:
             logger.error("Failed to generate driver route")
@@ -361,21 +368,85 @@ def calculate_route_overlap(driver_start, driver_end, rider_pickup, rider_dropof
             logger.error("Failed to generate rider route")
             return 0, None, None
         
-        # Find optimal pickup and dropoff points
+        # Find optimal pickup and dropoff points and their distances
         optimal_pickup_point, pickup_dist = find_optimal_point(driver_route, rider_pickup)
         optimal_dropoff_point, dropoff_dist = find_optimal_point(driver_route, rider_dropoff)
+        
+        if not optimal_pickup_point or not optimal_dropoff_point:
+            logger.error("Failed to find optimal pickup or dropoff points")
+            return 0, None, None
         
         logger.info(f"Calculated optimal pickup point: {optimal_pickup_point}")
         logger.info(f"Calculated optimal dropoff point: {optimal_dropoff_point}")
         
-        # Calculate driver-to-rider overlap
-        driver_to_rider_overlap = calculate_segment_overlap(driver_route, rider_route)
+        # Calculate driver route indices for pickup and dropoff
+        pickup_idx = find_point_index(driver_route, optimal_pickup_point)
+        dropoff_idx = find_point_index(driver_route, optimal_dropoff_point)
         
-        # Calculate rider-to-driver overlap
-        rider_to_driver_overlap = calculate_segment_overlap(rider_route, driver_route)
+        if pickup_idx is None or dropoff_idx is None:
+            logger.error(f"Could not determine position in route. Pickup index: {pickup_idx}, Dropoff index: {dropoff_idx}")
+            return 0, None, None
         
-        # Take average of the two overlap measures
-        overlap_percentage = (driver_to_rider_overlap + rider_to_driver_overlap) / 2
+        # Check sequence - pickup must come before dropoff along the driver's route
+        if pickup_idx > dropoff_idx:
+            logger.warning("Invalid sequence: pickup comes after dropoff along driver's route")
+            return 0, None, None
+            
+        # Calculate vector directions to assess directional compatibility
+        driver_direction = calculate_direction_vector(driver_start, driver_end)
+        rider_direction = calculate_direction_vector(rider_pickup, rider_dropoff)
+        direction_similarity = calculate_vector_similarity(driver_direction, rider_direction)
+        
+        # If directions are nearly opposite (negative similarity), this is a poor match
+        if direction_similarity < 0:
+            logger.warning(f"Driver and rider are going in opposite directions: {direction_similarity:.2f}")
+            return 0, None, None
+            
+        # Calculate what percentage of the driver's route this ride covers
+        route_coverage = (dropoff_idx - pickup_idx) / max(1, len(driver_route) - 1)
+        
+        # Calculate deviation from direct route
+        # How much extra distance will the driver travel to accommodate this rider?
+        direct_distance = calculate_distance(driver_route[pickup_idx], driver_route[dropoff_idx])
+        with_rider_distance = pickup_dist + dropoff_dist + calculate_distance(rider_pickup, rider_dropoff)
+        
+        # Normalize deviation as a percentage of the direct distance
+        deviation_percentage = max(0, (with_rider_distance - direct_distance) / max(0.1, direct_distance)) * 100
+        
+        # Penalize high deviations
+        if deviation_percentage > 50:
+            logger.warning(f"High deviation percentage: {deviation_percentage:.2f}%")
+            deviation_score = max(0, 100 - deviation_percentage)
+        else:
+            deviation_score = 100 - deviation_percentage
+            
+        # Calculate overall compatibility score (0-100)
+        # Weighted combination of:
+        # - Direction similarity (are they going the same way?)
+        # - Route coverage (how much of the driver's route is being used?)
+        # - Deviation score (how much extra distance for the driver?)
+        
+        direction_weight = 0.4
+        coverage_weight = 0.3
+        deviation_weight = 0.3
+        
+        # Convert direction similarity from [-1,1] to [0,100]
+        direction_score = (direction_similarity + 1) * 50
+        
+        # Convert coverage to [0,100], optimal coverage is around 50%
+        coverage_score = 100 - abs(50 - route_coverage * 100)
+        
+        compatibility_score = (
+            direction_weight * direction_score +
+            coverage_weight * coverage_score +
+            deviation_weight * deviation_score
+        )
+        
+        # Log detailed scoring
+        logger.info(f"Direction score: {direction_score:.2f} (similarity: {direction_similarity:.2f})")
+        logger.info(f"Coverage score: {coverage_score:.2f} (coverage: {route_coverage:.2f})")
+        logger.info(f"Deviation score: {deviation_score:.2f} (deviation: {deviation_percentage:.2f}%)")
+        logger.info(f"Overall compatibility score: {compatibility_score:.2f}")
         
         # Format the optimal points as dictionaries for JSON storage
         formatted_pickup_point = None
@@ -388,7 +459,8 @@ def calculate_route_overlap(driver_start, driver_end, rider_pickup, rider_dropof
                     'longitude': float(optimal_pickup_point[0]),
                     'latitude': float(optimal_pickup_point[1]),
                     'address': pickup_address or "Optimal pickup point",
-                    'distance_from_rider': float(pickup_dist)
+                    'distance_from_rider': float(pickup_dist),
+                    'sequence_index': pickup_idx
                 }
             except Exception as e:
                 logger.error(f"Error formatting pickup point: {str(e)}")
@@ -397,7 +469,8 @@ def calculate_route_overlap(driver_start, driver_end, rider_pickup, rider_dropof
                     'longitude': float(optimal_pickup_point[0]),
                     'latitude': float(optimal_pickup_point[1]),
                     'address': "Optimal pickup point",
-                    'distance_from_rider': float(pickup_dist)
+                    'distance_from_rider': float(pickup_dist),
+                    'sequence_index': pickup_idx
                 }
             
         if optimal_dropoff_point:
@@ -407,7 +480,8 @@ def calculate_route_overlap(driver_start, driver_end, rider_pickup, rider_dropof
                     'longitude': float(optimal_dropoff_point[0]),
                     'latitude': float(optimal_dropoff_point[1]),
                     'address': dropoff_address or "Optimal dropoff point",
-                    'distance_from_rider': float(dropoff_dist)
+                    'distance_from_rider': float(dropoff_dist),
+                    'sequence_index': dropoff_idx
                 }
             except Exception as e:
                 logger.error(f"Error formatting dropoff point: {str(e)}")
@@ -416,20 +490,63 @@ def calculate_route_overlap(driver_start, driver_end, rider_pickup, rider_dropof
                     'longitude': float(optimal_dropoff_point[0]),
                     'latitude': float(optimal_dropoff_point[1]),
                     'address': "Optimal dropoff point", 
-                    'distance_from_rider': float(dropoff_dist)
+                    'distance_from_rider': float(dropoff_dist),
+                    'sequence_index': dropoff_idx
                 }
         
-        logger.info(f"Calculated route overlap: {overlap_percentage:.2f}%")
+        logger.info(f"Calculated compatibility score: {compatibility_score:.2f}")
         logger.info(f"Formatted optimal pickup point: {formatted_pickup_point}")
         logger.info(f"Formatted optimal dropoff point: {formatted_dropoff_point}")
         
-        return overlap_percentage, formatted_dropoff_point, formatted_pickup_point
+        return compatibility_score, formatted_dropoff_point, formatted_pickup_point
         
     except Exception as e:
         logger.error(f"Error in calculate_route_overlap: {str(e)}")
         logger.error(f"Full exception details:")
         logger.exception("Exception details")
         return 0, None, None
+
+def find_point_index(route, point):
+    """Find the closest index position of a point in a route"""
+    if not route or not point:
+        return None
+        
+    min_dist = float('inf')
+    closest_idx = None
+    
+    for i, route_point in enumerate(route):
+        dist = calculate_distance(route_point, point)
+        if dist < min_dist:
+            min_dist = dist
+            closest_idx = i
+            
+    return closest_idx
+
+def calculate_direction_vector(start, end):
+    """Calculate a normalized direction vector between start and end points"""
+    if not start or not end:
+        return (0, 0)
+        
+    dx = end[0] - start[0]
+    dy = end[1] - start[1]
+    
+    # Normalize the vector
+    magnitude = math.sqrt(dx*dx + dy*dy)
+    if magnitude > 0:
+        return (dx/magnitude, dy/magnitude)
+    else:
+        return (0, 0)
+
+def calculate_vector_similarity(vec1, vec2):
+    """Calculate the cosine similarity between two vectors (dot product of normalized vectors)"""
+    if not vec1 or not vec2:
+        return 0
+        
+    # Dot product
+    dot_product = vec1[0] * vec2[0] + vec1[1] * vec2[1]
+    
+    # Clamp to [-1, 1] range to handle floating point errors
+    return max(-1, min(1, dot_product))
 
 def generate_route(start_coords, end_coords, max_retries=3, retry_delay=2):
     """
@@ -677,7 +794,7 @@ class RideViewSet(viewsets.ModelViewSet):
                     rider_dropoff = (pending_request.dropoff_longitude, pending_request.dropoff_latitude)
                     
                     # Calculate route overlap which returns optimal points
-                    overlap_percentage, optimal_dropoff_point, optimal_pickup_point = calculate_route_overlap(
+                    compatibility_score, optimal_dropoff_point, optimal_pickup_point = calculate_route_overlap(
                         driver_start, driver_end, rider_pickup, rider_dropoff
                     )
                 except Exception as e:
@@ -781,7 +898,7 @@ class RideRequestViewSet(viewsets.ModelViewSet):
                 )
                 
                 # Calculate route overlap which returns optimal points
-                overlap_percentage, optimal_dropoff_point, optimal_pickup_point = calculate_route_overlap(
+                compatibility_score, optimal_dropoff_point, optimal_pickup_point = calculate_route_overlap(
                     driver_start, driver_end, rider_pickup, rider_dropoff
                 )
                 logger.info(f"Calculated optimal pickup point: {optimal_pickup_point}")
@@ -795,6 +912,43 @@ class RideRequestViewSet(viewsets.ModelViewSet):
             except Exception as e:
                 logger.error(f"Error calculating optimal points: {str(e)}")
                 # Continue with the request even if calculation fails
+            
+            # Decrement available seats since this is a direct match
+            seats_needed = serializer.validated_data.get('seats_needed', 1)
+            logger.info(f"DIRECT MATCH - BEFORE SEAT UPDATE: Ride {ride.id} has {ride.available_seats} available seats")
+            logger.info(f"Going to decrease seats by {seats_needed}")
+            
+            try:
+                # Use atomic transaction to ensure this operation is completed fully
+                with transaction.atomic():
+                    # Refresh from database to ensure we have the latest count
+                    ride.refresh_from_db()
+                    
+                    # Double-check we still have enough seats
+                    if ride.available_seats < seats_needed:
+                        logger.error(f"Race condition: Not enough seats available anymore. Needed {seats_needed}, available {ride.available_seats}")
+                        return Response(
+                            {"error": "Not enough available seats anymore, please try again"},
+                            status=status.HTTP_400_BAD_REQUEST
+                        )
+                    
+                    ride.available_seats -= seats_needed
+                    ride.save()
+                    
+                    # Verify the update with another refresh
+                    ride.refresh_from_db()
+                    logger.info(f"DIRECT MATCH - AFTER SEAT UPDATE: Ride {ride.id} now has {ride.available_seats} available seats")
+                    
+                    # If seats are now zero, mark ride as full
+                    if ride.available_seats <= 0:
+                        logger.info(f"Ride {ride.id} is now full, updating status")
+                        ride.status = 'FULL'
+                        ride.save()
+            except Exception as e:
+                logger.error(f"Error updating available seats: {str(e)}")
+                logger.exception("Full exception details")
+                # Continue with the request even if seat update fails
+                # The consistency will be maintained by database constraints
             
             # Create notification for the driver
             driver_notification = Notification.objects.create(
@@ -826,7 +980,8 @@ class RideRequestViewSet(viewsets.ModelViewSet):
                     "vehicle_year": getattr(ride.driver, 'vehicle_year', ''),  # Add vehicle year
                     "license_plate": getattr(ride.driver, 'license_plate', ''),
                     "optimal_pickup_point": optimal_pickup_point,
-                    "optimal_dropoff_point": optimal_dropoff_point
+                    "optimal_dropoff_point": optimal_dropoff_point,
+                    "compatibility_score": compatibility_score
                 },
                 "ride_request": serializer.data,
                 "notification_sent": True,
@@ -886,7 +1041,7 @@ class RideRequestViewSet(viewsets.ModelViewSet):
                     rider_dropoff = (pending_request.dropoff_longitude, pending_request.dropoff_latitude)
                     
                     # Calculate route overlap which returns optimal points
-                    overlap_percentage, optimal_dropoff_point, optimal_pickup_point = calculate_route_overlap(
+                    compatibility_score, optimal_dropoff_point, optimal_pickup_point = calculate_route_overlap(
                         driver_start, driver_end, rider_pickup, rider_dropoff
                     )
                     logger.info(f"Calculated optimal pickup point: {optimal_pickup_point}")
@@ -928,8 +1083,25 @@ class RideRequestViewSet(viewsets.ModelViewSet):
                 pending_request.save()
                 
                 # Decrement the available seats in the ride
-                proposed_ride.available_seats -= pending_request.seats_needed
-                proposed_ride.save()
+                logger.info(f"BEFORE SEAT UPDATE: Ride {proposed_ride.id} has {proposed_ride.available_seats} available seats")
+                logger.info(f"Going to decrease seats by {pending_request.seats_needed}")
+                
+                # Use atomic transaction to ensure this operation is completed fully
+                with transaction.atomic():
+                    # Refresh from database to ensure we have the latest count
+                    proposed_ride.refresh_from_db()
+                    proposed_ride.available_seats -= pending_request.seats_needed
+                    proposed_ride.save()
+                    
+                    # Verify the update with another refresh
+                    proposed_ride.refresh_from_db()
+                    logger.info(f"AFTER SEAT UPDATE: Ride {proposed_ride.id} now has {proposed_ride.available_seats} available seats")
+                    
+                    # If seats are now zero, mark ride as full
+                    if proposed_ride.available_seats <= 0:
+                        logger.info(f"Ride {proposed_ride.id} is now full, updating status")
+                        proposed_ride.status = 'FULL'
+                        proposed_ride.save()
 
                 # Create notifications and send emails
                 try:
@@ -956,6 +1128,7 @@ class RideRequestViewSet(viewsets.ModelViewSet):
                         "departure_time": proposed_ride.departure_time.isoformat() if proposed_ride.departure_time else None,
                         "optimal_pickup_point": optimal_pickup_point,
                         "optimal_dropoff_point": optimal_dropoff_point,
+                        "compatibility_score": compatibility_score,
                         "vehicle_make": getattr(proposed_ride.driver, 'vehicle_make', ''),
                         "vehicle_model": getattr(proposed_ride.driver, 'vehicle_model', ''),
                         "vehicle_color": getattr(proposed_ride.driver, 'vehicle_color', ''),
@@ -1294,3 +1467,53 @@ The Ridex Team
     except Exception as e:
         logger.error(f"Error sending ride match emails: {str(e)}")
         logger.exception("Full exception details")
+
+def check_destination_compatibility(driver_start_coords, driver_end_coords, destination_query):
+    """
+    Check if a destination is compatible with a driver's route.
+    Returns (is_compatible, geocoded_address)
+    """
+    try:
+        logger.info(f"Checking if destination '{destination_query}' is compatible with route from {driver_start_coords} to {driver_end_coords}")
+        
+        # Geocode the destination query
+        API_URL = "https://api.openrouteservice.org/geocode/search"
+        headers = {
+            'Authorization': ORS_API_KEY
+        }
+        params = {
+            'text': destination_query,
+            'size': 1,  # Limit to 1 result for best match
+            'boundary.country': 'US'  # Limit to the US
+        }
+        
+        # Use query parameters in the API request
+        response = requests.get(API_URL, headers=headers, params=params)
+        
+        # If the API call is successful, parse the results
+        if response.status_code == 200:
+            data = response.json()
+            if 'features' in data and data['features']:
+                # Get the coordinates from the API response
+                coordinates = data['features'][0]['geometry']['coordinates']
+                
+                # Calculate route compatibility using OpenRouteService results
+                compatibility_score, optimal_dropoff_point, optimal_pickup_point = calculate_route_overlap(
+                    driver_start_coords, driver_end_coords, coordinates[0], coordinates[-1]
+                )
+                
+                # Check if this route is compatible enough with the driver's route
+                if compatibility_score >= 60:  # Minimum 60 out of 100 compatibility score required
+                    geocoded_address = data['features'][0]['properties']['label']
+                    logger.info(f"Found compatible route to {geocoded_address} with score {compatibility_score:.2f}")
+                    return True, geocoded_address
+                else:
+                    logger.warning(f"Route has low compatibility score: {compatibility_score:.2f}")
+        else:
+            logger.error(f"Error from geocoding API: {response.status_code} - {response.text}")
+            
+    except Exception as e:
+        logger.error(f"Error in check_destination_compatibility: {str(e)}")
+        logger.exception("Exception details:")
+        
+    return False, None
