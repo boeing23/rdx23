@@ -437,6 +437,7 @@ def calculate_route_overlap(driver_start, driver_end, rider_pickup, rider_dropof
     logger.info(f"{log_prefix}Coverage score: {coverage_score:.2f} (coverage: {coverage_ratio:.2f})")
     
     # Calculate deviation
+    deviation_score = 0
     if get_optimal_points and optimal_pickup_point and optimal_dropoff_point:
         # Calculate direct distance along original driver route
         direct_distance = sum(
@@ -459,7 +460,8 @@ def calculate_route_overlap(driver_start, driver_end, rider_pickup, rider_dropof
         else:
             deviation_percentage = 1000  # Arbitrary high value
             
-        logger.warning(f"{log_prefix}High deviation percentage: {deviation_percentage:.2f}%") if deviation_percentage > 100 else None
+        if deviation_percentage > 100:
+            logger.warning(f"{log_prefix}High deviation percentage: {deviation_percentage:.2f}%") 
         
         # DEVIATION CHECK: Maximum acceptable deviation is 200%
         if deviation_percentage > 200:
@@ -470,7 +472,6 @@ def calculate_route_overlap(driver_start, driver_end, rider_pickup, rider_dropof
         deviation_score = max(0, 100 - min(deviation_percentage, 100))
         logger.info(f"{log_prefix}Deviation score: {deviation_score:.2f} (deviation: {deviation_percentage:.2f}%)")
     else:
-        deviation_score = 0
         logger.info(f"{log_prefix}Deviation score: {deviation_score:.2f} (no optimal points)")
     
     # Calculate weighted compatibility score
@@ -648,13 +649,13 @@ def generate_route(start_coords, end_coords, max_retries=3, retry_delay=2):
                 if attempt < max_retries - 1:
                     time.sleep(retry_delay)
                     continue
-                    
+            
         except requests.exceptions.RequestException as e:
             logger.error(f"Request error in generate_route: {str(e)}")
             if attempt < max_retries - 1:
                 time.sleep(retry_delay)
                 continue
-                
+        
     # If all retries failed, use fallback method
     logger.warning("OpenRouteService APIs failed or not accessible, using straight line fallback method")
     return generate_fallback_route(start_coords, end_coords)
@@ -857,67 +858,62 @@ class RideViewSet(viewsets.ModelViewSet):
             )
 
 class RideRequestViewSet(viewsets.ModelViewSet):
+    queryset = RideRequest.objects.all()
     serializer_class = RideRequestSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        """Get ride requests for the current user"""
         user = self.request.user
-        return RideRequest.objects.filter(Q(rider=user) | Q(ride__driver=user))
-
-    @action(detail=False, methods=['get'])
-    def accepted(self, request):
-        """Get accepted ride requests for the current user"""
-        user = self.request.user
-        ride_requests = RideRequest.objects.filter(
-            (Q(rider=user) | Q(ride__driver=user)) & 
-            Q(status='ACCEPTED')
-        ).select_related('ride', 'rider', 'ride__driver')
-        
-        serializer = self.get_serializer(ride_requests, many=True)
+        # Return all ride requests for this user
+        return RideRequest.objects.filter(rider=user)
+    
+    def retrieve(self, request, *args, **kwargs):
+        instance = self.get_object()
+        serializer = self.get_serializer(instance)
         return Response(serializer.data)
 
-    def create(self, request, *args, **kwargs):
-        """Create a new ride request"""
+    def create(self, request):
+        serializer = self.get_serializer(data=request.data)
+        
         try:
-            # Log incoming request for debugging
-            logger.info(f"RideRequest create: Received data: {request.data}")
-            
-            # Check if ride ID is present
-            ride_id = request.data.get('ride')
-            if not ride_id:
-                return Response(
-                    {"error": "Ride ID is required"},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-            
-            # Validate request data
-            serializer = self.get_serializer(data=request.data)
             serializer.is_valid(raise_exception=True)
-    
-            # Get ride object
+            
+            # Get the ride from the serializer data
+            ride_id = serializer.validated_data.get('ride')
+            
+            # If no ride is specified, this is a standalone ride request
+            if not ride_id:
+                # Save ride request without matching
+                ride_request = serializer.save(rider=request.user, status='PENDING')
+                return Response({
+                    'status': 'success',
+                    'message': 'Your ride request has been saved. You will be notified when a matching ride is found.'
+                }, status=status.HTTP_201_CREATED)
+            
+            # Get the specific ride
             try:
-                ride = Ride.objects.get(pk=ride_id)
+                ride = Ride.objects.get(id=ride_id.id)
+                logger.info(f"Found ride with ID {ride.id}: {ride}")
             except Ride.DoesNotExist:
-                return Response(
-                    {"error": "Ride not found"},
-                    status=status.HTTP_404_NOT_FOUND
-                )
+                return Response({
+                    'status': 'error',
+                    'error': f'Ride with ID {ride_id} does not exist'
+                }, status=status.HTTP_400_BAD_REQUEST)
     
             # Check if ride has available seats
-            if ride.available_seats < serializer.validated_data.get('seats_needed', 1):
-                return Response(
-                    {"error": "Not enough available seats"},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-    
+            if ride.available_seats <= 0:
+                return Response({
+                    'status': 'error',
+                    'error': 'This ride has no available seats'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
             # Set a higher threshold for automatic matching
             COMPATIBILITY_THRESHOLD = 60
             
-            # Calculate route overlap
+            # Calculate route overlap - use correct field names
             compatibility_result = calculate_route_overlap(
-                driver_start=(ride.pickup_longitude, ride.pickup_latitude),
-                driver_end=(ride.dropoff_longitude, ride.dropoff_latitude),
+                driver_start=(ride.start_longitude, ride.start_latitude),
+                driver_end=(ride.end_longitude, ride.end_latitude),
                 rider_pickup=(float(serializer.validated_data['pickup_longitude']), float(serializer.validated_data['pickup_latitude'])),
                 rider_dropoff=(float(serializer.validated_data['dropoff_longitude']), float(serializer.validated_data['dropoff_latitude'])),
                 get_optimal_points=True,
@@ -954,86 +950,79 @@ class RideRequestViewSet(viewsets.ModelViewSet):
             ride_request = serializer.save(rider=request.user)
             
             # Decrement available seats since this is a direct match
-            seats_needed = serializer.validated_data.get('seats_needed', 1)
             logger.info(f"DIRECT MATCH - BEFORE SEAT UPDATE: Ride {ride.id} has {ride.available_seats} available seats")
-            logger.info(f"Going to decrease seats by {seats_needed}")
-            
-            try:
-                # Use atomic transaction to ensure this operation is completed fully
-                with transaction.atomic():
-                    # Refresh from database to ensure we have the latest count
-                    ride.refresh_from_db()
-                    
-                    # Double-check we still have enough seats
-                    if ride.available_seats < seats_needed:
-                        logger.error(f"Race condition: Not enough seats available anymore. Needed {seats_needed}, available {ride.available_seats}")
-                        return Response(
-                            {"error": "Not enough available seats anymore, please try again"},
-                            status=status.HTTP_400_BAD_REQUEST
-                        )
-                    
-                    ride.available_seats -= seats_needed
+            if ride.available_seats > 0:
+                logger.info(f"Going to decrease seats by {serializer.validated_data.get('seats_needed', 1)}")
+                ride.available_seats -= serializer.validated_data.get('seats_needed', 1)
+                ride.save()
+                logger.info(f"DIRECT MATCH - AFTER SEAT UPDATE: Ride {ride.id} now has {ride.available_seats} available seats")
+                
+                # If ride is now full, update the status
+                if ride.available_seats <= 0:
+                    logger.info(f"Ride {ride.id} is now full, updating status")
+                    ride.status = 'FULL'
                     ride.save()
-                    
-                    # Verify the update with another refresh
-                    ride.refresh_from_db()
-                    logger.info(f"DIRECT MATCH - AFTER SEAT UPDATE: Ride {ride.id} now has {ride.available_seats} available seats")
-                    
-                    # If seats are now zero, mark ride as full
-                    if ride.available_seats <= 0:
-                        logger.info(f"Ride {ride.id} is now full, updating status")
-                        ride.status = 'FULL'
-                        ride.save()
-            except Exception as e:
-                logger.error(f"Error updating available seats: {str(e)}")
-                logger.exception("Full exception details")
-                # Continue with the request even if seat update fails
-                # The consistency will be maintained by database constraints
             
-            # Create notification for the driver
-            driver_notification = Notification.objects.create(
-                recipient=ride.driver,
-                notification_type='RIDE_REQUEST',
-                message=f"{request.user.get_full_name()} has requested to join your ride from {ride.start_location} to {ride.end_location}",
+            # Store optimal pickup and dropoff points if they exist
+            if optimal_pickup_point and optimal_dropoff_point:
+                ride_request.optimal_pickup_point = optimal_pickup_point
+                ride_request.nearest_dropoff_point = optimal_dropoff_point
+                ride_request.save()
+            
+            # Notify driver about the new request
+            Notification.objects.create(
+                user=ride.driver,
+                message=f"{request.user.username} has requested to join your ride.",
+                type='ride_request',
                 ride_request=ride_request
             )
     
-            # Note: We include several explicit match-related fields (isMatched, match_found, match_details)
-            # to ensure the frontend correctly recognizes this as a matched ride
+            # Create a temporary map URL for the response
+            def format_coord(coord):
+                return f"{coord[1]},{coord[0]}" if isinstance(coord, tuple) else f"{coord['latitude']},{coord['longitude']}"
+            
+            driver_start = (ride.start_longitude, ride.start_latitude)
+            driver_end = (ride.end_longitude, ride.end_latitude)
+            rider_pickup = (serializer.validated_data['pickup_longitude'], serializer.validated_data['pickup_latitude'])
+            rider_dropoff = (serializer.validated_data['dropoff_longitude'], serializer.validated_data['dropoff_latitude'])
+            
+            map_url = "https://www.openstreetmap.org/directions?"
+            if optimal_pickup_point and 'latitude' in optimal_pickup_point and 'longitude' in optimal_pickup_point:
+                map_url += f"route={format_coord(driver_start)};{format_coord(optimal_pickup_point)};{format_coord(optimal_dropoff_point)};{format_coord(driver_end)}"
+            else:
+                map_url += f"route={format_coord(driver_start)};{format_coord(rider_pickup)};{format_coord(rider_dropoff)};{format_coord(driver_end)}"
+            
+            # Return success response with ride details
             return Response({
-                "status": "success",
-                "has_match": True,
-                "isMatched": True,  # Add explicit field for frontend
-                "match_found": True,  # Add another explicit field for frontend
-                "message": "Ride request created successfully.",
-                "match_details": {  # Add this specific field for the frontend
-                    "ride_id": ride.id,
-                    "driver_name": ride.driver.get_full_name(),
-                    "driver_id": ride.driver.id,
-                    "pickup": ride.start_location,
-                    "dropoff": ride.end_location,
-                    "departure_time": ride.departure_time.isoformat() if ride.departure_time else None,
-                    "created_at": timezone.now().isoformat(),
-                    "vehicle_make": getattr(ride.driver, 'vehicle_make', ''),
-                    "vehicle_model": getattr(ride.driver, 'vehicle_model', ''),
-                    "vehicle_color": getattr(ride.driver, 'vehicle_color', ''),
-                    "vehicle_year": getattr(ride.driver, 'vehicle_year', ''),  # Add vehicle year
-                    "license_plate": getattr(ride.driver, 'license_plate', ''),
-                    "optimal_pickup_point": optimal_pickup_point,
-                    "optimal_dropoff_point": optimal_dropoff_point,
-                    "compatibility_score": compatibility_score
-                },
-                "ride_request": serializer.data,
-                "notification_sent": True,
-                "notification_id": driver_notification.id
+                'status': 'success',
+                'message': 'Ride request created successfully.',
+                'has_match': True,
+                'match_details': {
+                    'ride_id': ride.id,
+                    'driver': {
+                        'id': ride.driver.id,
+                        'username': ride.driver.username,
+                        'first_name': ride.driver.first_name,
+                        'last_name': ride.driver.last_name,
+                        'profile_image': ride.driver.profile.profile_image.url if ride.driver.profile.profile_image else None
+                    },
+                    'vehicle': {
+                        'make': ride.vehicle.make if ride.vehicle else 'Not specified',
+                        'model': ride.vehicle.model if ride.vehicle else 'Not specified',
+                        'color': ride.vehicle.color if ride.vehicle else 'Not specified',
+                        'license_plate': ride.vehicle.license_plate if ride.vehicle else 'Not specified'
+                    },
+                    'optimal_pickup_point': optimal_pickup_point,
+                    'optimal_dropoff_point': optimal_dropoff_point,
+                    'compatibility_score': compatibility_score,
+                    'departure_time': ride.departure_time,
+                    'map_url': map_url
+                }
             }, status=status.HTTP_201_CREATED)
     
         except Exception as e:
-            logger.error(f"Error creating ride request: {str(e)}", exc_info=True)
-            return Response(
-                {"error": f"Failed to create ride request: {str(e)}"},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
+            logger.error(f"Failed to create ride request: {str(e)}")
+            return Response({"error": f"Failed to create ride request: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     @action(detail=False, methods=['post'])
     def accept_match(self, request):
@@ -1057,7 +1046,7 @@ class RideRequestViewSet(viewsets.ModelViewSet):
                 # Check if the request is in MATCH_PROPOSED state
                 if pending_request.status != 'MATCH_PROPOSED':
                     return Response(
-                        {"error": f"This request is not in a state to be accepted. Current status: {pending_request.status}"},
+                            {"error": f"This request is not in a state to be accepted. Current status: {pending_request.status}"},
                         status=status.HTTP_400_BAD_REQUEST
                     )
 
@@ -1068,7 +1057,7 @@ class RideRequestViewSet(viewsets.ModelViewSet):
                         {"error": "No proposed ride found for this request"},
                         status=status.HTTP_400_BAD_REQUEST
                     )
-                
+                    
                 # Calculate optimal pickup and dropoff points
                 optimal_pickup_point = None
                 optimal_dropoff_point = None
@@ -1121,7 +1110,7 @@ class RideRequestViewSet(viewsets.ModelViewSet):
                 pending_request.status = 'MATCHED'
                 pending_request.matched_ride_request = ride_request
                 pending_request.save()
-                
+
                 # Decrement the available seats in the ride
                 logger.info(f"BEFORE SEAT UPDATE: Ride {proposed_ride.id} has {proposed_ride.available_seats} available seats")
                 logger.info(f"Going to decrease seats by {pending_request.seats_needed}")
@@ -1176,7 +1165,6 @@ class RideRequestViewSet(viewsets.ModelViewSet):
                         "license_plate": getattr(proposed_ride.driver, 'license_plate', '')
                     }
                 })
-                
             except PendingRideRequest.DoesNotExist:
                 # If no PendingRideRequest was found, check if this is a RideRequest ID
                 logger.info(f"No PendingRideRequest with ID {pending_request_id}, checking if this is a RideRequest ID")
