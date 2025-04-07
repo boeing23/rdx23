@@ -438,8 +438,9 @@ function NotificationList() {
       console.log('Checking notification for Accept button:', notification.id, notification.notification_type);
       
       // Check if notification is a ride match notification and has ride_request data
-      if (notification.notification_type === 'RIDE_MATCH') {
-        console.log('Found RIDE_MATCH notification:', notification.id);
+      if (notification.notification_type === 'RIDE_MATCH' || 
+          notification.notification_type === 'REQUEST_ACCEPTED') {
+        console.log(`Found ${notification.notification_type} notification:`, notification.id);
         
         // Use direct ID access - if ride_request is a number/string ID rather than an object
         const rideRequestId = notification.ride_request || 
@@ -461,7 +462,7 @@ function NotificationList() {
             </Button>
           );
         } else {
-          console.warn('RIDE_MATCH notification missing ride_request data:', notification);
+          console.warn(`${notification.notification_type} notification missing ride_request data:`, notification);
         }
       }
       return null;
@@ -474,7 +475,10 @@ function NotificationList() {
   // Function to render ride match details for better readability
   const renderRideMatchDetails = (notification) => {
     try {
-      if (notification.notification_type !== 'RIDE_MATCH' || !notification.ride_details) {
+      if (!notification) return null;
+      
+      if (notification.notification_type !== 'RIDE_MATCH' && 
+          notification.notification_type !== 'REQUEST_ACCEPTED') {
         return null;
       }
 
@@ -573,6 +577,7 @@ function NotificationList() {
     try {
       switch (notification.notification_type) {
         case 'RIDE_MATCH':
+        case 'REQUEST_ACCEPTED':
           // Safely access nested properties with optional chaining
           const rideDetails = notification.ride_details;
           const formattedTime = rideDetails?.formatted_departure_time || 
