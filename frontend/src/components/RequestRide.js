@@ -159,57 +159,42 @@ const RequestRide = () => {
           console.log('Found match details:', data.match_details);
           console.log('Found ride request:', data.ride_request);
           
-          // Update state to trigger modal display
-          setMatchDetails({
+          // Add proper structure to matchDetails
+          const structuredMatchDetails = {
             ...data.match_details,
             ride_request: data.ride_request,
             // Add proper structure for vehicle_details
             vehicle_details: {
-              year: data.match_details.vehicle_year,
-              make: data.match_details.vehicle_make,
-              model: data.match_details.vehicle_model,
-              color: data.match_details.vehicle_color,
-              license_plate: data.match_details.license_plate,
+              year: data.match_details.vehicle_year || '',
+              make: data.match_details.vehicle_make || '',
+              model: data.match_details.vehicle_model || '',
+              color: data.match_details.vehicle_color || '',
+              license_plate: data.match_details.license_plate || '',
               max_passengers: data.match_details.max_passengers || 1
             },
             // Set driver contact info if missing
-            driver_email: data.match_details.driver_email || data.ride_request.ride_details?.driver?.email,
-            driver_phone: data.match_details.driver_phone || data.ride_request.ride_details?.driver?.phone_number,
+            driver_email: data.match_details.driver_email || data.ride_request.ride_details?.driver?.email || '',
+            driver_phone: data.match_details.driver_phone || data.ride_request.ride_details?.driver?.phone_number || '',
             // Add ride_details for consistency
             ride_details: data.ride_request.ride_details || {
-              start_location: data.match_details.pickup,
-              end_location: data.match_details.dropoff,
-              departure_time: data.match_details.departure_time,
+              start_location: data.match_details.pickup || '',
+              end_location: data.match_details.dropoff || '',
+              departure_time: data.match_details.departure_time || new Date().toISOString(),
               available_seats: 1
             }
-          });
+          };
+          
+          // Update state with properly structured data
+          setMatchDetails(structuredMatchDetails);
           setShowMatchDialog(true);
           setSuccess('Found a matching ride! Please review the details below.');
           
-          // Save both match_details and ride_request to localStorage
-          localStorage.setItem('currentMatch', JSON.stringify({
-            ...data.match_details,
-            ride_request: data.ride_request,
-            // Add proper structure for vehicle_details
-            vehicle_details: {
-              year: data.match_details.vehicle_year,
-              make: data.match_details.vehicle_make,
-              model: data.match_details.vehicle_model,
-              color: data.match_details.vehicle_color,
-              license_plate: data.match_details.license_plate,
-              max_passengers: data.match_details.max_passengers || 1
-            },
-            // Set driver contact info if missing
-            driver_email: data.match_details.driver_email || data.ride_request.ride_details?.driver?.email,
-            driver_phone: data.match_details.driver_phone || data.ride_request.ride_details?.driver?.phone_number,
-            // Add ride_details for consistency
-            ride_details: data.ride_request.ride_details || {
-              start_location: data.match_details.pickup,
-              end_location: data.match_details.dropoff,
-              departure_time: data.match_details.departure_time,
-              available_seats: 1
-            }
-          }));
+          // Save properly structured data to localStorage as a string
+          try {
+            localStorage.setItem('currentMatch', JSON.stringify(structuredMatchDetails));
+          } catch (err) {
+            console.error('Error saving match to localStorage:', err);
+          }
           
           // Clear form
           setPickupLocation('');
@@ -282,7 +267,17 @@ const RequestRide = () => {
   const handleAcceptMatch = async () => {
     try {
       const token = localStorage.getItem('token');
-      const currentMatch = JSON.parse(localStorage.getItem('currentMatch'));
+      
+      // Safely parse the JSON from localStorage with error handling
+      let currentMatch;
+      try {
+        const storedMatch = localStorage.getItem('currentMatch');
+        currentMatch = storedMatch ? JSON.parse(storedMatch) : null;
+      } catch (err) {
+        console.error('Error parsing currentMatch from localStorage:', err);
+        setError('Invalid ride data. Please try requesting a new ride.');
+        return;
+      }
       
       console.log('Current match data:', currentMatch);
       
@@ -326,9 +321,19 @@ const RequestRide = () => {
   const handleRejectMatch = async () => {
     try {
       const token = localStorage.getItem('token');
-      const currentMatch = JSON.parse(localStorage.getItem('currentMatch'));
       
-      if (!currentMatch) {
+      // Safely parse the JSON from localStorage with error handling
+      let currentMatch;
+      try {
+        const storedMatch = localStorage.getItem('currentMatch');
+        currentMatch = storedMatch ? JSON.parse(storedMatch) : null;
+      } catch (err) {
+        console.error('Error parsing currentMatch from localStorage:', err);
+        setError('Invalid ride data. Please close this dialog and try again.');
+        return;
+      }
+      
+      if (!currentMatch || !currentMatch.ride_request) {
         setError('No match found. Please try again.');
         return;
       }
@@ -526,11 +531,11 @@ const RequestRide = () => {
                 </Typography>
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
                   <Typography>
-                    {matchDetails.vehicle_details.year} {matchDetails.vehicle_details.make} {matchDetails.vehicle_details.model}
+                    {matchDetails.vehicle_details?.year || ''} {matchDetails.vehicle_details?.make || ''} {matchDetails.vehicle_details?.model || ''}
                   </Typography>
-                  <Typography>Color: {matchDetails.vehicle_details.color}</Typography>
-                  <Typography>License Plate: {matchDetails.vehicle_details.license_plate}</Typography>
-                  <Typography>Max Passengers: {matchDetails.vehicle_details.max_passengers}</Typography>
+                  <Typography>Color: {matchDetails.vehicle_details?.color || ''}</Typography>
+                  <Typography>License Plate: {matchDetails.vehicle_details?.license_plate || ''}</Typography>
+                  <Typography>Max Passengers: {matchDetails.vehicle_details?.max_passengers || ''}</Typography>
                 </Box>
               </Box>
               
@@ -539,12 +544,12 @@ const RequestRide = () => {
                   Ride Details
                 </Typography>
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                  <Typography>From: {matchDetails.ride_details.start_location}</Typography>
-                  <Typography>To: {matchDetails.ride_details.end_location}</Typography>
+                  <Typography>From: {matchDetails.ride_details?.start_location || ''}</Typography>
+                  <Typography>To: {matchDetails.ride_details?.end_location || ''}</Typography>
                   <Typography>
-                    Departure: {new Date(matchDetails.ride_details.departure_time).toLocaleString()}
+                    Departure: {matchDetails.ride_details?.departure_time ? new Date(matchDetails.ride_details.departure_time).toLocaleString() : ''}
                   </Typography>
-                  <Typography>Available Seats: {matchDetails.ride_details.available_seats}</Typography>
+                  <Typography>Available Seats: {matchDetails.ride_details?.available_seats || ''}</Typography>
                 </Box>
               </Box>
             </Box>
