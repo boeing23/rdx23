@@ -652,44 +652,51 @@ const RequestRide = () => {
                 <Typography>Your Pickup: {matchDetails.pickup_location || matchDetails.ride_request?.pickup_location || ''}</Typography>
                 <Typography>Your Dropoff: {matchDetails.dropoff_location || matchDetails.ride_request?.dropoff_location || ''}</Typography>
                 
-                {matchDetails.ride_request?.optimal_pickup_point && (
+                {/* Debug output to check what data is available */}
+                {console.log('Debug - matchDetails for optimal points:', {
+                  from_match_details: {
+                    optimal_pickup: matchDetails.optimal_pickup_point,
+                    optimal_dropoff: matchDetails.optimal_dropoff_point
+                  },
+                  from_ride_request: {
+                    optimal_pickup: matchDetails.ride_request?.optimal_pickup_point,
+                    nearest_dropoff: matchDetails.ride_request?.nearest_dropoff_point
+                  }
+                })}
+                
+                {/* Only show if optimal points are available */}
+                {(matchDetails.optimal_pickup_point || matchDetails.ride_request?.optimal_pickup_point) ? (
                   <Typography>
-                    Optimal Pickup Point: {
-                      typeof matchDetails.ride_request.optimal_pickup_point === 'object' 
-                        ? `Lat: ${matchDetails.ride_request.optimal_pickup_point.latitude || matchDetails.ride_request.optimal_pickup_point[0]}, Lng: ${matchDetails.ride_request.optimal_pickup_point.longitude || matchDetails.ride_request.optimal_pickup_point[1]}`
-                        : matchDetails.ride_request.optimal_pickup_point
+                    <strong>Optimal Pickup Point:</strong> {
+                      typeof matchDetails.optimal_pickup_point === 'object' || typeof matchDetails.ride_request?.optimal_pickup_point === 'object'
+                        ? `Lat: ${(matchDetails.optimal_pickup_point?.[0] || matchDetails.optimal_pickup_point?.latitude || 
+                            matchDetails.ride_request?.optimal_pickup_point?.[0] || 
+                            matchDetails.ride_request?.optimal_pickup_point?.latitude || '').toString().substring(0, 10)}, 
+                           Lng: ${(matchDetails.optimal_pickup_point?.[1] || matchDetails.optimal_pickup_point?.longitude || 
+                            matchDetails.ride_request?.optimal_pickup_point?.[1] || 
+                            matchDetails.ride_request?.optimal_pickup_point?.longitude || '').toString().substring(0, 10)}`
+                        : matchDetails.optimal_pickup_point || matchDetails.ride_request?.optimal_pickup_point || 'Not calculated'
                     }
                   </Typography>
+                ) : (
+                  <Typography><strong>Optimal Pickup Point:</strong> Not available</Typography>
                 )}
                 
-                {matchDetails.ride_request?.nearest_dropoff_point && (
+                {(matchDetails.optimal_dropoff_point || matchDetails.ride_request?.nearest_dropoff_point) ? (
                   <Typography>
-                    Optimal Dropoff Point: {
-                      typeof matchDetails.ride_request.nearest_dropoff_point === 'object'
-                        ? `Lat: ${matchDetails.ride_request.nearest_dropoff_point.latitude || matchDetails.ride_request.nearest_dropoff_point[0]}, Lng: ${matchDetails.ride_request.nearest_dropoff_point.longitude || matchDetails.ride_request.nearest_dropoff_point[1]}`
-                        : matchDetails.ride_request.nearest_dropoff_point
+                    <strong>Optimal Dropoff Point:</strong> {
+                      typeof matchDetails.optimal_dropoff_point === 'object' || typeof matchDetails.ride_request?.nearest_dropoff_point === 'object'
+                        ? `Lat: ${(matchDetails.optimal_dropoff_point?.[0] || matchDetails.optimal_dropoff_point?.latitude || 
+                            matchDetails.ride_request?.nearest_dropoff_point?.[0] || 
+                            matchDetails.ride_request?.nearest_dropoff_point?.latitude || '').toString().substring(0, 10)}, 
+                           Lng: ${(matchDetails.optimal_dropoff_point?.[1] || matchDetails.optimal_dropoff_point?.longitude || 
+                            matchDetails.ride_request?.nearest_dropoff_point?.[1] || 
+                            matchDetails.ride_request?.nearest_dropoff_point?.longitude || '').toString().substring(0, 10)}`
+                        : matchDetails.optimal_dropoff_point || matchDetails.ride_request?.nearest_dropoff_point || 'Not calculated'
                     }
                   </Typography>
-                )}
-                
-                {matchDetails.optimal_pickup_point && (
-                  <Typography>
-                    Optimal Pickup: {
-                      typeof matchDetails.optimal_pickup_point === 'object'
-                        ? `Lat: ${matchDetails.optimal_pickup_point.latitude || matchDetails.optimal_pickup_point[0]}, Lng: ${matchDetails.optimal_pickup_point.longitude || matchDetails.optimal_pickup_point[1]}`
-                        : matchDetails.optimal_pickup_point
-                    }
-                  </Typography>
-                )}
-                
-                {matchDetails.optimal_dropoff_point && (
-                  <Typography>
-                    Optimal Dropoff: {
-                      typeof matchDetails.optimal_dropoff_point === 'object'
-                        ? `Lat: ${matchDetails.optimal_dropoff_point.latitude || matchDetails.optimal_dropoff_point[0]}, Lng: ${matchDetails.optimal_dropoff_point.longitude || matchDetails.optimal_dropoff_point[1]}`
-                        : matchDetails.optimal_dropoff_point
-                    }
-                  </Typography>
+                ) : (
+                  <Typography><strong>Optimal Dropoff Point:</strong> Not available</Typography>
                 )}
               </Box>
             </>

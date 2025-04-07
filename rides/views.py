@@ -1180,6 +1180,39 @@ class RideRequestViewSet(viewsets.ModelViewSet):
             # Create the ride request
             ride_request = serializer.save(rider=request.user)
             
+            # Calculate optimal pickup and dropoff points
+            optimal_pickup_point = None
+            optimal_dropoff_point = None
+            
+            try:
+                # Get coordinates for rider and driver
+                driver_start = (ride.start_longitude, ride.start_latitude)
+                driver_end = (ride.end_longitude, ride.end_latitude)
+                rider_pickup = (
+                    serializer.validated_data.get('pickup_longitude') or request.data.get('pickup_longitude'),
+                    serializer.validated_data.get('pickup_latitude') or request.data.get('pickup_latitude')
+                )
+                rider_dropoff = (
+                    serializer.validated_data.get('dropoff_longitude') or request.data.get('dropoff_longitude'),
+                    serializer.validated_data.get('dropoff_latitude') or request.data.get('dropoff_latitude')
+                )
+                
+                # Calculate route overlap which returns optimal points
+                overlap_percentage, optimal_dropoff_point, optimal_pickup_point = calculate_route_overlap(
+                    driver_start, driver_end, rider_pickup, rider_dropoff
+                )
+                logger.info(f"Calculated optimal pickup point: {optimal_pickup_point}")
+                logger.info(f"Calculated optimal dropoff point: {optimal_dropoff_point}")
+                
+                # Store the optimal points in the ride request
+                ride_request.optimal_pickup_point = optimal_pickup_point
+                ride_request.nearest_dropoff_point = optimal_dropoff_point
+                ride_request.save()
+                
+            except Exception as e:
+                logger.error(f"Error calculating optimal points: {str(e)}")
+                # Continue with the request even if calculation fails
+            
             # Create notification for the driver
             driver_notification = Notification.objects.create(
                 recipient=ride.driver,
@@ -1208,7 +1241,9 @@ class RideRequestViewSet(viewsets.ModelViewSet):
                     "vehicle_model": getattr(ride.driver, 'vehicle_model', ''),
                     "vehicle_color": getattr(ride.driver, 'vehicle_color', ''),
                     "vehicle_year": getattr(ride.driver, 'vehicle_year', ''),  # Add vehicle year
-                    "license_plate": getattr(ride.driver, 'license_plate', '')
+                    "license_plate": getattr(ride.driver, 'license_plate', ''),
+                    "optimal_pickup_point": optimal_pickup_point,
+                    "optimal_dropoff_point": optimal_dropoff_point
                 },
                 "ride_request": serializer.data,
                 "notification_sent": True,
