@@ -900,13 +900,22 @@ class RideRequestViewSet(viewsets.ModelViewSet):
         try:
             serializer.is_valid(raise_exception=True)
             
+            # Debug logging to check user authentication
+            logger.info(f"Creating ride request for user: {request.user.id} - {request.user.username}")
+            logger.info(f"User authenticated: {request.user.is_authenticated}")
+            
             # Get the ride from the serializer data
             ride_id = serializer.validated_data.get('ride')
             
             # If no ride is specified, this is a standalone ride request
             if not ride_id:
-                # Save ride request without matching
-                ride_request = serializer.save(rider=request.user, status='PENDING')
+                # Explicitly set rider in a separate step to ensure it's not null
+                ride_request = serializer.save()
+                ride_request.rider = request.user
+                ride_request.save()
+                
+                logger.info(f"Created standalone ride request with ID {ride_request.id} for user {request.user.id}")
+                
                 return Response({
                     'status': 'success',
                     'message': 'Your ride request has been saved. You will be notified when a matching ride is found.'
@@ -949,8 +958,14 @@ class RideRequestViewSet(viewsets.ModelViewSet):
             # If either optimal point is None, treat it as no match
             if not optimal_pickup_point or not optimal_dropoff_point:
                 logger.warning(f"Match failed: Missing optimal points")
-                # Save ride request without matching
-                ride_request = serializer.save(status='PENDING')
+                # Explicitly set rider in a separate step to ensure it's not null
+                ride_request = serializer.save()
+                ride_request.rider = request.user
+                ride_request.status = 'PENDING'
+                ride_request.save()
+                
+                logger.info(f"Created pending ride request with ID {ride_request.id} for user {request.user.id}")
+                
                 return Response({
                     'status': 'error',
                     'has_match': False,
@@ -960,16 +975,26 @@ class RideRequestViewSet(viewsets.ModelViewSet):
             # Check if compatibility score meets the threshold
             if compatibility_score < COMPATIBILITY_THRESHOLD:
                 logger.warning(f"Match failed: Compatibility score {compatibility_score:.2f} below threshold {COMPATIBILITY_THRESHOLD}")
-                # Save ride request without matching
-                ride_request = serializer.save(status='PENDING')
+                # Explicitly set rider in a separate step to ensure it's not null
+                ride_request = serializer.save()
+                ride_request.rider = request.user
+                ride_request.status = 'PENDING'
+                ride_request.save()
+                
+                logger.info(f"Created pending ride request with ID {ride_request.id} for user {request.user.id}")
+                
                 return Response({
                     'status': 'error',
                     'has_match': False,
                     'error': 'No suitable matching rides found. Your request has been saved and will be matched when a compatible ride becomes available.'
                 }, status=status.HTTP_200_OK)
             
-            # Create the ride request
-            ride_request = serializer.save(rider=request.user)
+            # Create the ride request - explicitly set rider in a separate step
+            ride_request = serializer.save()
+            ride_request.rider = request.user
+            ride_request.save()
+            
+            logger.info(f"Created ride request with ID {ride_request.id} for user {request.user.id}")
             
             # Decrement available seats since this is a direct match
             logger.info(f"DIRECT MATCH - BEFORE SEAT UPDATE: Ride {ride.id} has {ride.available_seats} available seats")
