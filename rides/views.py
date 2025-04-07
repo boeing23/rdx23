@@ -338,173 +338,207 @@ def calculate_segment_overlap(route1, route2, threshold=200):
     
     return (proximity_count / len(route1)) * 100 if route1 else 0
 
-def calculate_route_overlap(driver_start, driver_end, rider_pickup, rider_dropoff):
+def calculate_route_overlap(driver_start, driver_end, rider_pickup, rider_dropoff, get_optimal_points=True, log_prefix=""):
     """
-    Calculate the route compatibility between driver and rider routes.
+    Calculate the percentage of route overlap between driver and rider routes.
     
-    This improved algorithm considers:
-    1. Directional compatibility (driver and rider must be going in similar directions)
-    2. Sequence compatibility (pickup must come before dropoff along driver's route)
-    3. Deviation from the driver's original route (minimize detour)
-    
+    Args:
+        driver_start: Tuple of (longitude, latitude) for driver's start location
+        driver_end: Tuple of (longitude, latitude) for driver's end location
+        rider_pickup: Tuple of (longitude, latitude) for rider's pickup location
+        rider_dropoff: Tuple of (longitude, latitude) for rider's dropoff location
+        get_optimal_points: Whether to calculate and return optimal pickup/dropoff points
+        log_prefix: Prefix for log messages
+        
     Returns:
-        tuple: (compatibility_score, optimal_dropoff_point, optimal_pickup_point)
+        Dictionary with overlap percentage and optional optimal points
     """
-    try:
-        # Log input coordinates for debugging
-        logger.info(f"Calculating route overlap with inputs:")
-        logger.info(f"  Driver start: {driver_start}, Driver end: {driver_end}")
-        logger.info(f"  Rider pickup: {rider_pickup}, Rider dropoff: {rider_dropoff}")
+    logger.info(f"{log_prefix}Calculating route overlap with inputs:")
+    logger.info(f"{log_prefix}  Driver start: {driver_start}, Driver end: {driver_end}")
+    logger.info(f"{log_prefix}  Rider pickup: {rider_pickup}, Rider dropoff: {rider_dropoff}")
+    
+    # Generate driver's route
+    driver_route = generate_route(driver_start, driver_end)
+    if not driver_route or len(driver_route) < 2:
+        logger.error(f"{log_prefix}Failed to generate driver route")
+        return {"compatibility_score": 0, "optimal_pickup_point": None, "optimal_dropoff_point": None}
+    
+    logger.info(f"{log_prefix}Successfully generated route with {len(driver_route)} points")
+    
+    # Generate rider's route
+    rider_route = generate_route(rider_pickup, rider_dropoff)
+    if not rider_route or len(rider_route) < 2:
+        logger.error(f"{log_prefix}Failed to generate rider route")
+        return {"compatibility_score": 0, "optimal_pickup_point": None, "optimal_dropoff_point": None}
+    
+    logger.info(f"{log_prefix}Successfully generated route with {len(rider_route)} points")
+    
+    # Find optimal pickup and dropoff points
+    optimal_pickup_point = None
+    optimal_dropoff_point = None
+    
+    if get_optimal_points:
+        optimal_pickup_data = find_optimal_point(driver_route, rider_pickup)
+        optimal_pickup_point = optimal_pickup_data["point"]
+        pickup_sequence_index = optimal_pickup_data["index"]
         
-        # Generate driver's route
-        driver_route = generate_route(driver_start, driver_end)
-        if not driver_route:
-            logger.error("Failed to generate driver route")
-            return 0, None, None
+        logger.info(f"{log_prefix}Calculated optimal pickup point: {optimal_pickup_point}")
         
-        # Generate rider's route
-        rider_route = generate_route(rider_pickup, rider_dropoff)
-        if not rider_route:
-            logger.error("Failed to generate rider route")
-            return 0, None, None
+        optimal_dropoff_data = find_optimal_point(driver_route, rider_dropoff)
+        optimal_dropoff_point = optimal_dropoff_data["point"]
+        dropoff_sequence_index = optimal_dropoff_data["index"]
         
-        # Find optimal pickup and dropoff points and their distances
-        optimal_pickup_point, pickup_dist = find_optimal_point(driver_route, rider_pickup)
-        optimal_dropoff_point, dropoff_dist = find_optimal_point(driver_route, rider_dropoff)
+        logger.info(f"{log_prefix}Calculated optimal dropoff point: {optimal_dropoff_point}")
         
-        if not optimal_pickup_point or not optimal_dropoff_point:
-            logger.error("Failed to find optimal pickup or dropoff points")
-            return 0, None, None
+        # SEQUENCE CHECK: Ensure pickup comes before dropoff on driver's route
+        if pickup_sequence_index >= dropoff_sequence_index:
+            logger.warning(f"{log_prefix}Invalid sequence: pickup point ({pickup_sequence_index}) must come before dropoff point ({dropoff_sequence_index})")
+            return {"compatibility_score": 0, "optimal_pickup_point": None, "optimal_dropoff_point": None}
         
-        logger.info(f"Calculated optimal pickup point: {optimal_pickup_point}")
-        logger.info(f"Calculated optimal dropoff point: {optimal_dropoff_point}")
-        
-        # Calculate driver route indices for pickup and dropoff
-        pickup_idx = find_point_index(driver_route, optimal_pickup_point)
-        dropoff_idx = find_point_index(driver_route, optimal_dropoff_point)
-        
-        if pickup_idx is None or dropoff_idx is None:
-            logger.error(f"Could not determine position in route. Pickup index: {pickup_idx}, Dropoff index: {dropoff_idx}")
-            return 0, None, None
-        
-        # Check sequence - pickup must come before dropoff along the driver's route
-        if pickup_idx > dropoff_idx:
-            logger.warning("Invalid sequence: pickup comes after dropoff along driver's route")
-            return 0, None, None
-            
-        # Calculate vector directions to assess directional compatibility
-        driver_direction = calculate_direction_vector(driver_start, driver_end)
-        rider_direction = calculate_direction_vector(rider_pickup, rider_dropoff)
-        direction_similarity = calculate_vector_similarity(driver_direction, rider_direction)
-        
-        # If directions are nearly opposite (negative similarity), this is a poor match
-        if direction_similarity < 0:
-            logger.warning(f"Driver and rider are going in opposite directions: {direction_similarity:.2f}")
-            return 0, None, None
-            
-        # Calculate what percentage of the driver's route this ride covers
-        route_coverage = (dropoff_idx - pickup_idx) / max(1, len(driver_route) - 1)
-        
-        # Calculate deviation from direct route
-        # How much extra distance will the driver travel to accommodate this rider?
-        direct_distance = calculate_distance(driver_route[pickup_idx], driver_route[dropoff_idx])
-        with_rider_distance = pickup_dist + dropoff_dist + calculate_distance(rider_pickup, rider_dropoff)
-        
-        # Normalize deviation as a percentage of the direct distance
-        deviation_percentage = max(0, (with_rider_distance - direct_distance) / max(0.1, direct_distance)) * 100
-        
-        # Penalize high deviations
-        if deviation_percentage > 50:
-            logger.warning(f"High deviation percentage: {deviation_percentage:.2f}%")
-            deviation_score = max(0, 100 - deviation_percentage)
-        else:
-            deviation_score = 100 - deviation_percentage
-            
-        # Calculate overall compatibility score (0-100)
-        # Weighted combination of:
-        # - Direction similarity (are they going the same way?)
-        # - Route coverage (how much of the driver's route is being used?)
-        # - Deviation score (how much extra distance for the driver?)
-        
-        direction_weight = 0.4
-        coverage_weight = 0.3
-        deviation_weight = 0.3
-        
-        # Convert direction similarity from [-1,1] to [0,100]
-        direction_score = (direction_similarity + 1) * 50
-        
-        # Convert coverage to [0,100], optimal coverage is around 50%
-        coverage_score = 100 - abs(50 - route_coverage * 100)
-        
-        compatibility_score = (
-            direction_weight * direction_score +
-            coverage_weight * coverage_score +
-            deviation_weight * deviation_score
+        # Minimum required segment distance (at least 20% of driver's route)
+        min_segment_points = max(2, int(0.2 * len(driver_route)))
+        if dropoff_sequence_index - pickup_sequence_index < min_segment_points:
+            logger.warning(f"{log_prefix}Segment too short: only {dropoff_sequence_index - pickup_sequence_index} points between pickup and dropoff (minimum: {min_segment_points})")
+            return {"compatibility_score": 0, "optimal_pickup_point": None, "optimal_dropoff_point": None}
+    
+    # Calculate direction vectors
+    driver_direction = (
+        driver_end[0] - driver_start[0],
+        driver_end[1] - driver_start[1]
+    )
+    
+    rider_direction = (
+        rider_dropoff[0] - rider_pickup[0],
+        rider_dropoff[1] - rider_pickup[1]
+    )
+    
+    # Calculate cosine similarity between directions
+    driver_magnitude = (driver_direction[0]**2 + driver_direction[1]**2)**0.5
+    rider_magnitude = (rider_direction[0]**2 + rider_direction[1]**2)**0.5
+    
+    if driver_magnitude == 0 or rider_magnitude == 0:
+        direction_similarity = 0
+    else:
+        dot_product = driver_direction[0] * rider_direction[0] + driver_direction[1] * rider_direction[1]
+        direction_similarity = dot_product / (driver_magnitude * rider_magnitude)
+    
+    # Calculate direction score (0-100)
+    direction_score = (direction_similarity + 1) * 50  # Convert from [-1,1] to [0,100]
+    logger.info(f"{log_prefix}Direction score: {direction_score:.2f} (similarity: {direction_similarity:.2f})")
+    
+    # DIRECTION CHECK: Must be going in generally the same direction
+    if direction_similarity < 0:
+        logger.warning(f"{log_prefix}Incompatible directions: similarity {direction_similarity:.2f} is negative")
+        return {"compatibility_score": 0, "optimal_pickup_point": None, "optimal_dropoff_point": None}
+    
+    # Calculate route coverage
+    coverage_ratio = calculate_segment_overlap(driver_route, rider_route)
+    coverage_score = coverage_ratio * 100
+    logger.info(f"{log_prefix}Coverage score: {coverage_score:.2f} (coverage: {coverage_ratio:.2f})")
+    
+    # Calculate deviation
+    if get_optimal_points and optimal_pickup_point and optimal_dropoff_point:
+        # Calculate direct distance along original driver route
+        direct_distance = sum(
+            calculate_distance(driver_route[i], driver_route[i+1])
+            for i in range(min(pickup_sequence_index, len(driver_route)-1), 
+                          min(dropoff_sequence_index, len(driver_route)-1))
         )
         
-        # Log detailed scoring
-        logger.info(f"Direction score: {direction_score:.2f} (similarity: {direction_similarity:.2f})")
-        logger.info(f"Coverage score: {coverage_score:.2f} (coverage: {route_coverage:.2f})")
-        logger.info(f"Deviation score: {deviation_score:.2f} (deviation: {deviation_percentage:.2f}%)")
-        logger.info(f"Overall compatibility score: {compatibility_score:.2f}")
+        # Calculate distance with detour
+        detour_distance = (
+            calculate_distance(driver_route[pickup_sequence_index], optimal_pickup_point) +
+            calculate_distance(optimal_pickup_point, rider_pickup) +
+            sum(calculate_distance(rider_route[i], rider_route[i+1]) for i in range(len(rider_route)-1)) +
+            calculate_distance(rider_dropoff, optimal_dropoff_point) +
+            calculate_distance(optimal_dropoff_point, driver_route[dropoff_sequence_index])
+        )
         
-        # Format the optimal points as dictionaries for JSON storage
-        formatted_pickup_point = None
-        formatted_dropoff_point = None
-        
-        if optimal_pickup_point:
-            try:
-                pickup_address = get_address_from_coordinates(optimal_pickup_point[0], optimal_pickup_point[1])
-                formatted_pickup_point = {
-                    'longitude': float(optimal_pickup_point[0]),
-                    'latitude': float(optimal_pickup_point[1]),
-                    'address': pickup_address or "Optimal pickup point",
-                    'distance_from_rider': float(pickup_dist),
-                    'sequence_index': pickup_idx
-                }
-            except Exception as e:
-                logger.error(f"Error formatting pickup point: {str(e)}")
-                # Basic fallback format
-                formatted_pickup_point = {
-                    'longitude': float(optimal_pickup_point[0]),
-                    'latitude': float(optimal_pickup_point[1]),
-                    'address': "Optimal pickup point",
-                    'distance_from_rider': float(pickup_dist),
-                    'sequence_index': pickup_idx
-                }
+        if direct_distance > 0:
+            deviation_percentage = (detour_distance - direct_distance) / direct_distance * 100
+        else:
+            deviation_percentage = 1000  # Arbitrary high value
             
-        if optimal_dropoff_point:
-            try:
-                dropoff_address = get_address_from_coordinates(optimal_dropoff_point[0], optimal_dropoff_point[1])
-                formatted_dropoff_point = {
-                    'longitude': float(optimal_dropoff_point[0]),
-                    'latitude': float(optimal_dropoff_point[1]),
-                    'address': dropoff_address or "Optimal dropoff point",
-                    'distance_from_rider': float(dropoff_dist),
-                    'sequence_index': dropoff_idx
-                }
-            except Exception as e:
-                logger.error(f"Error formatting dropoff point: {str(e)}")
-                # Basic fallback format
-                formatted_dropoff_point = {
-                    'longitude': float(optimal_dropoff_point[0]),
-                    'latitude': float(optimal_dropoff_point[1]),
-                    'address': "Optimal dropoff point", 
-                    'distance_from_rider': float(dropoff_dist),
-                    'sequence_index': dropoff_idx
-                }
+        logger.warning(f"{log_prefix}High deviation percentage: {deviation_percentage:.2f}%") if deviation_percentage > 100 else None
         
-        logger.info(f"Calculated compatibility score: {compatibility_score:.2f}")
-        logger.info(f"Formatted optimal pickup point: {formatted_pickup_point}")
-        logger.info(f"Formatted optimal dropoff point: {formatted_dropoff_point}")
+        # DEVIATION CHECK: Maximum acceptable deviation is 200%
+        if deviation_percentage > 200:
+            logger.warning(f"{log_prefix}Excessive deviation: {deviation_percentage:.2f}% exceeds maximum 200%")
+            return {"compatibility_score": 0, "optimal_pickup_point": None, "optimal_dropoff_point": None}
         
-        return compatibility_score, formatted_dropoff_point, formatted_pickup_point
+        # Calculate deviation score (0-100)
+        deviation_score = max(0, 100 - min(deviation_percentage, 100))
+        logger.info(f"{log_prefix}Deviation score: {deviation_score:.2f} (deviation: {deviation_percentage:.2f}%)")
+    else:
+        deviation_score = 0
+        logger.info(f"{log_prefix}Deviation score: {deviation_score:.2f} (no optimal points)")
+    
+    # Calculate weighted compatibility score
+    weights = {'direction': 0.4, 'coverage': 0.3, 'deviation': 0.3}
+    compatibility_score = (
+        weights['direction'] * direction_score +
+        weights['coverage'] * coverage_score +
+        weights['deviation'] * deviation_score
+    )
+    
+    logger.info(f"{log_prefix}Overall compatibility score: {compatibility_score:.2f}")
+    
+    # MINIMUM COMPATIBILITY THRESHOLD: At least 60%
+    if compatibility_score < 60:
+        logger.warning(f"{log_prefix}Compatibility score {compatibility_score:.2f} below minimum threshold of 60")
+        return {"compatibility_score": compatibility_score, "optimal_pickup_point": None, "optimal_dropoff_point": None}
+    
+    # Format the optimal points
+    formatted_pickup_point = None
+    formatted_dropoff_point = None
+    
+    if get_optimal_points and optimal_pickup_point and optimal_dropoff_point:
+        pickup_distance = calculate_distance(optimal_pickup_point, rider_pickup)
+        dropoff_distance = calculate_distance(optimal_dropoff_point, rider_dropoff)
         
-    except Exception as e:
-        logger.error(f"Error in calculate_route_overlap: {str(e)}")
-        logger.error(f"Full exception details:")
-        logger.exception("Exception details")
-        return 0, None, None
+        # MAX DISTANCE CHECK: Pickup point must be within 500 meters of requested pickup
+        if pickup_distance > 500:
+            logger.warning(f"{log_prefix}Pickup point too far: {pickup_distance:.2f} meters exceeds maximum 500 meters")
+            return {"compatibility_score": compatibility_score, "optimal_pickup_point": None, "optimal_dropoff_point": None}
+        
+        # MAX DISTANCE CHECK: Dropoff point must be within 1000 meters of requested dropoff
+        if dropoff_distance > 1000:
+            logger.warning(f"{log_prefix}Dropoff point too far: {dropoff_distance:.2f} meters exceeds maximum 1000 meters")
+            return {"compatibility_score": compatibility_score, "optimal_pickup_point": None, "optimal_dropoff_point": None}
+        
+        # Reverse coordinates for geocoding
+        pickup_lat_lng = (optimal_pickup_point[1], optimal_pickup_point[0])
+        dropoff_lat_lng = (optimal_dropoff_point[1], optimal_dropoff_point[0])
+        
+        # Get addresses for the optimal points
+        pickup_address = reverse_geocode(pickup_lat_lng)
+        dropoff_address = reverse_geocode(dropoff_lat_lng)
+        
+        formatted_pickup_point = {
+            'longitude': optimal_pickup_point[0],
+            'latitude': optimal_pickup_point[1],
+            'address': pickup_address,
+            'distance_from_rider': pickup_distance,
+            'sequence_index': pickup_sequence_index
+        }
+        
+        formatted_dropoff_point = {
+            'longitude': optimal_dropoff_point[0],
+            'latitude': optimal_dropoff_point[1],
+            'address': dropoff_address,
+            'distance_from_rider': dropoff_distance,
+            'sequence_index': dropoff_sequence_index
+        }
+        
+        logger.info(f"{log_prefix}Formatted optimal pickup point: {formatted_pickup_point}")
+        logger.info(f"{log_prefix}Formatted optimal dropoff point: {formatted_dropoff_point}")
+    
+    logger.info(f"{log_prefix}Calculated compatibility score: {compatibility_score:.2f}")
+    return {
+        "compatibility_score": compatibility_score,
+        "optimal_pickup_point": formatted_pickup_point,
+        "optimal_dropoff_point": formatted_dropoff_point
+    }
 
 def find_point_index(route, point):
     """Find the closest index position of a point in a route"""
@@ -877,41 +911,47 @@ class RideRequestViewSet(viewsets.ModelViewSet):
                     status=status.HTTP_400_BAD_REQUEST
                 )
     
+            # Set a higher threshold for automatic matching
+            COMPATIBILITY_THRESHOLD = 60
+            
+            # Calculate route overlap
+            compatibility_result = calculate_route_overlap(
+                driver_start=(ride.pickup_longitude, ride.pickup_latitude),
+                driver_end=(ride.dropoff_longitude, ride.dropoff_latitude),
+                rider_pickup=(float(serializer.validated_data['pickup_longitude']), float(serializer.validated_data['pickup_latitude'])),
+                rider_dropoff=(float(serializer.validated_data['dropoff_longitude']), float(serializer.validated_data['dropoff_latitude'])),
+                get_optimal_points=True,
+                log_prefix=""
+            )
+            
+            compatibility_score = compatibility_result.get('compatibility_score', 0)
+            optimal_pickup_point = compatibility_result.get('optimal_pickup_point')
+            optimal_dropoff_point = compatibility_result.get('optimal_dropoff_point')
+            
+            # If either optimal point is None, treat it as no match
+            if not optimal_pickup_point or not optimal_dropoff_point:
+                logger.warning(f"Match failed: Missing optimal points")
+                # Save ride request without matching
+                ride_request = serializer.save(status='PENDING')
+                return Response({
+                    'status': 'error',
+                    'has_match': False,
+                    'error': 'No suitable matching rides found. Your request has been saved and will be matched when a compatible ride becomes available.'
+                }, status=status.HTTP_200_OK)
+            
+            # Check if compatibility score meets the threshold
+            if compatibility_score < COMPATIBILITY_THRESHOLD:
+                logger.warning(f"Match failed: Compatibility score {compatibility_score:.2f} below threshold {COMPATIBILITY_THRESHOLD}")
+                # Save ride request without matching
+                ride_request = serializer.save(status='PENDING')
+                return Response({
+                    'status': 'error',
+                    'has_match': False,
+                    'error': 'No suitable matching rides found. Your request has been saved and will be matched when a compatible ride becomes available.'
+                }, status=status.HTTP_200_OK)
+            
             # Create the ride request
             ride_request = serializer.save(rider=request.user)
-            
-            # Calculate optimal pickup and dropoff points
-            optimal_pickup_point = None
-            optimal_dropoff_point = None
-            
-            try:
-                # Get coordinates for rider and driver
-                driver_start = (ride.start_longitude, ride.start_latitude)
-                driver_end = (ride.end_longitude, ride.end_latitude)
-                rider_pickup = (
-                    serializer.validated_data.get('pickup_longitude') or request.data.get('pickup_longitude'),
-                    serializer.validated_data.get('pickup_latitude') or request.data.get('pickup_latitude')
-                )
-                rider_dropoff = (
-                    serializer.validated_data.get('dropoff_longitude') or request.data.get('dropoff_longitude'),
-                    serializer.validated_data.get('dropoff_latitude') or request.data.get('dropoff_latitude')
-                )
-                
-                # Calculate route overlap which returns optimal points
-                compatibility_score, optimal_dropoff_point, optimal_pickup_point = calculate_route_overlap(
-                    driver_start, driver_end, rider_pickup, rider_dropoff
-                )
-                logger.info(f"Calculated optimal pickup point: {optimal_pickup_point}")
-                logger.info(f"Calculated optimal dropoff point: {optimal_dropoff_point}")
-                
-                # Store the optimal points in the ride request
-                ride_request.optimal_pickup_point = optimal_pickup_point
-                ride_request.nearest_dropoff_point = optimal_dropoff_point
-                ride_request.save()
-                
-            except Exception as e:
-                logger.error(f"Error calculating optimal points: {str(e)}")
-                # Continue with the request even if calculation fails
             
             # Decrement available seats since this is a direct match
             seats_needed = serializer.validated_data.get('seats_needed', 1)
