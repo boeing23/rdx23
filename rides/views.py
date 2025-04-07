@@ -1921,7 +1921,7 @@ class RideRequestViewSet(viewsets.ModelViewSet):
                 message=f"You've been matched with a ride from {best_match.start_location} to {best_match.end_location}",
                 ride=best_match,
                 ride_request=ride_request,
-                notification_type='RIDE_MATCH'
+                notification_type='RIDE_MATCH'  # Make sure this is consistently 'RIDE_MATCH'
             )
             
             # Notify driver about the new ride request
@@ -1937,9 +1937,13 @@ class RideRequestViewSet(viewsets.ModelViewSet):
             logging.info(f"Created notifications for rider (ID: {rider_notification.id}) and driver (ID: {driver_notification.id})")
             
             # Return success response with the matched ride
+            # Note: We include several explicit match-related fields (isMatched, match_found, match_details)
+            # to ensure the frontend correctly recognizes this as a matched ride
             return Response({
                 "status": "success",
                 "has_match": True,
+                "isMatched": True,  # Add explicit field for frontend
+                "match_found": True,  # Add another explicit field for frontend
                 "message": "Ride request created and matched with an available ride.",
                 "matched_ride": {
                     "id": best_match.id,
@@ -1948,7 +1952,23 @@ class RideRequestViewSet(viewsets.ModelViewSet):
                     "end_location": best_match.end_location,
                     "departure_time": best_match.departure_time.isoformat()
                 },
-                "ride_request": serializer.data
+                "match_details": {  # Add this specific field for the frontend
+                    "ride_id": best_match.id,
+                    "driver_name": best_match.driver.get_full_name(),
+                    "driver_id": best_match.driver.id,
+                    "pickup": best_match.start_location,
+                    "dropoff": best_match.end_location,
+                    "departure_time": best_match.departure_time.isoformat(),
+                    "overlap_percentage": best_match_details.get('overlap_percentage', 0),
+                    "matching_score": best_match_details.get('matching_score', 0),
+                    "vehicle_make": getattr(best_match.driver, 'vehicle_make', ''),
+                    "vehicle_model": getattr(best_match.driver, 'vehicle_model', ''),
+                    "vehicle_color": getattr(best_match.driver, 'vehicle_color', ''),
+                    "license_plate": getattr(best_match.driver, 'license_plate', '')
+                },
+                "ride_request": serializer.data,
+                "notification_sent": True,
+                "notification_id": rider_notification.id
             }, status=status.HTTP_201_CREATED)
         
         # If a ride is specified, proceed with the normal creation process
@@ -1968,7 +1988,7 @@ class RideRequestViewSet(viewsets.ModelViewSet):
         ride = ride_request.ride
         
         # Notify driver about the new ride request
-        Notification.objects.create(
+        driver_notification = Notification.objects.create(
             recipient=ride.driver,
             sender=request.user,
             message=f"A rider has requested to join your ride from {ride.start_location} to {ride.end_location}",
@@ -1978,10 +1998,29 @@ class RideRequestViewSet(viewsets.ModelViewSet):
         )
         
         headers = self.get_success_headers(serializer.data)
+        # Note: We include several explicit match-related fields (isMatched, match_found, match_details)
+        # to ensure the frontend correctly recognizes this as a matched ride
         return Response({
             "status": "success",
             "has_match": True,
-            "ride_request": serializer.data
+            "isMatched": True,  # Add explicit field for frontend
+            "match_found": True,  # Add another explicit field for frontend
+            "message": "Ride request created successfully.",
+            "match_details": {  # Add this specific field for the frontend
+                "ride_id": ride.id,
+                "driver_name": ride.driver.get_full_name(),
+                "driver_id": ride.driver.id,
+                "pickup": ride.start_location,
+                "dropoff": ride.end_location,
+                "departure_time": ride.departure_time.isoformat(),
+                "vehicle_make": getattr(ride.driver, 'vehicle_make', ''),
+                "vehicle_model": getattr(ride.driver, 'vehicle_model', ''),
+                "vehicle_color": getattr(ride.driver, 'vehicle_color', ''),
+                "license_plate": getattr(ride.driver, 'license_plate', '')
+            },
+            "ride_request": serializer.data,
+            "notification_sent": True,
+            "notification_id": driver_notification.id
         }, status=status.HTTP_201_CREATED, headers=headers)
         
     def perform_create(self, serializer):
