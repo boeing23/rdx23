@@ -1026,7 +1026,7 @@ class RideRequestViewSet(viewsets.ModelViewSet):
                         'username': ride.driver.username,
                         'first_name': ride.driver.first_name,
                         'last_name': ride.driver.last_name,
-                        'profile_image': ride.driver.profile.profile_image.url if ride.driver.profile.profile_image else None
+                        'profile_image': ride.driver.profile.profile_image.url if hasattr(ride.driver, 'profile') and ride.driver.profile and ride.driver.profile.profile_image else None
                     },
                     'vehicle': {
                         'make': ride.vehicle.make if ride.vehicle else 'Not specified',
