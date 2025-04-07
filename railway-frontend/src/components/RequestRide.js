@@ -30,6 +30,31 @@ import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
 import SearchIcon from '@mui/icons-material/Search';
 import { getUserCurrentLocation, DEFAULT_LOCATION, geocodeWithPriority } from '../utils/locationUtils';
 
+const formatCoordinates = (point) => {
+  if (!point) return 'Not available';
+  
+  // Handle tuple/array format [lng, lat] or [lat, lng]
+  if (Array.isArray(point)) {
+    return `${Number(point[0]).toFixed(6)}, ${Number(point[1]).toFixed(6)}`;
+  }
+  
+  // Handle object format with lat/lng or latitude/longitude
+  if (typeof point === 'object') {
+    const lat = point.latitude || point.lat;
+    const lng = point.longitude || point.lng;
+    if (lat && lng) {
+      return `${Number(lat).toFixed(6)}, ${Number(lng).toFixed(6)}`;
+    }
+  }
+  
+  // If it's a string, return as is
+  if (typeof point === 'string') {
+    return point;
+  }
+  
+  return 'Invalid format';
+};
+
 const RequestRide = () => {
   const navigate = useNavigate();
   const [pickupLocation, setPickupLocation] = useState('');
@@ -764,9 +789,11 @@ const RequestRide = () => {
                     <strong>Requested Pickup:</strong> {matchDetails.pickup || 'Not provided'}
                   </Typography>
                   <Typography variant="body1">
-                    <strong>Optimal Pickup:</strong> {matchDetails.ride_request?.optimal_pickup_point ? 
-                      `${matchDetails.ride_request.optimal_pickup_point.latitude.toFixed(6)}, ${matchDetails.ride_request.optimal_pickup_point.longitude.toFixed(6)}` : 
-                      'Not available'}
+                    <strong>Optimal Pickup:</strong> {formatCoordinates(
+                      matchDetails.optimal_pickup_point || 
+                      (matchDetails.ride_request && matchDetails.ride_request.optimal_pickup_point) ||
+                      (matchDetails.ride_request && matchDetails.ride_request.optimal_pickup_info)
+                    )}
                   </Typography>
                 </Grid>
                 <Grid item xs={12} sm={6}>
@@ -774,9 +801,11 @@ const RequestRide = () => {
                     <strong>Requested Dropoff:</strong> {matchDetails.dropoff || 'Not provided'}
                   </Typography>
                   <Typography variant="body1">
-                    <strong>Optimal Dropoff:</strong> {matchDetails.ride_request?.nearest_dropoff_point ? 
-                      `${matchDetails.ride_request.nearest_dropoff_point.latitude.toFixed(6)}, ${matchDetails.ride_request.nearest_dropoff_point.longitude.toFixed(6)}` : 
-                      'Not available'}
+                    <strong>Optimal Dropoff:</strong> {formatCoordinates(
+                      matchDetails.optimal_dropoff_point || 
+                      (matchDetails.ride_request && matchDetails.ride_request.nearest_dropoff_point) ||
+                      (matchDetails.ride_request && matchDetails.ride_request.nearest_dropoff_info)
+                    )}
                   </Typography>
                 </Grid>
               </Grid>

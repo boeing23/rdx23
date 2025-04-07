@@ -287,164 +287,70 @@ def calculate_direction_similarity(vec1, vec2):
 
 def calculate_route_overlap(driver_start, driver_end, rider_pickup, rider_dropoff):
     """
-    Calculate the percentage of route overlap between driver and rider routes.
-    
-    Parameters:
-    driver_start (tuple): Driver's starting point coordinates (longitude, latitude)
-    driver_end (tuple): Driver's destination coordinates (longitude, latitude)
-    rider_pickup (tuple): Rider's pickup point coordinates (longitude, latitude)
-    rider_dropoff (tuple): Rider's dropoff point coordinates (longitude, latitude)
-    
+    Calculate the route overlap between driver and rider routes.
     Returns:
-    tuple: (overlap_percentage, nearest_dropoff_point, optimal_pickup_point)
+        tuple: (overlap_percentage, optimal_dropoff_point, optimal_pickup_point)
     """
     try:
+        # Generate driver's route
         logger.info(f"Calculating route overlap with inputs:")
         logger.info(f"  Driver start: {driver_start}, Driver end: {driver_end}")
         logger.info(f"  Rider pickup: {rider_pickup}, Rider dropoff: {rider_dropoff}")
         
-        # Validate input coordinates
-        if None in [driver_start, driver_end, rider_pickup, rider_dropoff]:
-            logger.error("Missing coordinate values in calculate_route_overlap")
-            return 0.0, None, None
-        
-        # Ensure coordinates are in the correct format (lng, lat)
-        def ensure_lng_lat_format(coords):
-            lng, lat = coords
-            try:
-                lng = float(lng)
-                lat = float(lat)
-            except (ValueError, TypeError):
-                logger.error(f"Invalid coordinate values: {coords}")
-                return None
-                
-            if abs(lng) <= 90 and abs(lat) > 90:
-                logger.warning(f"Coordinates appear to be in (lat, lng) format, correcting: {coords}")
-                return (lat, lng)
-            return (lng, lat)
-        
-        # Validate and potentially correct all coordinates
-        driver_start = ensure_lng_lat_format(driver_start)
-        driver_end = ensure_lng_lat_format(driver_end)
-        rider_pickup = ensure_lng_lat_format(rider_pickup)
-        rider_dropoff = ensure_lng_lat_format(rider_dropoff)
-        
-        if None in [driver_start, driver_end, rider_pickup, rider_dropoff]:
-            logger.error("Failed to validate coordinates")
-            return 0.0, None, None
-        
-        # Generate routes for both driver and rider
         driver_route = generate_route(driver_start, driver_end)
+        if not driver_route:
+            logger.error("Failed to generate driver route")
+            return 0, None, None
+        
+        # Generate rider's route
         rider_route = generate_route(rider_pickup, rider_dropoff)
+        if not rider_route:
+            logger.error("Failed to generate rider route")
+            return 0, None, None
         
-        if not driver_route or not rider_route:
-            logger.error("Failed to generate routes")
-            return 0.0, None, None
-        
-        def find_optimal_point(route, target_point):
-            """Find optimal point along a route closest to target point using vector projection"""
-            min_dist = float('inf')
-            optimal_point = None
-            
-            for i in range(len(route) - 1):
-                p1, p2 = route[i], route[i+1]
-                
-                # Vector calculations
-                vec = (p2[0]-p1[0], p2[1]-p1[1])
-                vec_target = (target_point[0]-p1[0], target_point[1]-p1[1])
-                
-                # Projection calculation
-                t = (vec_target[0]*vec[0] + vec_target[1]*vec[1]) / (vec[0]**2 + vec[1]**2 + 1e-8)
-                t = max(0, min(1, t))
-                closest = (p1[0] + t*vec[0], p1[1] + t*vec[1])
-                
-                try:
-                    dist = calculate_distance(closest, target_point)
-                    if dist < min_dist:
-                        min_dist = dist
-                        optimal_point = closest
-                except Exception as e:
-                    logger.error(f"Error calculating distance: {str(e)}")
-                    continue
-            
-            return optimal_point, min_dist
-        
-        # Find optimal pickup and dropoff points using vector projection
+        # Find optimal pickup and dropoff points
         optimal_pickup_point, pickup_dist = find_optimal_point(driver_route, rider_pickup)
-        nearest_point, dropoff_dist = find_optimal_point(driver_route, rider_dropoff)
+        optimal_dropoff_point, dropoff_dist = find_optimal_point(driver_route, rider_dropoff)
         
-        logger.info(f"Optimal pickup point found with distance {pickup_dist:.2f}m")
-        logger.info(f"Nearest dropoff point found with distance {dropoff_dist:.2f}m")
+        logger.info(f"Calculated optimal pickup point: {optimal_pickup_point}")
+        logger.info(f"Calculated optimal dropoff point: {optimal_dropoff_point}")
         
-        # Calculate route overlap using improved algorithm
-        def calculate_segment_overlap(route1, route2, threshold=200):
-            """Calculate percentage of points in route1 that are close to any point in route2"""
-            proximity_count = 0
-            for p1 in route1:
-                for p2 in route2:
-                    if calculate_distance(p1, p2) <= threshold:
-                        proximity_count += 1
-                        break
-            return (proximity_count / len(route1)) * 100 if route1 else 0
-        
-        # Calculate overlap in both directions
+        # Calculate driver-to-rider overlap
         driver_to_rider_overlap = calculate_segment_overlap(driver_route, rider_route)
+        
+        # Calculate rider-to-driver overlap
         rider_to_driver_overlap = calculate_segment_overlap(rider_route, driver_route)
         
-        # Calculate directional similarity
-        def calculate_direction_similarity(route1, route2):
-            """Calculate how similar the directions of two routes are"""
-            if len(route1) < 2 or len(route2) < 2:
-                return 0.0
-                
-            # Calculate overall direction vectors
-            vec1 = (route1[-1][0] - route1[0][0], route1[-1][1] - route1[0][1])
-            vec2 = (route2[-1][0] - route2[0][0], route2[-1][1] - route2[0][1])
+        # Take average of the two overlap measures
+        overlap_percentage = (driver_to_rider_overlap + rider_to_driver_overlap) / 2
+        
+        # Format the optimal points as dictionaries for JSON storage
+        formatted_pickup_point = None
+        formatted_dropoff_point = None
+        
+        if optimal_pickup_point:
+            formatted_pickup_point = {
+                'longitude': float(optimal_pickup_point[0]),
+                'latitude': float(optimal_pickup_point[1])
+            }
             
-            # Normalize vectors
-            mag1 = (vec1[0]**2 + vec1[1]**2)**0.5
-            mag2 = (vec2[0]**2 + vec2[1]**2)**0.5
-            
-            if mag1 == 0 or mag2 == 0:
-                return 0.0
-                
-            vec1 = (vec1[0]/mag1, vec1[1]/mag1)
-            vec2 = (vec2[0]/mag2, vec2[1]/mag2)
-            
-            # Calculate dot product (cosine of angle between vectors)
-            dot_product = vec1[0]*vec2[0] + vec1[1]*vec2[1]
-            return max(0, dot_product)  # Only consider angles <= 90 degrees
+        if optimal_dropoff_point:
+            formatted_dropoff_point = {
+                'longitude': float(optimal_dropoff_point[0]),
+                'latitude': float(optimal_dropoff_point[1])
+            }
         
-        direction_similarity = calculate_direction_similarity(driver_route, rider_route)
+        logger.info(f"Calculated route overlap: {overlap_percentage:.2f}%")
+        logger.info(f"Formatted optimal pickup point: {formatted_pickup_point}")
+        logger.info(f"Formatted optimal dropoff point: {formatted_dropoff_point}")
         
-        # Calculate weighted overlap score
-        OVERLAP_WEIGHT = 0.6
-        DIRECTION_WEIGHT = 0.4
-        
-        weighted_overlap = (
-            OVERLAP_WEIGHT * (driver_to_rider_overlap + rider_to_driver_overlap) / 2 +
-            DIRECTION_WEIGHT * direction_similarity * 100
-        )
-        
-        # Apply bonuses
-        if calculate_distance(driver_end, rider_dropoff) <= 200:
-            logger.info("Bonus: Rider and driver share same destination")
-            weighted_overlap += 10
-        
-        if direction_similarity > 0.8:
-            logger.info("Bonus: Routes have high directional similarity")
-            weighted_overlap += 5
-        
-        # Ensure final score is between 0 and 100
-        overlap_percentage = max(0, min(100, weighted_overlap))
-        logger.info(f"Final overlap percentage: {overlap_percentage:.2f}%")
-        
-        return overlap_percentage, nearest_point, optimal_pickup_point
+        return overlap_percentage, formatted_dropoff_point, formatted_pickup_point
         
     except Exception as e:
         logger.error(f"Error in calculate_route_overlap: {str(e)}")
-        logger.exception("Full exception details:")
-        return 0.0, None, None
+        logger.error(f"Full exception details:")
+        logger.exception("Exception details")
+        return 0, None, None
 
 def generate_route(start_coords, end_coords, max_retries=3, retry_delay=2):
     """
@@ -464,15 +370,15 @@ def generate_route(start_coords, end_coords, max_retries=3, retry_delay=2):
     start_lng, start_lat = start_coords
     end_lng, end_lat = end_coords
     
-    # Validate coordinates
+        # Validate coordinates
     if not all(isinstance(x, (int, float)) for x in [start_lng, start_lat, end_lng, end_lat]):
         logger.error(f"Invalid coordinate values: start={start_coords}, end={end_coords}")
         return None
         
     # Construct the API request
     url = f"{OPENROUTE_BASE_URL}/directions/driving-car"
-    headers = {
-        'Authorization': ORS_API_KEY,
+                headers = {
+                    'Authorization': ORS_API_KEY,
         'Accept': 'application/json, application/geo+json, application/gpx+xml, img/png; charset=utf-8'
     }
     params = {
@@ -486,16 +392,16 @@ def generate_route(start_coords, end_coords, max_retries=3, retry_delay=2):
             logger.info(f"Calling OpenRouteService directions API (attempt {attempt + 1}/{max_retries}) for route from ({start_lng}, {start_lat}) to ({end_lng}, {end_lat})")
             
             response = requests.get(url, headers=headers, params=params, timeout=15)
-            
-            if response.status_code == 200:
-                data = response.json()
+                
+                if response.status_code == 200:
+                    data = response.json()
                 if 'features' in data and data['features']:
                     # Extract coordinates from the route
                     coordinates = data['features'][0]['geometry']['coordinates']
                     logger.info(f"Successfully generated route with {len(coordinates)} points")
-                    return coordinates
-                else:
-                    logger.warning("No features found in directions API response")
+                                return coordinates
+                    else:
+                        logger.warning("No features found in directions API response")
                     if attempt < max_retries - 1:
                         time.sleep(retry_delay)
                         continue
@@ -506,21 +412,21 @@ def generate_route(start_coords, end_coords, max_retries=3, retry_delay=2):
                 retry_after = int(response.headers.get('Retry-After', retry_delay))
                 logger.warning(f"Rate limited by OpenRouteService, retrying after {retry_after} seconds")
                 time.sleep(retry_after)
-                continue
-            else:
+                    continue
+                else:
                 logger.error(f"OpenRouteService API error: {response.status_code} - {response.text}")
+                    if attempt < max_retries - 1:
+                        time.sleep(retry_delay)
+                        continue
+            
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Request error in generate_route: {str(e)}")
                 if attempt < max_retries - 1:
                     time.sleep(retry_delay)
                     continue
-                    
-        except requests.exceptions.RequestException as e:
-            logger.error(f"Request error in generate_route: {str(e)}")
-            if attempt < max_retries - 1:
-                time.sleep(retry_delay)
-                continue
-                
+        
     # If all retries failed, use fallback method
-    logger.warning("OpenRouteService APIs failed or not accessible, using straight line fallback method")
+        logger.warning("OpenRouteService APIs failed or not accessible, using straight line fallback method")
     return generate_fallback_route(start_coords, end_coords)
 
 def generate_fallback_route(start_coords, end_coords, num_points=10):
@@ -541,223 +447,223 @@ def generate_fallback_route(start_coords, end_coords, num_points=10):
         
     return route
 
-def get_address_from_coordinates(self, longitude, latitude):
-    """Get address from coordinates using reverse geocoding"""
-    try:
-        response = requests.get(
-            "https://nominatim.openstreetmap.org/reverse",
-            params={
-                'format': 'json',
-                'lat': latitude,
-                'lon': longitude
-            },
-            headers={'User-Agent': 'ChalBeyy/1.0'}
-        )
-        if response.status_code == 200:
-            data = response.json()
-            return data.get('display_name', 'Unknown location')
-        return 'Unknown location'
-    except Exception as e:
-        logger.error(f"Error reverse geocoding: {str(e)}")
-        return 'Unknown location'
+    def get_address_from_coordinates(self, longitude, latitude):
+        """Get address from coordinates using reverse geocoding"""
+        try:
+            response = requests.get(
+                "https://nominatim.openstreetmap.org/reverse",
+                params={
+                    'format': 'json',
+                    'lat': latitude,
+                    'lon': longitude
+                },
+                headers={'User-Agent': 'ChalBeyy/1.0'}
+            )
+            if response.status_code == 200:
+                data = response.json()
+                return data.get('display_name', 'Unknown location')
+            return 'Unknown location'
+        except Exception as e:
+            logger.error(f"Error reverse geocoding: {str(e)}")
+            return 'Unknown location'
 
-def calculate_matching_score(self, overlap_percentage, time_diff, available_seats, seats_needed):
-    """
-    Calculate a matching score between driver and rider based on route overlap, time difference, and seat availability.
-    
-    Parameters:
-    overlap_percentage (float): Percentage of route overlap between driver and rider
-    time_diff (int): Absolute time difference in minutes between driver and rider departure times
-    available_seats (int): Number of available seats in the driver's vehicle
-    seats_needed (int): Number of seats requested by the rider
-    
-    Returns:
-    float: A matching score between 0 and 100, higher is better
-    """
-    try:
-        logger.info(f"Calculating matching score with: overlap={overlap_percentage:.2f}%, time_diff={time_diff} mins, " +
-                   f"seats_available={available_seats}, seats_needed={seats_needed}")
+    def calculate_matching_score(self, overlap_percentage, time_diff, available_seats, seats_needed):
+        """
+        Calculate a matching score between driver and rider based on route overlap, time difference, and seat availability.
         
-        # Constants for weighting factors
-        OVERLAP_WEIGHT = 0.6  # Route overlap is the most important factor
-        TIME_WEIGHT = 0.3     # Time difference is second most important
-        SEAT_WEIGHT = 0.1     # Seat availability is least important but still matters
+        Parameters:
+        overlap_percentage (float): Percentage of route overlap between driver and rider
+        time_diff (int): Absolute time difference in minutes between driver and rider departure times
+        available_seats (int): Number of available seats in the driver's vehicle
+        seats_needed (int): Number of seats requested by the rider
         
-        # Calculate overlap score (0-100)
-        # We directly use the overlap percentage which is already on a 0-100 scale
-        overlap_score = overlap_percentage
-        
-        # Calculate time score (0-100)
-        # Time difference of 0 minutes = 100 score
-        # Time difference of 30+ minutes = 0 score
-        # Linear scale in between
-        MAX_TIME_DIFF = 30  # minutes
-        time_score = max(0, 100 - (time_diff * 100 / MAX_TIME_DIFF))
-        
-        # Calculate seat score (0-100)
-        # If rider's seat needs can be met, score is 100
-        # Otherwise, score is 0
-        seat_score = 100 if available_seats >= seats_needed else 0
-        
-        # Calculate weighted score
-        weighted_score = (
-            OVERLAP_WEIGHT * overlap_score +
-            TIME_WEIGHT * time_score +
-            SEAT_WEIGHT * seat_score
-        )
-        
-        # Ensure score is between 0 and 100
-        final_score = max(0, min(100, weighted_score))
-        
-        # Apply bonuses for perfect matches
-        # Perfect time match (within 5 minutes)
-        if time_diff <= 5:
-            final_score += 5
-            logger.info("Bonus: Near-perfect time match (+5 points)")
+        Returns:
+        float: A matching score between 0 and 100, higher is better
+        """
+        try:
+            logger.info(f"Calculating matching score with: overlap={overlap_percentage:.2f}%, time_diff={time_diff} mins, " +
+                       f"seats_available={available_seats}, seats_needed={seats_needed}")
             
-        # Very high route overlap (over 70%)
-        if overlap_percentage >= 70:
-            final_score += 5
-            logger.info("Bonus: Excellent route overlap (+5 points)")
+            # Constants for weighting factors
+            OVERLAP_WEIGHT = 0.6  # Route overlap is the most important factor
+            TIME_WEIGHT = 0.3     # Time difference is second most important
+            SEAT_WEIGHT = 0.1     # Seat availability is least important but still matters
             
-        # Cap the final score at 100
-        final_score = min(100, final_score)
-        
-        logger.info(f"Scoring components: Overlap={overlap_score:.2f}, Time={time_score:.2f}, Seat={seat_score:.2f}")
-        logger.info(f"Final matching score: {final_score:.2f}")
-        
-        return final_score
-        
-    except Exception as e:
-        logger.error(f"Error calculating matching score: {str(e)}")
-        logger.exception("Full exception details:")
-        return 0.0
+            # Calculate overlap score (0-100)
+            # We directly use the overlap percentage which is already on a 0-100 scale
+            overlap_score = overlap_percentage
+            
+            # Calculate time score (0-100)
+            # Time difference of 0 minutes = 100 score
+            # Time difference of 30+ minutes = 0 score
+            # Linear scale in between
+            MAX_TIME_DIFF = 30  # minutes
+            time_score = max(0, 100 - (time_diff * 100 / MAX_TIME_DIFF))
+            
+            # Calculate seat score (0-100)
+            # If rider's seat needs can be met, score is 100
+            # Otherwise, score is 0
+            seat_score = 100 if available_seats >= seats_needed else 0
+            
+            # Calculate weighted score
+            weighted_score = (
+                OVERLAP_WEIGHT * overlap_score +
+                TIME_WEIGHT * time_score +
+                SEAT_WEIGHT * seat_score
+            )
+            
+            # Ensure score is between 0 and 100
+            final_score = max(0, min(100, weighted_score))
+            
+            # Apply bonuses for perfect matches
+            # Perfect time match (within 5 minutes)
+            if time_diff <= 5:
+                final_score += 5
+                logger.info("Bonus: Near-perfect time match (+5 points)")
+                
+            # Very high route overlap (over 70%)
+            if overlap_percentage >= 70:
+                final_score += 5
+                logger.info("Bonus: Excellent route overlap (+5 points)")
+                
+            # Cap the final score at 100
+            final_score = min(100, final_score)
+            
+            logger.info(f"Scoring components: Overlap={overlap_score:.2f}, Time={time_score:.2f}, Seat={seat_score:.2f}")
+            logger.info(f"Final matching score: {final_score:.2f}")
+            
+            return final_score
+            
+        except Exception as e:
+            logger.error(f"Error calculating matching score: {str(e)}")
+            logger.exception("Full exception details:")
+            return 0.0
 
-def find_suitable_rides(self, rides, ride_request_data):
-    """
-    Find suitable rides for a ride request based on route overlap, time proximity, and seat availability.
-    
-    Parameters:
-    rides (QuerySet): Available rides to search through
-    ride_request_data (dict): Data from the ride request
-    
-    Returns:
-    list: List of suitable rides with matching details
-    """
-    try:
-        # Extract necessary data from ride request
-        rider_pickup = ride_request_data.get('pickup_location_coordinates')
-        rider_dropoff = ride_request_data.get('dropoff_location_coordinates')
-        rider_departure_time = ride_request_data.get('departure_time')
-        seats_needed = ride_request_data.get('seats', 1)
+    def find_suitable_rides(self, rides, ride_request_data):
+        """
+        Find suitable rides for a ride request based on route overlap, time proximity, and seat availability.
         
-        logger.info(f"Finding suitable rides for request from {ride_request_data.get('pickup_location')} " +
-                    f"to {ride_request_data.get('dropoff_location')}")
-        logger.info(f"Rider coordinates: Pickup {rider_pickup}, Dropoff {rider_dropoff}")
+        Parameters:
+        rides (QuerySet): Available rides to search through
+        ride_request_data (dict): Data from the ride request
         
-        # Validate rider coordinates
-        if not rider_pickup or not rider_dropoff:
-            logger.error("Missing rider coordinates in find_suitable_rides")
-            return []
+        Returns:
+        list: List of suitable rides with matching details
+        """
+        try:
+            # Extract necessary data from ride request
+            rider_pickup = ride_request_data.get('pickup_location_coordinates')
+            rider_dropoff = ride_request_data.get('dropoff_location_coordinates')
+            rider_departure_time = ride_request_data.get('departure_time')
+            seats_needed = ride_request_data.get('seats', 1)
             
-        # Convert rider_departure_time to datetime if it's a string
-        if isinstance(rider_departure_time, str):
-            try:
-                rider_departure_time = datetime.fromisoformat(rider_departure_time.replace('Z', '+00:00'))
-            except ValueError:
-                logger.error(f"Invalid departure time format: {rider_departure_time}")
+            logger.info(f"Finding suitable rides for request from {ride_request_data.get('pickup_location')} " +
+                        f"to {ride_request_data.get('dropoff_location')}")
+            logger.info(f"Rider coordinates: Pickup {rider_pickup}, Dropoff {rider_dropoff}")
+            
+            # Validate rider coordinates
+            if not rider_pickup or not rider_dropoff:
+                logger.error("Missing rider coordinates in find_suitable_rides")
                 return []
-        
-        # Use lower overlap threshold for better inclusivity
-        MIN_OVERLAP_THRESHOLD = 35.0  # Reduced from 50.0 to catch more potential matches
-        MIN_MATCHING_SCORE = 60.0     # Adjusted as well to balance against lower overlap threshold
-        
-        suitable_rides = []
-        
-        for ride in rides:
-            # Skip rides with insufficient available seats
-            if ride.available_seats < seats_needed:
-                logger.debug(f"Skipping ride {ride.id}: insufficient seats ({ride.available_seats} available, {seats_needed} needed)")
-                continue
-            
-            # Get driver's coordinates
-            driver_start = ride.start_location_coordinates
-            driver_end = ride.end_location_coordinates
-            
-            # Validate driver coordinates
-            if not driver_start or not driver_end:
-                logger.warning(f"Skipping ride {ride.id}: missing coordinates")
-                continue
                 
-            # Calculate route overlap
-            overlap_percentage, nearest_dropoff, optimal_pickup = self.calculate_route_overlap(
-                driver_start, driver_end, rider_pickup, rider_dropoff
-            )
+            # Convert rider_departure_time to datetime if it's a string
+            if isinstance(rider_departure_time, str):
+                try:
+                    rider_departure_time = datetime.fromisoformat(rider_departure_time.replace('Z', '+00:00'))
+                except ValueError:
+                    logger.error(f"Invalid departure time format: {rider_departure_time}")
+                    return []
             
-            # If overlap is below threshold, skip this ride
-            if overlap_percentage < MIN_OVERLAP_THRESHOLD:
-                logger.debug(f"Skipping ride {ride.id}: low overlap ({overlap_percentage:.2f}%)")
-                continue
+            # Use lower overlap threshold for better inclusivity
+            MIN_OVERLAP_THRESHOLD = 35.0  # Reduced from 50.0 to catch more potential matches
+            MIN_MATCHING_SCORE = 60.0     # Adjusted as well to balance against lower overlap threshold
+            
+            suitable_rides = []
+            
+            for ride in rides:
+                # Skip rides with insufficient available seats
+                if ride.available_seats < seats_needed:
+                    logger.debug(f"Skipping ride {ride.id}: insufficient seats ({ride.available_seats} available, {seats_needed} needed)")
+                    continue
                 
-            # Calculate time difference in minutes
-            time_diff = abs((ride.departure_time - rider_departure_time).total_seconds() / 60)
-            
-            # Calculate matching score
-            matching_score = self.calculate_matching_score(
-                overlap_percentage, time_diff, ride.available_seats, seats_needed
-            )
-            
-            # If matching score is below threshold, skip this ride
-            if matching_score < MIN_MATCHING_SCORE:
-                logger.debug(f"Skipping ride {ride.id}: low matching score ({matching_score:.2f})")
-                continue
+                # Get driver's coordinates
+                driver_start = ride.start_location_coordinates
+                driver_end = ride.end_location_coordinates
                 
-            # This ride is suitable, add it to results
-            suitable_ride = {
-                'ride': ride,
-                'overlap_percentage': overlap_percentage,
-                'matching_score': matching_score,
-                'time_diff_minutes': time_diff,
-                'nearest_dropoff_point': nearest_dropoff,
-                'optimal_pickup_point': optimal_pickup
-            }
+                # Validate driver coordinates
+                if not driver_start or not driver_end:
+                    logger.warning(f"Skipping ride {ride.id}: missing coordinates")
+                    continue
+                    
+                # Calculate route overlap
+                overlap_percentage, nearest_dropoff, optimal_pickup = self.calculate_route_overlap(
+                    driver_start, driver_end, rider_pickup, rider_dropoff
+                )
+                
+                # If overlap is below threshold, skip this ride
+                if overlap_percentage < MIN_OVERLAP_THRESHOLD:
+                    logger.debug(f"Skipping ride {ride.id}: low overlap ({overlap_percentage:.2f}%)")
+                    continue
+                    
+                # Calculate time difference in minutes
+                time_diff = abs((ride.departure_time - rider_departure_time).total_seconds() / 60)
+                
+                # Calculate matching score
+                matching_score = self.calculate_matching_score(
+                    overlap_percentage, time_diff, ride.available_seats, seats_needed
+                )
+                
+                # If matching score is below threshold, skip this ride
+                if matching_score < MIN_MATCHING_SCORE:
+                    logger.debug(f"Skipping ride {ride.id}: low matching score ({matching_score:.2f})")
+                    continue
+                    
+                # This ride is suitable, add it to results
+                suitable_ride = {
+                    'ride': ride,
+                    'overlap_percentage': overlap_percentage,
+                    'matching_score': matching_score,
+                    'time_diff_minutes': time_diff,
+                    'nearest_dropoff_point': nearest_dropoff,
+                    'optimal_pickup_point': optimal_pickup
+                }
+                
+                suitable_rides.append(suitable_ride)
+                logger.info(f"Found suitable ride {ride.id} with overlap {overlap_percentage:.2f}% " +
+                            f"and matching score {matching_score:.2f}")
             
-            suitable_rides.append(suitable_ride)
-            logger.info(f"Found suitable ride {ride.id} with overlap {overlap_percentage:.2f}% " +
-                        f"and matching score {matching_score:.2f}")
-        
-        # Sort suitable rides by matching score (highest first)
-        suitable_rides.sort(key=lambda r: r['matching_score'], reverse=True)
-        
-        return suitable_rides
-        
-    except Exception as e:
-        logger.error(f"Error finding suitable rides: {str(e)}")
-        logger.exception("Full exception details:")
-        return []
+            # Sort suitable rides by matching score (highest first)
+            suitable_rides.sort(key=lambda r: r['matching_score'], reverse=True)
+            
+            return suitable_rides
+            
+        except Exception as e:
+            logger.error(f"Error finding suitable rides: {str(e)}")
+            logger.exception("Full exception details:")
+            return []
 
-def calculate_distance(self, point1, point2):
-    """
-    Calculate the distance between two points in meters.
-    
-    Parameters:
-    point1 (tuple): First point coordinates (longitude, latitude)
-    point2 (tuple): Second point coordinates (longitude, latitude)
-    
-    Returns:
-    float: Distance in meters
-    """
-    # Convert to radians
-    lon1, lat1 = map(math.radians, point1)
-    lon2, lat2 = map(math.radians, point2)
-    
-    # Haversine formula
-    dlon = lon2 - lon1
-    dlat = lat2 - lat1
-    a = math.sin(dlat/2)**2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon/2)**2
-    c = 2 * math.asin(math.sqrt(a))
-    r = 6371000  # Radius of earth in meters
-    return c * r
+    def calculate_distance(self, point1, point2):
+        """
+        Calculate the distance between two points in meters.
+        
+        Parameters:
+        point1 (tuple): First point coordinates (longitude, latitude)
+        point2 (tuple): Second point coordinates (longitude, latitude)
+        
+        Returns:
+        float: Distance in meters
+        """
+        # Convert to radians
+        lon1, lat1 = map(math.radians, point1)
+        lon2, lat2 = map(math.radians, point2)
+        
+        # Haversine formula
+        dlon = lon2 - lon1
+        dlat = lat2 - lat1
+        a = math.sin(dlat/2)**2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon/2)**2
+        c = 2 * math.asin(math.sqrt(a))
+        r = 6371000  # Radius of earth in meters
+        return c * r
 
 # Permission classes
 class IsDriverOrReadOnly(permissions.BasePermission):
@@ -1087,7 +993,7 @@ class RideRequestViewSet(viewsets.ModelViewSet):
             try:
                 pending_request = PendingRideRequest.objects.get(id=pending_request_id)
                 logger.info(f"Found pending request with ID {pending_request_id}")
-                
+            
                 # Verify the user is the rider
                 if pending_request.rider != request.user:
                     raise PermissionDenied("You can only accept your own ride requests")
@@ -1126,7 +1032,11 @@ class RideRequestViewSet(viewsets.ModelViewSet):
                     logger.info(f"Calculated optimal dropoff point: {optimal_dropoff_point}")
                 except Exception as e:
                     logger.error(f"Error calculating optimal points for match: {str(e)}")
+                    logger.exception("Full exception details")
                     # Continue with the request even if calculation fails
+
+                # Log the points before creating the ride request
+                logger.info(f"Creating RideRequest with optimal_pickup_point={optimal_pickup_point}, nearest_dropoff_point={optimal_dropoff_point}")
 
                 # Create a RideRequest with the optimal points
                 ride_request = RideRequest.objects.create(
@@ -1143,6 +1053,12 @@ class RideRequestViewSet(viewsets.ModelViewSet):
                     optimal_pickup_point=optimal_pickup_point,
                     nearest_dropoff_point=optimal_dropoff_point
                 )
+                
+                # Double-check that the optimal points were saved
+                ride_request.refresh_from_db()
+                logger.info(f"Saved RideRequest with ID {ride_request.id}")
+                logger.info(f"Saved optimal_pickup_point: {ride_request.optimal_pickup_point}")
+                logger.info(f"Saved nearest_dropoff_point: {ride_request.nearest_dropoff_point}")
 
                 # Update the pending request status
                 pending_request.status = 'MATCHED'
@@ -1153,8 +1069,17 @@ class RideRequestViewSet(viewsets.ModelViewSet):
                 proposed_ride.available_seats -= pending_request.seats_needed
                 proposed_ride.save()
 
-                # Create notifications
-                create_match_notifications(ride_request)
+                # Create notifications and send emails
+                try:
+                    create_match_notifications(ride_request)
+                    logger.info(f"Created notifications for ride request {ride_request.id}")
+                    
+                    # Send email notifications
+                    send_ride_match_emails(ride_request)
+                    logger.info(f"Sent email notifications for ride request {ride_request.id}")
+                except Exception as e:
+                    logger.error(f"Error creating notifications or sending emails: {str(e)}")
+                    logger.exception("Full exception details")
 
                 return Response({
                     "status": "success",
@@ -1355,3 +1280,92 @@ def fix_notification_field_names():
 
 # Run the fix on module import
 fix_notification_field_names()
+
+def send_ride_match_emails(ride_request):
+    """
+    Send email notifications to both driver and rider when a ride match is created.
+    
+    Args:
+        ride_request: The RideRequest that was created
+        
+    Returns:
+        None
+    """
+    try:
+        # Get all the necessary data
+        ride = ride_request.ride
+        rider = ride_request.rider
+        driver = ride.driver
+        
+        # Compose rider email
+        rider_subject = f"Your ride request has been matched!"
+        rider_message = f"""
+        Hello {rider.first_name},
+        
+        Great news! Your ride request has been matched with a driver.
+        
+        Ride Details:
+        - Driver: {driver.first_name} {driver.last_name}
+        - From: {ride_request.pickup_location}
+        - To: {ride_request.dropoff_location}
+        - Date/Time: {ride.departure_time.strftime('%m/%d/%Y at %I:%M %p')}
+        - Vehicle: {driver.vehicle_make} {driver.vehicle_model}, {driver.vehicle_color}
+        - License Plate: {driver.license_plate}
+        
+        Driver Contact: {driver.email}
+        
+        Please be at the pickup location on time. Safe travels!
+        
+        Best regards,
+        The Ridex Team
+        """
+        
+        # Compose driver email
+        driver_subject = f"A rider has been matched with your ride"
+        driver_message = f"""
+        Hello {driver.first_name},
+        
+        A rider has been matched with your ride.
+        
+        Ride Details:
+        - Rider: {rider.first_name} {rider.last_name}
+        - From: {ride.start_location}
+        - To: {ride.end_location}
+        - Date/Time: {ride.departure_time.strftime('%m/%d/%Y at %I:%M %p')}
+        - Pickup Location: {ride_request.pickup_location}
+        - Dropoff Location: {ride_request.dropoff_location}
+        
+        Rider Contact: {rider.email}
+        
+        Have a safe trip!
+        
+        Best regards,
+        The Ridex Team
+        """
+        
+        # Send emails
+        from django.core.mail import send_mail
+        
+        # Send to rider
+        send_mail(
+            subject=rider_subject,
+            message=rider_message,
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[rider.email],
+            fail_silently=False,
+        )
+        logger.info(f"Sent match notification email to rider {rider.email}")
+        
+        # Send to driver
+        send_mail(
+            subject=driver_subject,
+            message=driver_message,
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[driver.email],
+            fail_silently=False,
+        )
+        logger.info(f"Sent match notification email to driver {driver.email}")
+        
+    except Exception as e:
+        logger.error(f"Error sending ride match emails: {str(e)}")
+        logger.exception("Full exception details")
