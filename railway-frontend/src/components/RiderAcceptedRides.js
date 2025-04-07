@@ -953,6 +953,72 @@ const RiderAcceptedRides = () => {
               )}
             </Box>
             
+            {/* Display optimal pickup and dropoff points */}
+            {(ride.optimal_pickup_point || ride.nearest_dropoff_point) && (
+              <>
+                <Divider sx={{ my: 1 }} />
+                <Box sx={{ mt: 1 }}>
+                  <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 1 }}>
+                    Optimal Route Points
+                  </Typography>
+                  
+                  {ride.optimal_pickup_point && (
+                    <Box>
+                      <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
+                        Optimal Pickup:
+                      </Typography>
+                      <Box ml={2}>
+                        <Typography variant="body2">
+                          {ride.optimal_pickup_point.address || 'Address not available'}
+                        </Typography>
+                        {ride.optimal_pickup_point.distance_from_rider && (
+                          <Typography variant="body2" color="text.secondary">
+                            Distance: {(ride.optimal_pickup_point.distance_from_rider / 1000).toFixed(2)} km from requested pickup
+                          </Typography>
+                        )}
+                        <Button 
+                          size="small" 
+                          variant="outlined" 
+                          color="primary"
+                          sx={{ mt: 0.5, fontSize: '0.7rem' }}
+                          onClick={() => window.open(`https://www.google.com/maps/search/?api=1&query=${ride.optimal_pickup_point.latitude},${ride.optimal_pickup_point.longitude}`, '_blank')}
+                        >
+                          View on Maps
+                        </Button>
+                      </Box>
+                    </Box>
+                  )}
+                  
+                  {ride.nearest_dropoff_point && (
+                    <Box mt={1}>
+                      <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
+                        Optimal Dropoff:
+                      </Typography>
+                      <Box ml={2}>
+                        <Typography variant="body2">
+                          {ride.nearest_dropoff_point.address || 'Address not available'}
+                        </Typography>
+                        {ride.nearest_dropoff_point.distance_from_rider && (
+                          <Typography variant="body2" color="text.secondary">
+                            Distance: {(ride.nearest_dropoff_point.distance_from_rider / 1000).toFixed(2)} km from requested dropoff
+                          </Typography>
+                        )}
+                        <Button 
+                          size="small" 
+                          variant="outlined" 
+                          color="primary"
+                          sx={{ mt: 0.5, fontSize: '0.7rem' }}
+                          onClick={() => window.open(`https://www.google.com/maps/search/?api=1&query=${ride.nearest_dropoff_point.latitude},${ride.nearest_dropoff_point.longitude}`, '_blank')}
+                        >
+                          View on Maps
+                        </Button>
+                      </Box>
+                    </Box>
+                  )}
+                </Box>
+              </>
+            )}
+            
             <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 2 }}>
               {ride.status === 'ACCEPTED' && (
                 <Button

@@ -534,6 +534,104 @@ const RequestRide = () => {
     console.log('State changed - matchDetails:', matchDetails);
   }, [showMatchDialog, matchDetails]);
 
+  const getOptimalPickupDetails = () => {
+    // Get pickup data from all possible sources
+    const pickupData = matchDetails.optimal_pickup_point || 
+      (matchDetails.ride_request && matchDetails.ride_request.optimal_pickup_point) ||
+      (matchDetails.ride_request && matchDetails.ride_request.optimal_pickup_info);
+    
+    if (!pickupData) {
+      return <Typography variant="body2" color="text.secondary">No optimal pickup data available</Typography>;
+    }
+    
+    // Handle string format
+    let parsedData = pickupData;
+    if (typeof pickupData === 'string') {
+      try {
+        parsedData = JSON.parse(pickupData);
+      } catch (e) {
+        console.error('Error parsing pickup data:', e);
+        return <Typography variant="body2" color="text.secondary">Error parsing pickup data</Typography>;
+      }
+    }
+    
+    // Extract data with fallbacks
+    const address = parsedData.address || 'Address not available';
+    const latitude = parsedData.latitude || (parsedData.coordinates && parsedData.coordinates[0]);
+    const longitude = parsedData.longitude || (parsedData.coordinates && parsedData.coordinates[1]);
+    const distance = parsedData.distance_from_rider;
+    
+    return (
+      <>
+        <Typography variant="body2">{address}</Typography>
+        {distance && (
+          <Typography variant="body2" color="text.secondary">
+            {(distance / 1000).toFixed(2)} km from requested pickup
+          </Typography>
+        )}
+        {latitude && longitude && (
+          <Button 
+            size="small" 
+            variant="outlined"
+            sx={{ mt: 0.5, fontSize: '0.7rem' }}
+            onClick={() => window.open(`https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`, '_blank')}
+          >
+            View on Maps
+          </Button>
+        )}
+      </>
+    );
+  };
+
+  const getOptimalDropoffDetails = () => {
+    // Get dropoff data from all possible sources
+    const dropoffData = matchDetails.optimal_dropoff_point || 
+      (matchDetails.ride_request && matchDetails.ride_request.nearest_dropoff_point) ||
+      (matchDetails.ride_request && matchDetails.ride_request.nearest_dropoff_info);
+    
+    if (!dropoffData) {
+      return <Typography variant="body2" color="text.secondary">No optimal dropoff data available</Typography>;
+    }
+    
+    // Handle string format
+    let parsedData = dropoffData;
+    if (typeof dropoffData === 'string') {
+      try {
+        parsedData = JSON.parse(dropoffData);
+      } catch (e) {
+        console.error('Error parsing dropoff data:', e);
+        return <Typography variant="body2" color="text.secondary">Error parsing dropoff data</Typography>;
+      }
+    }
+    
+    // Extract data with fallbacks
+    const address = parsedData.address || 'Address not available';
+    const latitude = parsedData.latitude || (parsedData.coordinates && parsedData.coordinates[0]);
+    const longitude = parsedData.longitude || (parsedData.coordinates && parsedData.coordinates[1]);
+    const distance = parsedData.distance_from_rider;
+    
+    return (
+      <>
+        <Typography variant="body2">{address}</Typography>
+        {distance && (
+          <Typography variant="body2" color="text.secondary">
+            {(distance / 1000).toFixed(2)} km from requested dropoff
+          </Typography>
+        )}
+        {latitude && longitude && (
+          <Button 
+            size="small" 
+            variant="outlined"
+            sx={{ mt: 0.5, fontSize: '0.7rem' }}
+            onClick={() => window.open(`https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`, '_blank')}
+          >
+            View on Maps
+          </Button>
+        )}
+      </>
+    );
+  };
+
   return (
     <Container sx={{ px: 4, py: 3 }}>
       <Box sx={{ 
@@ -785,28 +883,30 @@ const RequestRide = () => {
               </Typography>
               <Grid container spacing={2}>
                 <Grid item xs={12} sm={6}>
-                  <Typography variant="body1">
+                  <Typography variant="body1" gutterBottom>
                     <strong>Requested Pickup:</strong> {matchDetails.pickup || 'Not provided'}
                   </Typography>
-                  <Typography variant="body1">
-                    <strong>Optimal Pickup:</strong> {formatCoordinates(
-                      matchDetails.optimal_pickup_point || 
-                      (matchDetails.ride_request && matchDetails.ride_request.optimal_pickup_point) ||
-                      (matchDetails.ride_request && matchDetails.ride_request.optimal_pickup_info)
-                    )}
-                  </Typography>
+                  
+                  {/* Enhanced Optimal Pickup Display */}
+                  <Box sx={{ mt: 1, mb: 2, pl: 1, borderLeft: '2px solid #1976d2' }}>
+                    <Typography variant="body1" fontWeight="bold">
+                      Optimal Pickup:
+                    </Typography>
+                    {getOptimalPickupDetails()}
+                  </Box>
                 </Grid>
                 <Grid item xs={12} sm={6}>
-                  <Typography variant="body1">
+                  <Typography variant="body1" gutterBottom>
                     <strong>Requested Dropoff:</strong> {matchDetails.dropoff || 'Not provided'}
                   </Typography>
-                  <Typography variant="body1">
-                    <strong>Optimal Dropoff:</strong> {formatCoordinates(
-                      matchDetails.optimal_dropoff_point || 
-                      (matchDetails.ride_request && matchDetails.ride_request.nearest_dropoff_point) ||
-                      (matchDetails.ride_request && matchDetails.ride_request.nearest_dropoff_info)
-                    )}
-                  </Typography>
+                  
+                  {/* Enhanced Optimal Dropoff Display */}
+                  <Box sx={{ mt: 1, mb: 2, pl: 1, borderLeft: '2px solid #1976d2' }}>
+                    <Typography variant="body1" fontWeight="bold">
+                      Optimal Dropoff:
+                    </Typography>
+                    {getOptimalDropoffDetails()}
+                  </Box>
                 </Grid>
               </Grid>
             </>

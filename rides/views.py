@@ -1145,7 +1145,7 @@ fix_notification_field_names()
 
 def send_ride_match_emails(ride_request):
     """
-    Send email notifications to both driver and rider when a ride match is created.
+    Send email notifications to both rider and driver about a ride match.
     
     Args:
         ride_request: The RideRequest that was created
@@ -1159,51 +1159,114 @@ def send_ride_match_emails(ride_request):
         rider = ride_request.rider
         driver = ride.driver
         
+        # Extract optimal pickup and dropoff information
+        optimal_pickup_info = None
+        optimal_dropoff_info = None
+        
+        if ride_request.optimal_pickup_point:
+            if isinstance(ride_request.optimal_pickup_point, dict):
+                optimal_pickup_info = ride_request.optimal_pickup_point
+            elif isinstance(ride_request.optimal_pickup_point, str):
+                try:
+                    optimal_pickup_info = json.loads(ride_request.optimal_pickup_point)
+                except:
+                    logger.error("Failed to parse optimal_pickup_point JSON")
+        
+        if ride_request.nearest_dropoff_point:
+            if isinstance(ride_request.nearest_dropoff_point, dict):
+                optimal_dropoff_info = ride_request.nearest_dropoff_point
+            elif isinstance(ride_request.nearest_dropoff_point, str):
+                try:
+                    optimal_dropoff_info = json.loads(ride_request.nearest_dropoff_point)
+                except:
+                    logger.error("Failed to parse nearest_dropoff_point JSON")
+        
+        # Format pickup and dropoff information
+        pickup_details = ""
+        if optimal_pickup_info:
+            address = optimal_pickup_info.get('address', 'Address unavailable')
+            lat = optimal_pickup_info.get('latitude')
+            lng = optimal_pickup_info.get('longitude')
+            distance = optimal_pickup_info.get('distance_from_rider')
+            
+            distance_text = f"{distance:.2f} meters" if distance else "N/A"
+            
+            pickup_details = f"""
+Optimal Pickup Point:
+- Address: {address}
+- Coordinates: {lat}, {lng}
+- Distance from requested pickup: {distance_text}
+- Maps Link: https://www.google.com/maps/search/?api=1&query={lat},{lng}
+"""
+        
+        dropoff_details = ""
+        if optimal_dropoff_info:
+            address = optimal_dropoff_info.get('address', 'Address unavailable')
+            lat = optimal_dropoff_info.get('latitude')
+            lng = optimal_dropoff_info.get('longitude')
+            distance = optimal_dropoff_info.get('distance_from_rider')
+            
+            distance_text = f"{distance:.2f} meters" if distance else "N/A"
+            
+            dropoff_details = f"""
+Optimal Dropoff Point:
+- Address: {address}
+- Coordinates: {lat}, {lng}
+- Distance from requested dropoff: {distance_text}
+- Maps Link: https://www.google.com/maps/search/?api=1&query={lat},{lng}
+"""
+        
         # Compose rider email
         rider_subject = f"Your ride request has been matched!"
         rider_message = f"""
-        Hello {rider.first_name},
-        
-        Great news! Your ride request has been matched with a driver.
-        
-        Ride Details:
-        - Driver: {driver.first_name} {driver.last_name}
-        - From: {ride_request.pickup_location}
-        - To: {ride_request.dropoff_location}
-        - Date/Time: {ride.departure_time.strftime('%m/%d/%Y at %I:%M %p')}
-        - Vehicle: {driver.vehicle_make} {driver.vehicle_model}, {driver.vehicle_color}
-        - License Plate: {driver.license_plate}
-        
-        Driver Contact: {driver.email}
-        
-        Please be at the pickup location on time. Safe travels!
-        
-        Best regards,
-        The Ridex Team
-        """
+Hello {rider.first_name},
+
+Great news! Your ride request has been matched with a driver.
+
+Ride Details:
+- Driver: {driver.first_name} {driver.last_name}
+- From: {ride_request.pickup_location}
+- To: {ride_request.dropoff_location}
+- Date/Time: {ride.departure_time.strftime('%m/%d/%Y at %I:%M %p')}
+- Vehicle: {driver.vehicle_make} {driver.vehicle_model}, {driver.vehicle_color}
+- License Plate: {driver.license_plate}
+
+{pickup_details}
+{dropoff_details}
+
+Driver Contact: {driver.email}
+
+Please be at the pickup location on time. Safe travels!
+
+Best regards,
+The Ridex Team
+"""
         
         # Compose driver email
         driver_subject = f"A rider has been matched with your ride"
         driver_message = f"""
-        Hello {driver.first_name},
-        
-        A rider has been matched with your ride.
-        
-        Ride Details:
-        - Rider: {rider.first_name} {rider.last_name}
-        - From: {ride.start_location}
-        - To: {ride.end_location}
-        - Date/Time: {ride.departure_time.strftime('%m/%d/%Y at %I:%M %p')}
-        - Pickup Location: {ride_request.pickup_location}
-        - Dropoff Location: {ride_request.dropoff_location}
-        
-        Rider Contact: {rider.email}
-        
-        Have a safe trip!
-        
-        Best regards,
-        The Ridex Team
-        """
+Hello {driver.first_name},
+
+A rider has been matched with your ride.
+
+Ride Details:
+- Rider: {rider.first_name} {rider.last_name}
+- From: {ride.start_location}
+- To: {ride.end_location}
+- Date/Time: {ride.departure_time.strftime('%m/%d/%Y at %I:%M %p')}
+- Pickup Location: {ride_request.pickup_location}
+- Dropoff Location: {ride_request.dropoff_location}
+
+{pickup_details}
+{dropoff_details}
+
+Rider Contact: {rider.email}
+
+Have a safe trip!
+
+Best regards,
+The Ridex Team
+"""
         
         # Send emails
         from django.core.mail import send_mail
