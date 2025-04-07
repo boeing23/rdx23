@@ -30,6 +30,7 @@ import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
 import SearchIcon from '@mui/icons-material/Search';
 import { getUserCurrentLocation, DEFAULT_LOCATION, geocodeWithPriority } from '../utils/locationUtils';
+import { format } from 'date-fns';
 
 const formatCoordinates = (point) => {
   if (!point) return 'Not available';
@@ -54,6 +55,17 @@ const formatCoordinates = (point) => {
   }
   
   return 'Invalid format';
+};
+
+// Add the missing formatDate function
+const formatDate = (dateString) => {
+  try {
+    const date = new Date(dateString);
+    return format(date, 'MMM d, yyyy h:mm a');
+  } catch (error) {
+    console.error('Error formatting date:', error);
+    return dateString || 'Not available';
+  }
 };
 
 const RequestRide = () => {
