@@ -370,15 +370,15 @@ def generate_route(start_coords, end_coords, max_retries=3, retry_delay=2):
     start_lng, start_lat = start_coords
     end_lng, end_lat = end_coords
     
-        # Validate coordinates
+    # Validate coordinates
     if not all(isinstance(x, (int, float)) for x in [start_lng, start_lat, end_lng, end_lat]):
         logger.error(f"Invalid coordinate values: start={start_coords}, end={end_coords}")
         return None
         
     # Construct the API request
     url = f"{OPENROUTE_BASE_URL}/directions/driving-car"
-                headers = {
-                    'Authorization': ORS_API_KEY,
+    headers = {
+        'Authorization': ORS_API_KEY,
         'Accept': 'application/json, application/geo+json, application/gpx+xml, img/png; charset=utf-8'
     }
     params = {
@@ -392,16 +392,16 @@ def generate_route(start_coords, end_coords, max_retries=3, retry_delay=2):
             logger.info(f"Calling OpenRouteService directions API (attempt {attempt + 1}/{max_retries}) for route from ({start_lng}, {start_lat}) to ({end_lng}, {end_lat})")
             
             response = requests.get(url, headers=headers, params=params, timeout=15)
-                
-                if response.status_code == 200:
-                    data = response.json()
+            
+            if response.status_code == 200:
+                data = response.json()
                 if 'features' in data and data['features']:
                     # Extract coordinates from the route
                     coordinates = data['features'][0]['geometry']['coordinates']
                     logger.info(f"Successfully generated route with {len(coordinates)} points")
-                                return coordinates
-                    else:
-                        logger.warning("No features found in directions API response")
+                    return coordinates
+                else:
+                    logger.warning("No features found in directions API response")
                     if attempt < max_retries - 1:
                         time.sleep(retry_delay)
                         continue
@@ -412,21 +412,21 @@ def generate_route(start_coords, end_coords, max_retries=3, retry_delay=2):
                 retry_after = int(response.headers.get('Retry-After', retry_delay))
                 logger.warning(f"Rate limited by OpenRouteService, retrying after {retry_after} seconds")
                 time.sleep(retry_after)
-                    continue
-                else:
+                continue
+            else:
                 logger.error(f"OpenRouteService API error: {response.status_code} - {response.text}")
-                    if attempt < max_retries - 1:
-                        time.sleep(retry_delay)
-                        continue
-            
-        except requests.exceptions.RequestException as e:
-            logger.error(f"Request error in generate_route: {str(e)}")
                 if attempt < max_retries - 1:
                     time.sleep(retry_delay)
                     continue
-        
+                    
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Request error in generate_route: {str(e)}")
+            if attempt < max_retries - 1:
+                time.sleep(retry_delay)
+                continue
+                
     # If all retries failed, use fallback method
-        logger.warning("OpenRouteService APIs failed or not accessible, using straight line fallback method")
+    logger.warning("OpenRouteService APIs failed or not accessible, using straight line fallback method")
     return generate_fallback_route(start_coords, end_coords)
 
 def generate_fallback_route(start_coords, end_coords, num_points=10):
