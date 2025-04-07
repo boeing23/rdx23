@@ -526,7 +526,7 @@ def create_match_notifications(ride_request):
         if optimal_dropoff_point:
             dropoff_message = f" (Optimal dropoff point: {optimal_dropoff_point[1]:.6f}, {optimal_dropoff_point[0]:.6f})"
         
-        # Notify rider
+        # Notify rider - use REQUEST_ACCEPTED for consistency with frontend expectations
         Notification.objects.create(
             recipient=rider,
             sender=ride.driver,
@@ -534,10 +534,10 @@ def create_match_notifications(ride_request):
                    f"has been matched with a ride{pickup_message}{dropoff_message}",
             ride=ride,
             ride_request=ride_request,
-            notification_type='RIDE_MATCH'
+            notification_type='REQUEST_ACCEPTED'  # Changed from RIDE_MATCH
         )
         
-        # Notify driver
+        # Notify driver - use RIDE_REQUEST for consistency
         Notification.objects.create(
             recipient=ride.driver,
             sender=rider,

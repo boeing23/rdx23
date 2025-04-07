@@ -985,7 +985,20 @@ class RideViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         """Get rides for the current user"""
         user = self.request.user
-        return Ride.objects.filter(Q(driver=user) | Q(riderequest__rider=user)).distinct()
+        logger.info(f"Getting rides for user: {user.username}, type: {getattr(user, 'user_type', 'unknown')}")
+        
+        # For drivers, show only their rides
+        if hasattr(user, 'user_type') and user.user_type == 'DRIVER':
+            logger.info("User is a driver, returning driver's rides")
+            return Ride.objects.filter(driver=user)
+        
+        # For riders, show all available rides and rides they're part of
+        logger.info("User is a rider, returning available rides and rides they're part of")
+        return Ride.objects.filter(
+            Q(status='SCHEDULED') &  # Only show scheduled rides
+            Q(departure_time__gte=timezone.now()) &  # Only future rides
+            Q(available_seats__gt=0)  # With available seats
+        ).exclude(driver=user).distinct()
 
     @staticmethod
     def check_pending_requests(ride):

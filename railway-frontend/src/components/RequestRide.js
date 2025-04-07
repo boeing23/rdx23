@@ -21,12 +21,15 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
-  CircularProgress
+  CircularProgress,
+  Radio,
+  AlertTitle
 } from '@mui/material';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
 import SearchIcon from '@mui/icons-material/Search';
+import GoogleMapReact from 'google-map-react';
 import { getUserCurrentLocation, DEFAULT_LOCATION, geocodeWithPriority } from '../utils/locationUtils';
 
 const RequestRide = () => {
@@ -141,8 +144,38 @@ const RequestRide = () => {
         setError('Please log in to request a ride');
         return;
       }
+      
+      // Get the first available ride for testing
+      let rideId = null;
+      
+      try {
+        const ridesResponse = await fetch(`${API_BASE_URL}/api/rides/rides/`, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        
+        if (ridesResponse.ok) {
+          const rides = await ridesResponse.json();
+          if (rides && rides.length > 0) {
+            rideId = rides[0].id;
+            console.log('Selected ride ID for request:', rideId);
+          }
+        }
+      } catch (rideError) {
+        console.error('Error fetching rides:', rideError);
+      }
+      
+      if (!rideId) {
+        setError('No available rides found. Please try again later.');
+        setLoading(false);
+        isSubmitting.current = false;
+        return;
+      }
 
       const requestData = {
+        ride: rideId, // Use the fetched ride ID
         pickup_location: pickupLocation,
         dropoff_location: dropoffLocation,
         pickup_latitude: pickupCoordinates.lat,
