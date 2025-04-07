@@ -290,10 +290,8 @@ def calculate_route_overlap(driver_start, driver_end, rider_pickup, rider_dropof
             return 0.0, None, None
         
         # Ensure coordinates are in the correct format (lng, lat)
-        # Check if any coordinates appear to be in reversed order (lat, lng)
         def ensure_lng_lat_format(coords):
             lng, lat = coords
-            # Try to convert to float if not already
             try:
                 lng = float(lng)
                 lat = float(lat)
@@ -301,11 +299,7 @@ def calculate_route_overlap(driver_start, driver_end, rider_pickup, rider_dropof
                 logger.error(f"Invalid coordinate values: {coords}")
                 return None
                 
-            # Basic range check to detect if values are flipped
-            # Longitude typically ranges from -180 to 180
-            # Latitude typically ranges from -90 to 90
             if abs(lng) <= 90 and abs(lat) > 90:
-                # Values appear to be flipped, correct them
                 logger.warning(f"Coordinates appear to be in (lat, lng) format, correcting: {coords}")
                 return (lat, lng)
             return (lng, lat)
@@ -324,153 +318,102 @@ def calculate_route_overlap(driver_start, driver_end, rider_pickup, rider_dropof
         driver_route = generate_route(driver_start, driver_end)
         rider_route = generate_route(rider_pickup, rider_dropoff)
         
-        logger.info(f"Generated driver route with {len(driver_route)} points")
-        logger.info(f"Generated rider route with {len(rider_route)} points")
-        
         if not driver_route or not rider_route:
             logger.error("Failed to generate routes")
             return 0.0, None, None
         
-        # Find the nearest point on the driver's route to the rider's dropoff
-        min_distance = float('inf')
-        nearest_point = None
-        nearest_point_index = 0
-        
-        for i, point in enumerate(driver_route):
-            distance = calculate_distance(point, rider_dropoff)
-            if distance < min_distance:
-                min_distance = distance
-                nearest_point = point
-                nearest_point_index = i
-        
-        logger.info(f"Nearest dropoff point found at driver route index {nearest_point_index} with distance {min_distance:.2f}m")
-        
-        # Find an optimal pickup point along the driver's route that is closest to the rider's pickup
-        pickup_min_distance = float('inf')
-        optimal_pickup_point = None
-        optimal_pickup_index = 0
-        
-        # Only consider points before the dropoff point in the driver's route
-        for i, point in enumerate(driver_route[:nearest_point_index + 1]):
-            distance = calculate_distance(point, rider_pickup)
-            if distance < pickup_min_distance:
-                pickup_min_distance = distance
-                optimal_pickup_point = point
-                optimal_pickup_index = i
-        
-        logger.info(f"Optimal pickup point found at driver route index {optimal_pickup_index} with distance {pickup_min_distance:.2f}m")
-        
-        # More advanced overlap calculation
-        overlap_count = 0
-        total_points = len(driver_route)
-        
-        # Consider directional compatibility by checking segments between consecutive points
-        driver_direction_vectors = []
-        rider_direction_vectors = []
-        
-        # Calculate direction vectors for driver route
-        for i in range(len(driver_route) - 1):
-            p1 = driver_route[i]
-            p2 = driver_route[i + 1]
-            vector = (p2[0] - p1[0], p2[1] - p1[1])  # (delta_lng, delta_lat)
-            mag = (vector[0]**2 + vector[1]**2)**0.5
-            if mag > 0:
-                normalized = (vector[0]/mag, vector[1]/mag)
-                driver_direction_vectors.append(normalized)
-        
-        # Calculate direction vectors for rider route
-        for i in range(len(rider_route) - 1):
-            p1 = rider_route[i]
-            p2 = rider_route[i + 1]
-            vector = (p2[0] - p1[0], p2[1] - p1[1])
-            mag = (vector[0]**2 + vector[1]**2)**0.5
-            if mag > 0:
-                normalized = (vector[0]/mag, vector[1]/mag)
-                rider_direction_vectors.append(normalized)
-        
-        # Calculate direction similarity using a sliding window approach
-        direction_similarities = []
-        window_size = min(10, len(driver_direction_vectors), len(rider_direction_vectors))
-        
-        if window_size > 0:
-            for i in range(len(driver_direction_vectors) - window_size + 1):
-                for j in range(len(rider_direction_vectors) - window_size + 1):
-                    similarity_sum = 0
-                    for k in range(window_size):
-                        # Dot product of normalized vectors = cosine similarity
-                        d_vec = driver_direction_vectors[i + k]
-                        r_vec = rider_direction_vectors[j + k]
-                        dot_product = d_vec[0] * r_vec[0] + d_vec[1] * r_vec[1]
-                        similarity_sum += max(0, dot_product)  # Only count positive similarity
-                    
-                    avg_similarity = similarity_sum / window_size
-                    direction_similarities.append(avg_similarity)
-        
-        max_direction_similarity = max(direction_similarities) if direction_similarities else 0
-        logger.info(f"Maximum direction similarity: {max_direction_similarity:.4f}")
-        
-        # Calculate spatial proximity
-        proximity_counts = 0
-        PROXIMITY_THRESHOLD = 100  # meters
-        
-        # Pair points from both routes to find those that are within the threshold distance
-        for d_point in driver_route:
-            for r_point in rider_route:
-                if calculate_distance(d_point, r_point) <= PROXIMITY_THRESHOLD:
-                    proximity_counts += 1
-                    break  # Count each driver point only once if it's close to any rider point
-        
-        proximity_percentage = (proximity_counts / len(driver_route)) * 100 if driver_route else 0
-        logger.info(f"Proximity percentage: {proximity_percentage:.2f}%")
-        
-        # Consider the paths between optimal pickup and dropoff
-        if optimal_pickup_index is not None and nearest_point_index is not None:
-            # Path segment between pickup and dropoff on driver's route
-            driver_segment = driver_route[optimal_pickup_index:nearest_point_index+1]
+        def find_optimal_point(route, target_point):
+            """Find optimal point along a route closest to target point using vector projection"""
+            min_dist = float('inf')
+            optimal_point = None
             
-            # For rider, consider their entire route as we want to find overlaps
-            rider_segment = rider_route
+            for i in range(len(route) - 1):
+                p1, p2 = route[i], route[i+1]
+                
+                # Vector calculations
+                vec = (p2[0]-p1[0], p2[1]-p1[1])
+                vec_target = (target_point[0]-p1[0], target_point[1]-p1[1])
+                
+                # Projection calculation
+                t = (vec_target[0]*vec[0] + vec_target[1]*vec[1]) / (vec[0]**2 + vec[1]**2 + 1e-8)
+                t = max(0, min(1, t))
+                closest = (p1[0] + t*vec[0], p1[1] + t*vec[1])
+                
+                dist = calculate_distance(closest, target_point)
+                
+                if dist < min_dist:
+                    min_dist = dist
+                    optimal_point = closest
             
-            # Count points in the driver segment that are close to any point in the rider segment
-            segment_overlap_count = 0
-            for d_point in driver_segment:
-                for r_point in rider_segment:
-                    if calculate_distance(d_point, r_point) <= PROXIMITY_THRESHOLD:
-                        segment_overlap_count += 1
+            return optimal_point, min_dist
+        
+        # Find optimal pickup and dropoff points using vector projection
+        optimal_pickup_point, pickup_dist = find_optimal_point(driver_route, rider_pickup)
+        nearest_point, dropoff_dist = find_optimal_point(driver_route, rider_dropoff)
+        
+        logger.info(f"Optimal pickup point found with distance {pickup_dist:.2f}m")
+        logger.info(f"Nearest dropoff point found with distance {dropoff_dist:.2f}m")
+        
+        # Calculate route overlap using improved algorithm
+        def calculate_segment_overlap(route1, route2, threshold=200):
+            """Calculate percentage of points in route1 that are close to any point in route2"""
+            proximity_count = 0
+            for p1 in route1:
+                for p2 in route2:
+                    if calculate_distance(p1, p2) <= threshold:
+                        proximity_count += 1
                         break
+            return (proximity_count / len(route1)) * 100 if route1 else 0
+        
+        # Calculate overlap in both directions
+        driver_to_rider_overlap = calculate_segment_overlap(driver_route, rider_route)
+        rider_to_driver_overlap = calculate_segment_overlap(rider_route, driver_route)
+        
+        # Calculate directional similarity
+        def calculate_direction_similarity(route1, route2):
+            """Calculate how similar the directions of two routes are"""
+            if len(route1) < 2 or len(route2) < 2:
+                return 0.0
+                
+            # Calculate overall direction vectors
+            vec1 = (route1[-1][0] - route1[0][0], route1[-1][1] - route1[0][1])
+            vec2 = (route2[-1][0] - route2[0][0], route2[-1][1] - route2[0][1])
             
-            segment_overlap_percentage = (segment_overlap_count / len(driver_segment)) * 100 if driver_segment else 0
-            logger.info(f"Segment overlap percentage: {segment_overlap_percentage:.2f}%")
-        else:
-            segment_overlap_percentage = 0
+            # Normalize vectors
+            mag1 = (vec1[0]**2 + vec1[1]**2)**0.5
+            mag2 = (vec2[0]**2 + vec2[1]**2)**0.5
+            
+            if mag1 == 0 or mag2 == 0:
+                return 0.0
+                
+            vec1 = (vec1[0]/mag1, vec1[1]/mag1)
+            vec2 = (vec2[0]/mag2, vec2[1]/mag2)
+            
+            # Calculate dot product (cosine of angle between vectors)
+            dot_product = vec1[0]*vec2[0] + vec1[1]*vec2[1]
+            return max(0, dot_product)  # Only consider angles <= 90 degrees
         
-        # Combine all factors to determine overall overlap
-        # Weight the different factors based on their importance
-        direction_weight = 0.3
-        proximity_weight = 0.3
-        segment_weight = 0.4
+        direction_similarity = calculate_direction_similarity(driver_route, rider_route)
         
-        # Calculate weighted overlap percentage
+        # Calculate weighted overlap score
+        OVERLAP_WEIGHT = 0.6
+        DIRECTION_WEIGHT = 0.4
+        
         weighted_overlap = (
-            direction_weight * max_direction_similarity * 100 +
-            proximity_weight * proximity_percentage +
-            segment_weight * segment_overlap_percentage
+            OVERLAP_WEIGHT * (driver_to_rider_overlap + rider_to_driver_overlap) / 2 +
+            DIRECTION_WEIGHT * direction_similarity * 100
         )
         
-        logger.info(f"Weighted overlap: {weighted_overlap:.2f}%")
-        
-        # Apply additional bonuses for special cases
-        # If rider and driver share the same end point
-        if calculate_distance(driver_end, rider_dropoff) <= 200:  # Within 200m
+        # Apply bonuses
+        if calculate_distance(driver_end, rider_dropoff) <= 200:
             logger.info("Bonus: Rider and driver share same destination")
-            weighted_overlap += 10  # 10% bonus
+            weighted_overlap += 10
         
-        # If the route is generally aligned (same direction)
-        if max_direction_similarity > 0.8:  # High directional similarity
+        if direction_similarity > 0.8:
             logger.info("Bonus: Routes have high directional similarity")
-            weighted_overlap += 5  # 5% bonus
+            weighted_overlap += 5
         
-        # Ensure the overlap is within reasonable bounds
+        # Ensure final score is between 0 and 100
         overlap_percentage = max(0, min(100, weighted_overlap))
         logger.info(f"Final overlap percentage: {overlap_percentage:.2f}%")
         
