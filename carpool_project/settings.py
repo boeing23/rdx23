@@ -28,12 +28,12 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.0/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = config('SECRET_KEY')
+SECRET_KEY = config('SECRET_KEY', default='+@q$ijva4ep$rnp)2o%%pgnms@mxgt6!n%w644@=l2%832^#ee')
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = config('DEBUG', default=False, cast=bool)
 
-ALLOWED_HOSTS = ['localhost', '127.0.0.1', '.railway.app']
+ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='.railway.app,localhost,127.0.0.1').split(',')
 
 
 # Application definition
@@ -67,14 +67,14 @@ ROOT_URLCONF = "carpool_project.urls"
 # Email Configuration
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = 'smtp.gmail.com'
-EMAIL_PORT = 465
+EMAIL_PORT = config('EMAIL_PORT', default=465, cast=int)
 EMAIL_USE_TLS = False
-EMAIL_USE_SSL = True
+EMAIL_USE_SSL = config('EMAIL_USE_SSL', default=True, cast=bool)
 EMAIL_TIMEOUT = 30
-EMAIL_HOST_USER = 'ridex2429@gmail.com'
-EMAIL_HOST_PASSWORD = 'covhotczhrbzvcfy'
-DEFAULT_FROM_EMAIL = 'ridex2429@gmail.com'
-SERVER_EMAIL = 'ridex2429@gmail.com'
+EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='ridex2429@gmail.com')
+EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='covhotczhrbzvcfy')
+DEFAULT_FROM_EMAIL = config('EMAIL_HOST_USER', default='ridex2429@gmail.com')
+SERVER_EMAIL = config('EMAIL_HOST_USER', default='ridex2429@gmail.com')
 
 TEMPLATES = [
     {
@@ -100,7 +100,7 @@ WSGI_APPLICATION = "carpool_project.wsgi.application"
 
 DATABASES = {
     'default': dj_database_url.config(
-        default='sqlite:///db.sqlite3',
+        default=config('DATABASE_URL', default='sqlite:///db.sqlite3'),
         conn_max_age=600,
         conn_health_checks=True
     )
@@ -211,7 +211,7 @@ CORS_ALLOW_HEADERS = [
 
 # Geocoding API settings
 GEOCODING_API_KEY = config('GEOCODING_API_KEY', default='5b3ce3597851110001cf62482c1ae097a0b848ef81a1e5085aa27c1f')
-MAPBOX_ACCESS_TOKEN = config('MAPBOX_ACCESS_TOKEN')
+MAPBOX_ACCESS_TOKEN = config('MAPBOX_ACCESS_TOKEN', default='')
 OPENROUTE_API_KEY = config('OPENROUTE_API_KEY', default='5b3ce3597851110001cf62482c1ae097a0b848ef81a1e5085aa27c1f')
 
 # OpenRouteService settings
