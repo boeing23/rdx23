@@ -1089,14 +1089,14 @@ class RideRequestViewSet(viewsets.ModelViewSet):
                 # Verify the user is the rider
                 if pending_request.rider != request.user:
                     raise PermissionDenied("You can only accept your own ride requests")
-
+    
                 # Check if the request is in MATCH_PROPOSED state
                 if pending_request.status != 'MATCH_PROPOSED':
                     return Response(
-                            {"error": f"This request is not in a state to be accepted. Current status: {pending_request.status}"},
+                                {"error": f"This request is not in a state to be accepted. Current status: {pending_request.status}"},
                         status=status.HTTP_400_BAD_REQUEST
                     )
-
+    
                 # Get the proposed ride
                 proposed_ride = pending_request.proposed_ride
                 if not proposed_ride:
@@ -1124,17 +1124,17 @@ class RideRequestViewSet(viewsets.ModelViewSet):
                     compatibility_score = overlap_result.get("compatibility_score", 0)
                     optimal_pickup_point = overlap_result.get("optimal_pickup_point")
                     optimal_dropoff_point = overlap_result.get("optimal_dropoff_point")
-                    
+                        
                     logger.info(f"Calculated optimal pickup point: {optimal_pickup_point}")
                     logger.info(f"Calculated optimal dropoff point: {optimal_dropoff_point}")
                 except Exception as e:
                     logger.error(f"Error calculating optimal points for match: {str(e)}")
                     logger.exception("Full exception details")
                     # Continue with the request even if calculation fails
-
+    
                 # Log the points before creating the ride request
                 logger.info(f"Creating RideRequest with optimal_pickup_point={optimal_pickup_point}, nearest_dropoff_point={optimal_dropoff_point}")
-
+    
                 # Create a RideRequest with the optimal points
                 ride_request = RideRequest.objects.create(
                     rider=pending_request.rider,
@@ -1151,18 +1151,18 @@ class RideRequestViewSet(viewsets.ModelViewSet):
                     optimal_pickup_point=optimal_pickup_point,
                     nearest_dropoff_point=optimal_dropoff_point
                 )
-                
+                    
                 # Double-check that the optimal points were saved
                 ride_request.refresh_from_db()
                 logger.info(f"Saved RideRequest with ID {ride_request.id}")
                 logger.info(f"Saved optimal_pickup_point: {ride_request.optimal_pickup_point}")
                 logger.info(f"Saved nearest_dropoff_point: {ride_request.nearest_dropoff_point}")
-
+    
                 # Update the pending request status
                 pending_request.status = 'MATCHED'
                 pending_request.matched_ride_request = ride_request
                 pending_request.save()
-
+    
                 # Decrement the available seats in the ride
                 logger.info(f"BEFORE SEAT UPDATE: Ride {proposed_ride.id} has {proposed_ride.available_seats} available seats")
                 logger.info(f"Going to decrease seats by {pending_request.seats_needed}")
@@ -1183,7 +1183,7 @@ class RideRequestViewSet(viewsets.ModelViewSet):
                         logger.info(f"Ride {proposed_ride.id} is now full, updating status")
                         proposed_ride.status = 'FULL'
                         proposed_ride.save()
-
+    
                 # Create notifications and send emails
                 try:
                     create_match_notifications(ride_request)
@@ -1195,7 +1195,7 @@ class RideRequestViewSet(viewsets.ModelViewSet):
                 except Exception as e:
                     logger.error(f"Error creating notifications or sending emails: {str(e)}")
                     logger.exception("Full exception details")
-
+    
                 return Response({
                     "status": "success",
                     "message": "Match accepted successfully",
