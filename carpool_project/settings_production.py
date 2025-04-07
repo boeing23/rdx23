@@ -114,10 +114,8 @@ CORS_EXPOSE_HEADERS = ['*']
 if 'corsheaders.middleware.CorsMiddleware' in MIDDLEWARE:
     MIDDLEWARE.remove('corsheaders.middleware.CorsMiddleware')
 MIDDLEWARE.insert(0, 'corsheaders.middleware.CorsMiddleware')
-# Add CORS response middleware to ensure all responses have CORS headers
-MIDDLEWARE.insert(1, 'corsheaders.middleware.CorsPostCsrfMiddleware')
 # Add our custom CORS middleware as a final fallback
-MIDDLEWARE.insert(2, 'carpool_project.cors_middleware.CORSMiddleware')
+MIDDLEWARE.insert(1, 'carpool_project.cors_middleware.CORSMiddleware')
 
 # Explicit CORS allowed origins
 CORS_ALLOWED_ORIGINS = [
