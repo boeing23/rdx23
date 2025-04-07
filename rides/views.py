@@ -39,7 +39,9 @@ logger = logging.getLogger(__name__)
 geolocator = Nominatim(user_agent="carpool_app")
 
 # OpenRouteService API constants
-ORS_API_KEY = getattr(settings, 'ORS_API_KEY', "5b3ce3597851110001cf62482c1ae097a0b848ef81a1e5085aa27c1f")
+ORS_API_KEY = getattr(settings, 'ORS_API_KEY', None)
+if not ORS_API_KEY:
+    logger.error("OpenRouteService API key not configured in settings")
 OPENROUTE_BASE_URL = "https://api.openrouteservice.org/v2"
 
 def calculate_distance(point1, point2):
@@ -450,11 +452,10 @@ def generate_route(start_coords, end_coords, max_retries=3, retry_delay=2):
         logger.error("Missing coordinates for route generation")
         return None
         
-    # Get API key from Django settings with fallback
-    api_key = getattr(settings, 'ORS_API_KEY', '5b3ce3597851110001cf6248e3c8b3b1b0d14c0c8c1b1b1b1b1b1b1')
-    if not api_key:
-        logger.error("OpenRouteService API key not configured")
-        return None
+    # Check if API key is available
+    if not ORS_API_KEY:
+        logger.error("OpenRouteService API key not configured, using fallback method")
+        return generate_fallback_route(start_coords, end_coords)
         
     # Ensure coordinates are in the correct format (lng, lat)
     start_lng, start_lat = start_coords
@@ -468,7 +469,7 @@ def generate_route(start_coords, end_coords, max_retries=3, retry_delay=2):
     # Construct the API request
     url = f"{OPENROUTE_BASE_URL}/directions/driving-car"
     headers = {
-        'Authorization': api_key,
+        'Authorization': ORS_API_KEY,
         'Accept': 'application/json, application/geo+json, application/gpx+xml, img/png; charset=utf-8'
     }
     params = {
@@ -495,6 +496,9 @@ def generate_route(start_coords, end_coords, max_retries=3, retry_delay=2):
                     if attempt < max_retries - 1:
                         time.sleep(retry_delay)
                         continue
+            elif response.status_code == 403:
+                logger.error("OpenRouteService API key rejected (403 Forbidden)")
+                return generate_fallback_route(start_coords, end_coords)
             elif response.status_code == 429:  # Rate limit
                 retry_after = int(response.headers.get('Retry-After', retry_delay))
                 logger.warning(f"Rate limited by OpenRouteService, retrying after {retry_after} seconds")
@@ -514,15 +518,18 @@ def generate_route(start_coords, end_coords, max_retries=3, retry_delay=2):
                 
     # If all retries failed, use fallback method
     logger.warning("OpenRouteService APIs failed or not accessible, using straight line fallback method")
+    return generate_fallback_route(start_coords, end_coords)
+
+def generate_fallback_route(start_coords, end_coords, num_points=10):
+    """Generate a fallback route using straight line interpolation"""
     logger.warning("IMPORTANT: Using straight line approximation which may not reflect actual roads")
-    
-    # Generate a simple straight line route with some intermediate points
     logger.info("Using fallback route generation method (straight line with enhancements)")
     
-    # Calculate intermediate points
-    num_points = 10  # Number of points to generate
-    route = []
+    start_lng, start_lat = start_coords
+    end_lng, end_lat = end_coords
     
+    # Calculate intermediate points
+    route = []
     for i in range(num_points + 1):
         t = i / num_points
         lng = start_lng + t * (end_lng - start_lng)
@@ -1111,14 +1118,17 @@ class RideRequestViewSet(viewsets.ModelViewSet):
                 logger.info(f"Calculated optimal dropoff point: {optimal_dropoff_point}")
             except Exception as e:
                 logger.error(f"Error calculating optimal points for match: {str(e)}")
+                # Continue with the request even if calculation fails
 
-            # Create a RideRequest
+            # Create a RideRequest with the optimal points
             ride_request = RideRequest.objects.create(
                 rider=pending_request.rider,
                 ride=proposed_ride,
                 pickup_location=pending_request.pickup_location,
                 dropoff_location=pending_request.dropoff_location,
-                seats_needed=pending_request.seats_needed
+                seats_needed=pending_request.seats_needed,
+                optimal_pickup_point=optimal_pickup_point,
+                nearest_dropoff_point=optimal_dropoff_point
             )
 
             # Update the pending request status
