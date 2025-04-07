@@ -958,10 +958,20 @@ class RideRequestViewSet(viewsets.ModelViewSet):
             # If either optimal point is None, treat it as no match
             if not optimal_pickup_point or not optimal_dropoff_point:
                 logger.warning(f"Match failed: Missing optimal points")
-                # Explicitly set rider in a separate step to ensure it's not null
-                ride_request = serializer.save()
-                ride_request.rider = request.user
-                ride_request.status = 'PENDING'
+                # Create the request with rider explicitly set
+                ride_request = RideRequest(
+                    ride=ride,
+                    rider=request.user,
+                    pickup_location=serializer.validated_data['pickup_location'],
+                    dropoff_location=serializer.validated_data['dropoff_location'],
+                    pickup_latitude=serializer.validated_data['pickup_latitude'],
+                    pickup_longitude=serializer.validated_data['pickup_longitude'],
+                    dropoff_latitude=serializer.validated_data['dropoff_latitude'],
+                    dropoff_longitude=serializer.validated_data['dropoff_longitude'],
+                    departure_time=serializer.validated_data['departure_time'],
+                    seats_needed=serializer.validated_data.get('seats_needed', 1),
+                    status='PENDING'
+                )
                 ride_request.save()
                 
                 logger.info(f"Created pending ride request with ID {ride_request.id} for user {request.user.id}")
@@ -975,10 +985,20 @@ class RideRequestViewSet(viewsets.ModelViewSet):
             # Check if compatibility score meets the threshold
             if compatibility_score < COMPATIBILITY_THRESHOLD:
                 logger.warning(f"Match failed: Compatibility score {compatibility_score:.2f} below threshold {COMPATIBILITY_THRESHOLD}")
-                # Explicitly set rider in a separate step to ensure it's not null
-                ride_request = serializer.save()
-                ride_request.rider = request.user
-                ride_request.status = 'PENDING'
+                # Create the request with rider explicitly set
+                ride_request = RideRequest(
+                    ride=ride,
+                    rider=request.user,
+                    pickup_location=serializer.validated_data['pickup_location'],
+                    dropoff_location=serializer.validated_data['dropoff_location'],
+                    pickup_latitude=serializer.validated_data['pickup_latitude'],
+                    pickup_longitude=serializer.validated_data['pickup_longitude'],
+                    dropoff_latitude=serializer.validated_data['dropoff_latitude'],
+                    dropoff_longitude=serializer.validated_data['dropoff_longitude'],
+                    departure_time=serializer.validated_data['departure_time'],
+                    seats_needed=serializer.validated_data.get('seats_needed', 1),
+                    status='PENDING'
+                )
                 ride_request.save()
                 
                 logger.info(f"Created pending ride request with ID {ride_request.id} for user {request.user.id}")
@@ -989,9 +1009,20 @@ class RideRequestViewSet(viewsets.ModelViewSet):
                     'error': 'No suitable matching rides found. Your request has been saved and will be matched when a compatible ride becomes available.'
                 }, status=status.HTTP_200_OK)
             
-            # Create the ride request - explicitly set rider in a separate step
-            ride_request = serializer.save()
-            ride_request.rider = request.user
+            # Create the ride request directly with rider set
+            ride_request = RideRequest(
+                ride=ride,
+                rider=request.user,
+                pickup_location=serializer.validated_data['pickup_location'],
+                dropoff_location=serializer.validated_data['dropoff_location'],
+                pickup_latitude=serializer.validated_data['pickup_latitude'],
+                pickup_longitude=serializer.validated_data['pickup_longitude'],
+                dropoff_latitude=serializer.validated_data['dropoff_latitude'],
+                dropoff_longitude=serializer.validated_data['dropoff_longitude'],
+                departure_time=serializer.validated_data['departure_time'],
+                seats_needed=serializer.validated_data.get('seats_needed', 1),
+                status='ACCEPTED'
+            )
             ride_request.save()
             
             logger.info(f"Created ride request with ID {ride_request.id} for user {request.user.id}")
