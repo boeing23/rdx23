@@ -747,43 +747,96 @@ class RideViewSet(viewsets.ModelViewSet):
         ).exclude(driver=user).distinct()
 
     @staticmethod
-    def check_pending_requests(ride):
-        """Check for pending requests that might match this ride"""
+    def check_pending_requests(new_ride):
+        """
+        Check for pending requests that might match available rides and propose the best match.
+        This method is called when a new ride is created.
+        """
         try:
-            # Find pending requests that might match this ride
+            # Find pending requests that might match rides
             pending_requests = PendingRideRequest.objects.filter(
                 status='PENDING',
                 departure_time__gte=timezone.now()
             )
-
+            
+            logger.info(f"Checking {pending_requests.count()} pending requests against available rides")
+            
+            # For each pending request, find the best matching ride
             for pending_request in pending_requests:
-                # Calculate route overlap
-                overlap_result = calculate_route_overlap(
-                    (ride.start_longitude, ride.start_latitude),
-                    (ride.end_longitude, ride.end_latitude),
-                    (pending_request.pickup_longitude, pending_request.pickup_latitude),
-                    (pending_request.dropoff_longitude, pending_request.dropoff_latitude)
-                )
+                logger.info(f"Checking pending request ID: {pending_request.id} from {pending_request.rider.username}")
                 
-                compatibility_score = overlap_result.get("compatibility_score", 0)
-
-                # If there's significant overlap, propose this ride as a match
-                if compatibility_score >= 60:  # Minimum 60% compatibility required
+                # Get all available rides (including the new one)
+                available_rides = Ride.objects.filter(
+                    status='SCHEDULED',
+                    departure_time__gte=timezone.now(),
+                    available_seats__gte=pending_request.seats_needed
+                ).exclude(driver=pending_request.rider)  # Rider can't match with their own ride
+                
+                logger.info(f"Found {available_rides.count()} available rides to check for pending request {pending_request.id}")
+                
+                # Variables to track the best match
+                best_match = None
+                best_score = 0
+                best_compatibility = None
+                
+                # Check each ride for compatibility
+                for ride in available_rides:
+                    # Calculate route overlap
+                    overlap_result = calculate_route_overlap(
+                        (ride.start_longitude, ride.start_latitude),
+                        (ride.end_longitude, ride.end_latitude),
+                        (pending_request.pickup_longitude, pending_request.pickup_latitude),
+                        (pending_request.dropoff_longitude, pending_request.dropoff_latitude),
+                        get_optimal_points=True,
+                        log_prefix=f"[Pending Request {pending_request.id} - Ride {ride.id}] "
+                    )
+                    
+                    compatibility_score = overlap_result.get("compatibility_score", 0)
+                    
+                    # If compatible and better than current best match
+                    if (compatibility_score >= 60 and  # Minimum 60% compatibility required
+                        compatibility_score > best_score and
+                        overlap_result.get("optimal_pickup_point") and
+                        overlap_result.get("optimal_dropoff_point")):
+                        
+                        best_match = ride
+                        best_score = compatibility_score
+                        best_compatibility = overlap_result
+                        logger.info(f"Found better match: Ride {ride.id} with score {compatibility_score:.2f}")
+                
+                # If we found a good match
+                if best_match and best_score >= 60:
+                    logger.info(f"Found best match: Ride {best_match.id} with score {best_score:.2f}")
+                    
                     # Update the pending request
                     pending_request.status = 'MATCH_PROPOSED'
-                    pending_request.proposed_ride = ride
+                    pending_request.proposed_ride = best_match
                     pending_request.save()
-
+                    
+                    # Get optimal points from the best match
+                    optimal_pickup = best_compatibility.get("optimal_pickup_point")
+                    optimal_dropoff = best_compatibility.get("optimal_dropoff_point")
+                    
                     # Create notification for the rider
-                    Notification.objects.create(
+                    notification_message = (
+                        f"We found a potential ride match from {pending_request.pickup_location} to "
+                        f"{pending_request.dropoff_location} with driver {best_match.driver.get_full_name()}"
+                    )
+                    
+                    notification = Notification.objects.create(
                         recipient=pending_request.rider,
                         notification_type='MATCH_PROPOSED',
-                        message=f"We found a potential ride match from {ride.start_location} to {ride.end_location}",
-                        pending_request=pending_request
+                        message=notification_message,
+                        pending_request=pending_request,
+                        ride=best_match
                     )
+                    logger.info(f"Created notification {notification.id} for pending request {pending_request.id}")
+                else:
+                    logger.info(f"No suitable match found for pending request {pending_request.id}")
 
         except Exception as e:
             logger.error(f"Error checking pending requests: {str(e)}")
+            logger.exception("Full exception details:")
 
     def create(self, request, *args, **kwargs):
         """Create a new ride"""
