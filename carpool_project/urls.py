@@ -26,8 +26,17 @@ logger = logging.getLogger(__name__)
 
 def api_root(request):
     try:
+        # Handle OPTIONS requests for CORS preflight
+        if request.method == 'OPTIONS':
+            response = HttpResponse()
+            response['Access-Control-Allow-Origin'] = '*'
+            response['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+            response['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With, Accept, Origin'
+            response['Access-Control-Max-Age'] = '86400'  # 24 hours
+            return response
+        
         # Simple response that will always succeed
-        return JsonResponse({
+        response = JsonResponse({
             "status": "ok",
             "message": "Welcome to the Carpool API",
             "endpoints": {
@@ -36,10 +45,24 @@ def api_root(request):
                 "status": "/railway-status/"
             }
         }, status=200)
+        
+        # Add CORS headers to all responses
+        response['Access-Control-Allow-Origin'] = '*'
+        response['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+        response['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With, Accept, Origin'
+        
+        return response
     except Exception as e:
         # Log the error but still return 200 for healthcheck
         logger.error(f"Error in root endpoint: {str(e)}")
-        return HttpResponse("OK", status=200)
+        response = HttpResponse("OK", status=200)
+        
+        # Add CORS headers even in case of error
+        response['Access-Control-Allow-Origin'] = '*'
+        response['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+        response['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With, Accept, Origin'
+        
+        return response
 
 urlpatterns = [
     path('', api_root, name='api-root'),

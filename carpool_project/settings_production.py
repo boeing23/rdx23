@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 from datetime import timedelta
 import dj_database_url
+import traceback
 
 # Print version info
 print("Initializing Django settings...", file=sys.stderr)
@@ -41,33 +42,44 @@ try:
     
     # Print debug info
     if 'DATABASE_URL' in os.environ:
-        db_url_masked = os.environ['DATABASE_URL'].split('@')[0] + '@***' if '@' in os.environ['DATABASE_URL'] else '***'
+        db_url = os.environ['DATABASE_URL']
+        db_url_masked = '***' if '@' not in db_url else db_url.split('@')[0].split(':')[0] + ':***@' + db_url.split('@')[1]
         print(f"Found DATABASE_URL: {db_url_masked}", file=sys.stderr)
+        print(f"Database URL starts with: {db_url[:10]}...", file=sys.stderr)
     else:
         print("No DATABASE_URL found in environment", file=sys.stderr)
     
-    # Configure database - on Railway, we should use the provided DATABASE_URL without setting a default
+    # Configure database - on Railway, we should use the provided DATABASE_URL
     if is_on_railway:
-        # Railway provides its own DATABASE_URL, so we don't need a default
-        DATABASES = {
-            'default': dj_database_url.config(
-                conn_max_age=600,
-                conn_health_checks=True,
-                ssl_require=True
-            )
-        }
-        print("Using Railway-provided DATABASE_URL", file=sys.stderr)
+        # Railway provides its own DATABASE_URL
+        print("Running on Railway, using provided DATABASE_URL", file=sys.stderr)
+        
+        # Parse the DATABASE_URL to check its format
+        if 'DATABASE_URL' in os.environ:
+            raw_db_url = os.environ['DATABASE_URL']
+            
+            # Log connection attempt details
+            print(f"Attempting to connect to database using URL: {raw_db_url[:10]}...", file=sys.stderr)
+            
+            # Configure database with Railway settings
+            DATABASES = {
+                'default': dj_database_url.config(
+                    conn_max_age=600,
+                    conn_health_checks=True,
+                    ssl_require=True
+                )
+            }
+        else:
+            raise Exception("No DATABASE_URL found in Railway environment")
     else:
-        # For local development, use the DATABASE_URL with a SQLite fallback
+        # For local development, use SQLite
+        print("Running locally, using SQLite database", file=sys.stderr)
         DATABASES = {
-            'default': dj_database_url.config(
-                default='sqlite:///db.sqlite3',
-                conn_max_age=600,
-                conn_health_checks=True,
-                ssl_require=False
-            )
+            'default': {
+                'ENGINE': 'django.db.backends.sqlite3',
+                'NAME': os.path.join(BASE_DIR, 'db.sqlite3'),
+            }
         }
-        print("Using local DATABASE_URL with SQLite fallback", file=sys.stderr)
     
     # Log database details (safely)
     print(f"Database engine: {DATABASES['default']['ENGINE']}", file=sys.stderr)
@@ -78,6 +90,7 @@ try:
     
 except Exception as e:
     print(f"ERROR configuring database: {e}", file=sys.stderr)
+    print(f"Traceback: {traceback.format_exc()}", file=sys.stderr)
     # Provide a fallback SQLite configuration instead of failing
     DATABASES = {
         'default': {
@@ -106,16 +119,19 @@ SERVER_EMAIL = EMAIL_HOST_USER
 CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOW_CREDENTIALS = True
 CORS_ORIGIN_ALLOW_ALL = True
-CORS_REPLACE_HTTPS_REFERER = True
-CORS_URLS_REGEX = r'.*'
-CORS_EXPOSE_HEADERS = ['*']
 
 # Make sure corsheaders middleware is at the beginning of the middleware list
 if 'corsheaders.middleware.CorsMiddleware' in MIDDLEWARE:
     MIDDLEWARE.remove('corsheaders.middleware.CorsMiddleware')
 MIDDLEWARE.insert(0, 'corsheaders.middleware.CorsMiddleware')
-# Add our custom CORS middleware as a final fallback
-MIDDLEWARE.insert(1, 'carpool_project.cors_middleware.CORSMiddleware')
+
+# Remove CorsPostCsrfMiddleware if it's causing errors
+if 'corsheaders.middleware.CorsPostCsrfMiddleware' in MIDDLEWARE:
+    MIDDLEWARE.remove('corsheaders.middleware.CorsPostCsrfMiddleware')
+
+# Remove custom CORS middleware if it's causing issues
+if 'carpool_project.cors_middleware.CORSMiddleware' in MIDDLEWARE:
+    MIDDLEWARE.remove('carpool_project.cors_middleware.CORSMiddleware')
 
 # Explicit CORS allowed origins
 CORS_ALLOWED_ORIGINS = [

@@ -28,8 +28,16 @@ if 'DATABASE_URL' in os.environ:
     else:
         masked_url = '***'
     print(f"Found DATABASE_URL: {masked_url}", file=sys.stderr)
+    
+    # Ensure Railway's DATABASE_URL takes precedence
+    if 'RAILWAY_ENVIRONMENT' in os.environ and not db_url.startswith('postgres://'):
+        # Some Railway deployments provide DATABASE_URL without the postgres:// prefix
+        if db_url.startswith('//'):
+            os.environ['DATABASE_URL'] = 'postgres:' + db_url
+            print(f"Fixed DATABASE_URL format for Railway", file=sys.stderr)
 else:
-    print("CRITICAL ERROR: No DATABASE_URL found in environment. Setting a placeholder to prevent crashes.", file=sys.stderr)
+    print("CRITICAL ERROR: No DATABASE_URL found in environment. This is required for Railway deployment.", file=sys.stderr)
+    print("Using fallback SQLite configuration for emergency functionality only", file=sys.stderr)
     # Set a placeholder SQLite URL to prevent immediate crashes
     os.environ['DATABASE_URL'] = 'sqlite:///db.sqlite3'
 
@@ -39,10 +47,9 @@ def fallback_application(environ, start_response, error=None):
     status = '200 OK'
     headers = [
         ('Content-type', 'text/html; charset=utf-8'),
-        # Add CORS headers to ensure preflight requests succeed
         ('Access-Control-Allow-Origin', '*'),
         ('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS'),
-        ('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With')
+        ('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Origin'),
     ]
     start_response(status, headers)
     
@@ -65,7 +72,7 @@ def fallback_application(environ, start_response, error=None):
     
     return [error_message.encode('utf-8')]
 
-# Pre-initialize the Django application variable at module level
+# Initialize django_application to None
 django_application = None
 
 # Try loading the Django application
@@ -73,6 +80,15 @@ try:
     # Attempt to load the Django application
     print("Importing Django WSGI application...", file=sys.stderr)
     from django.core.wsgi import get_wsgi_application
+    
+    # Try to initialize Django application at module level
+    try:
+        print("Pre-initializing Django application", file=sys.stderr)
+        django_application = get_wsgi_application()
+        print("Django application pre-initialized successfully", file=sys.stderr)
+    except Exception as pre_init_error:
+        print(f"WARNING: Django pre-initialization failed: {pre_init_error}", file=sys.stderr)
+        # Keep django_application as None, will try again on first request
     
     # Wrap the application in a try/except to handle any startup errors
     def application(environ, start_response):
@@ -92,6 +108,10 @@ try:
             # Handle health checks directly to ensure they always succeed
             if environ.get('PATH_INFO', '') == '/':
                 print("Health check detected, ensuring 200 response", file=sys.stderr)
+                return fallback_application(environ, start_response)
+            
+            # Handle OPTIONS requests directly
+            if environ.get('REQUEST_METHOD') == 'OPTIONS':
                 return fallback_application(environ, start_response)
             
             # For other paths, use the Django application
