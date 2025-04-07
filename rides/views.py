@@ -49,16 +49,10 @@ def calculate_distance(point1, point2):
     Calculate the distance between two points using great circle distance.
     Points should be in (longitude, latitude) format.
     """
-    try:
-        # Ensure points are in the correct format (lng, lat)
-        point1 = (float(point1[0]), float(point1[1]))
-        point2 = (float(point2[0]), float(point2[1]))
-        
-        # Reverse coordinates for great_circle (it expects lat, lng)
-        return great_circle((point1[1], point1[0]), (point2[1], point2[0])).meters
-    except (ValueError, TypeError) as e:
-        logger.error(f"Error calculating distance: {str(e)}")
-        return float('inf')
+    # Convert from (longitude, latitude) to (latitude, longitude) for great_circle
+    p1 = (point1[1], point1[0])
+    p2 = (point2[1], point2[0])
+    return great_circle(p1, p2).meters
 
 def get_coordinates(address):
     location = geolocator.geocode(address)
@@ -284,6 +278,52 @@ def calculate_direction_similarity(vec1, vec2):
     except Exception as e:
         logger.error(f"Error calculating direction similarity: {str(e)}")
         return 0
+
+def find_optimal_point(route, target_point):
+    """Find optimal point along a route closest to target point using vector projection"""
+    min_dist = float('inf')
+    optimal_point = None
+    
+    for i in range(len(route) - 1):
+        p1, p2 = route[i], route[i+1]
+        
+        # Vector calculations
+        vec = (p2[0]-p1[0], p2[1]-p1[1])
+        vec_target = (target_point[0]-p1[0], target_point[1]-p1[1])
+        
+        # Projection calculation
+        t = (vec_target[0]*vec[0] + vec_target[1]*vec[1]) / (vec[0]**2 + vec[1]**2 + 1e-8)
+        t = max(0, min(1, t))
+        closest = (p1[0] + t*vec[0], p1[1] + t*vec[1])
+        
+        try:
+            dist = calculate_distance(closest, target_point)
+            if dist < min_dist:
+                min_dist = dist
+                optimal_point = closest
+        except Exception as e:
+            logger.error(f"Error calculating distance: {str(e)}")
+            continue
+    
+    return optimal_point, min_dist
+
+def calculate_segment_overlap(route1, route2, threshold=200):
+    """Calculate percentage of points in route1 that are close to any point in route2"""
+    if not route1 or not route2:
+        return 0
+        
+    proximity_count = 0
+    for p1 in route1:
+        for p2 in route2:
+            try:
+                if calculate_distance(p1, p2) <= threshold:
+                    proximity_count += 1
+                    break
+            except Exception as e:
+                logger.error(f"Error in calculating distance for overlap: {str(e)}")
+                continue
+    
+    return (proximity_count / len(route1)) * 100 if route1 else 0
 
 def calculate_route_overlap(driver_start, driver_end, rider_pickup, rider_dropoff):
     """
