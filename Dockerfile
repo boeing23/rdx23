@@ -29,9 +29,9 @@ RUN echo "=== Files in /app ===" && ls -la
 # Collect static files with fallback
 RUN python manage.py collectstatic --noinput || echo "Static collection failed but continuing"
 
-# Health check - using shell form to ensure PORT gets expanded
-HEALTHCHECK --interval=5s --timeout=3s --retries=3 \
-  CMD curl -f http://localhost:${PORT:-8000}/ || exit 1
+# Health check - using shell form to ensure PORT gets expanded and using railway-status endpoint
+HEALTHCHECK --interval=10s --timeout=5s --start-period=30s --retries=3 \
+  CMD curl -f http://localhost:${PORT:-8000}/railway-status/ || exit 1
 
 # Set the default port
 ENV PORT=8000

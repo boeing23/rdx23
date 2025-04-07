@@ -1738,9 +1738,14 @@ def fix_notification_field_names():
     """
     One-time fix for notification field names. 
     Migrates any notifications that use 'user' field to 'recipient' field.
+    This should be run as a management command, not on module import.
     """
     try:
         from django.db import connection
+        if not connection.is_usable():
+            logger.warning("Database connection is not usable, skipping notification field fix")
+            return
+
         with connection.cursor() as cursor:
             # Check if 'user' column exists in the notifications table
             cursor.execute("""
@@ -1757,10 +1762,12 @@ def fix_notification_field_names():
                 """)
                 logger.info("Successfully migrated notification field names from user to recipient")
     except Exception as e:
-        logger.error(f"Error fixing notification field names: {str(e)}")
+        logger.warning(f"Could not fix notification field names: {str(e)}")
+        # Don't raise the exception, just log it
+        return
 
-# Run the fix on module import
-fix_notification_field_names()
+# Remove the automatic execution on module import
+# fix_notification_field_names()
 
 def send_ride_match_emails(ride_request):
     """

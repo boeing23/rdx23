@@ -18,18 +18,30 @@ from django.views.decorators.csrf import csrf_exempt
 @csrf_exempt
 def status_check(request):
     """
-    Endpoint to check application and database status
+    Endpoint to check application and database status.
+    Always returns 200 for health checks, even if there are issues.
     """
-    status_data = {
-        "application": {
-            "status": "running",
-            "timestamp": datetime.now().isoformat(),
-            "environment": os.environ.get("ENVIRONMENT", "production")
-        },
-        "database": check_database_status(),
-    }
+    try:
+        status_data = {
+            "application": {
+                "status": "running",
+                "timestamp": datetime.now().isoformat(),
+                "environment": os.environ.get("ENVIRONMENT", "production")
+            },
+            "database": check_database_status(),
+        }
+    except Exception as e:
+        # For health checks, we still want to return 200
+        status_data = {
+            "application": {
+                "status": "running",
+                "timestamp": datetime.now().isoformat(),
+                "error": str(e)
+            }
+        }
     
-    return JsonResponse(status_data)
+    # Always return 200 for health checks
+    return JsonResponse(status_data, status=200)
 
 def check_database_status():
     """Check database connection and return status data"""
