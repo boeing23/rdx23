@@ -105,11 +105,19 @@ SERVER_EMAIL = EMAIL_HOST_USER
 # CORS settings - very permissive for troubleshooting
 CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOW_CREDENTIALS = True
+CORS_ORIGIN_ALLOW_ALL = True
+CORS_REPLACE_HTTPS_REFERER = True
+CORS_URLS_REGEX = r'.*'
+CORS_EXPOSE_HEADERS = ['*']
 
 # Make sure corsheaders middleware is at the beginning of the middleware list
 if 'corsheaders.middleware.CorsMiddleware' in MIDDLEWARE:
     MIDDLEWARE.remove('corsheaders.middleware.CorsMiddleware')
 MIDDLEWARE.insert(0, 'corsheaders.middleware.CorsMiddleware')
+# Add CORS response middleware to ensure all responses have CORS headers
+MIDDLEWARE.insert(1, 'corsheaders.middleware.CorsPostCsrfMiddleware')
+# Add our custom CORS middleware as a final fallback
+MIDDLEWARE.insert(2, 'carpool_project.cors_middleware.CORSMiddleware')
 
 # Explicit CORS allowed origins
 CORS_ALLOWED_ORIGINS = [

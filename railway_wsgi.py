@@ -37,8 +37,18 @@ else:
 def fallback_application(environ, start_response, error=None):
     """Fallback WSGI application that always returns 200 OK for health checks"""
     status = '200 OK'
-    headers = [('Content-type', 'text/html; charset=utf-8')]
+    headers = [
+        ('Content-type', 'text/html; charset=utf-8'),
+        # Add CORS headers to ensure preflight requests succeed
+        ('Access-Control-Allow-Origin', '*'),
+        ('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS'),
+        ('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With')
+    ]
     start_response(status, headers)
+    
+    # If it's an OPTIONS request (preflight), return empty response
+    if environ.get('REQUEST_METHOD') == 'OPTIONS':
+        return [b'']
     
     # Create a friendly error message
     error_message = f"""
@@ -55,6 +65,9 @@ def fallback_application(environ, start_response, error=None):
     
     return [error_message.encode('utf-8')]
 
+# Pre-initialize the Django application variable at module level
+django_application = None
+
 # Try loading the Django application
 try:
     # Attempt to load the Django application
@@ -65,10 +78,16 @@ try:
     def application(environ, start_response):
         try:
             # Initialize Django application on first request if not already initialized
-            if 'application' not in globals():
-                global django_application
-                django_application = get_wsgi_application()
-                print("Django application loaded on first request", file=sys.stderr)
+            global django_application
+            if django_application is None:
+                try:
+                    print("Initializing Django application on first request", file=sys.stderr)
+                    django_application = get_wsgi_application()
+                    print("Django application loaded on first request", file=sys.stderr)
+                except Exception as init_error:
+                    print(f"ERROR initializing Django application: {init_error}", file=sys.stderr)
+                    traceback.print_exc(file=sys.stderr)
+                    return fallback_application(environ, start_response, init_error)
             
             # Handle health checks directly to ensure they always succeed
             if environ.get('PATH_INFO', '') == '/':
