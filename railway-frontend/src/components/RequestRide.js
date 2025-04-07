@@ -393,7 +393,7 @@ const RequestRide = () => {
       console.log('Accepting match with ride request ID:', currentMatch.ride_request.id);
       
       // Use the correct endpoint URL
-      const response = await fetch(`${API_BASE_URL}/api/rides/requests/${currentMatch.ride_request.id}/accept/`, {
+      const response = await fetch(`${API_BASE_URL}/api/rides/requests/${currentMatch.ride_request.id}/accept_match/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
