@@ -1092,6 +1092,18 @@ class RideRequestViewSet(viewsets.ModelViewSet):
         user = self.request.user
         return RideRequest.objects.filter(Q(rider=user) | Q(ride__driver=user))
 
+    @action(detail=False, methods=['get'])
+    def accepted(self, request):
+        """Get accepted ride requests for the current user"""
+        user = self.request.user
+        ride_requests = RideRequest.objects.filter(
+            (Q(rider=user) | Q(ride__driver=user)) & 
+            Q(status='ACCEPTED')
+        ).select_related('ride', 'rider', 'ride__driver')
+        
+        serializer = self.get_serializer(ride_requests, many=True)
+        return Response(serializer.data)
+
     def create(self, request, *args, **kwargs):
         """Create a new ride request"""
         # Add rider to request data
