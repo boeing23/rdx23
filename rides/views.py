@@ -51,6 +51,17 @@ logger = logging.getLogger(__name__)
 # Initialize geolocator
 geolocator = Nominatim(user_agent="carpool_app")
 
+def reverse_geocode(coordinates):
+    """Get address from coordinates with fallback for errors"""
+    try:
+        # Try to get address using Nominatim
+        location = geolocator.reverse((coordinates[0], coordinates[1]), exactly_one=True)
+        if location and location.address:
+            return location.address
+    except Exception as e:
+        logger.error(f"Error in reverse_geocode: {str(e)}")
+    return "Location address unavailable"
+
 # OpenRouteService API constants
 ORS_API_KEY = getattr(settings, 'OPENROUTE_API_KEY', None)
 if not ORS_API_KEY:
@@ -296,6 +307,7 @@ def find_optimal_point(route, target_point):
     """Find optimal point along a route closest to target point using vector projection"""
     min_dist = float('inf')
     optimal_point = None
+    optimal_index = 0
     
     for i in range(len(route) - 1):
         p1, p2 = route[i], route[i+1]
@@ -314,11 +326,12 @@ def find_optimal_point(route, target_point):
             if dist < min_dist:
                 min_dist = dist
                 optimal_point = closest
+                optimal_index = i
         except Exception as e:
             logger.error(f"Error calculating distance: {str(e)}")
             continue
     
-    return optimal_point, min_dist
+    return {"point": optimal_point, "index": optimal_index, "distance": min_dist}
 
 def calculate_segment_overlap(route1, route2, threshold=200):
     """Calculate percentage of points in route1 that are close to any point in route2"""
@@ -747,15 +760,17 @@ class RideViewSet(viewsets.ModelViewSet):
 
             for pending_request in pending_requests:
                 # Calculate route overlap
-                overlap_percentage = calculate_route_overlap(
+                overlap_result = calculate_route_overlap(
                     (ride.start_longitude, ride.start_latitude),
                     (ride.end_longitude, ride.end_latitude),
                     (pending_request.pickup_longitude, pending_request.pickup_latitude),
                     (pending_request.dropoff_longitude, pending_request.dropoff_latitude)
                 )
+                
+                compatibility_score = overlap_result.get("compatibility_score", 0)
 
                 # If there's significant overlap, propose this ride as a match
-                if overlap_percentage >= 60:  # Minimum 60% overlap required
+                if compatibility_score >= 60:  # Minimum 60% compatibility required
                     # Update the pending request
                     pending_request.status = 'MATCH_PROPOSED'
                     pending_request.proposed_ride = ride
@@ -819,6 +834,7 @@ class RideViewSet(viewsets.ModelViewSet):
             # Calculate optimal pickup and dropoff points if there's a match
             optimal_pickup_point = None
             optimal_dropoff_point = None
+            compatibility_score = 0
             
             if pending_request.status == 'MATCH_PROPOSED' and pending_request.proposed_ride:
                 try:
@@ -829,9 +845,13 @@ class RideViewSet(viewsets.ModelViewSet):
                     rider_dropoff = (pending_request.dropoff_longitude, pending_request.dropoff_latitude)
                     
                     # Calculate route overlap which returns optimal points
-                    compatibility_score, optimal_dropoff_point, optimal_pickup_point = calculate_route_overlap(
+                    overlap_result = calculate_route_overlap(
                         driver_start, driver_end, rider_pickup, rider_dropoff
                     )
+                    compatibility_score = overlap_result.get("compatibility_score", 0)
+                    optimal_pickup_point = overlap_result.get("optimal_pickup_point")
+                    optimal_dropoff_point = overlap_result.get("optimal_dropoff_point")
+                    
                 except Exception as e:
                     logger.error(f"Error calculating optimal points: {str(e)}")
 
@@ -845,7 +865,8 @@ class RideViewSet(viewsets.ModelViewSet):
                     "dropoff": pending_request.dropoff_location,
                     "departure_time": pending_request.departure_time.isoformat() if pending_request.departure_time else None,
                     "optimal_pickup_point": optimal_pickup_point,
-                    "optimal_dropoff_point": optimal_dropoff_point
+                    "optimal_dropoff_point": optimal_dropoff_point,
+                    "compatibility_score": compatibility_score
                 } if pending_request.status == 'MATCH_PROPOSED' else None,
                 "notifications": NotificationSerializer(notifications, many=True).data
             })
@@ -1061,6 +1082,7 @@ class RideRequestViewSet(viewsets.ModelViewSet):
                 # Calculate optimal pickup and dropoff points
                 optimal_pickup_point = None
                 optimal_dropoff_point = None
+                compatibility_score = 0
                 
                 try:
                     # Get coordinates for rider and driver
@@ -1070,9 +1092,13 @@ class RideRequestViewSet(viewsets.ModelViewSet):
                     rider_dropoff = (pending_request.dropoff_longitude, pending_request.dropoff_latitude)
                     
                     # Calculate route overlap which returns optimal points
-                    compatibility_score, optimal_dropoff_point, optimal_pickup_point = calculate_route_overlap(
+                    overlap_result = calculate_route_overlap(
                         driver_start, driver_end, rider_pickup, rider_dropoff
                     )
+                    compatibility_score = overlap_result.get("compatibility_score", 0)
+                    optimal_pickup_point = overlap_result.get("optimal_pickup_point")
+                    optimal_dropoff_point = overlap_result.get("optimal_dropoff_point")
+                    
                     logger.info(f"Calculated optimal pickup point: {optimal_pickup_point}")
                     logger.info(f"Calculated optimal dropoff point: {optimal_dropoff_point}")
                 except Exception as e:
@@ -1370,7 +1396,7 @@ def send_ride_match_emails(ride_request):
             elif isinstance(ride_request.optimal_pickup_point, str):
                 try:
                     optimal_pickup_info = json.loads(ride_request.optimal_pickup_point)
-                except:
+                except JSONDecodeError:
                     logger.error("Failed to parse optimal_pickup_point JSON")
         
         if ride_request.nearest_dropoff_point:
@@ -1379,7 +1405,7 @@ def send_ride_match_emails(ride_request):
             elif isinstance(ride_request.nearest_dropoff_point, str):
                 try:
                     optimal_dropoff_info = json.loads(ride_request.nearest_dropoff_point)
-                except:
+                except JSONDecodeError:
                     logger.error("Failed to parse nearest_dropoff_point JSON")
         
         # Format pickup and dropoff information
@@ -1417,6 +1443,28 @@ Optimal Dropoff Point:
 - Maps Link: https://www.google.com/maps/search/?api=1&query={lat},{lng}
 """
         
+        # Try to get vehicle information
+        vehicle_make = getattr(driver, 'vehicle_make', 'Not specified')
+        vehicle_model = getattr(driver, 'vehicle_model', 'Not specified')
+        vehicle_color = getattr(driver, 'vehicle_color', 'Not specified')
+        license_plate = getattr(driver, 'license_plate', 'Not specified')
+        
+        # Try to get it from vehicle relationship if available
+        if hasattr(ride, 'vehicle') and ride.vehicle:
+            vehicle_make = getattr(ride.vehicle, 'make', vehicle_make)
+            vehicle_model = getattr(ride.vehicle, 'model', vehicle_model)
+            vehicle_color = getattr(ride.vehicle, 'color', vehicle_color)
+            license_plate = getattr(ride.vehicle, 'license_plate', license_plate)
+        
+        # Format the departure time
+        departure_time_str = 'Not specified'
+        if ride.departure_time:
+            try:
+                departure_time_str = ride.departure_time.strftime('%m/%d/%Y at %I:%M %p')
+            except Exception as e:
+                logger.error(f"Error formatting departure time: {str(e)}")
+                departure_time_str = str(ride.departure_time)
+        
         # Compose rider email
         rider_subject = f"Your ride request has been matched!"
         rider_message = f"""
@@ -1428,9 +1476,9 @@ Ride Details:
 - Driver: {driver.first_name} {driver.last_name}
 - From: {ride_request.pickup_location}
 - To: {ride_request.dropoff_location}
-- Date/Time: {ride.departure_time.strftime('%m/%d/%Y at %I:%M %p')}
-- Vehicle: {driver.vehicle_make} {driver.vehicle_model}, {driver.vehicle_color}
-- License Plate: {driver.license_plate}
+- Date/Time: {departure_time_str}
+- Vehicle: {vehicle_make} {vehicle_model}, {vehicle_color}
+- License Plate: {license_plate}
 
 {pickup_details}
 {dropoff_details}
@@ -1454,7 +1502,7 @@ Ride Details:
 - Rider: {rider.first_name} {rider.last_name}
 - From: {ride.start_location}
 - To: {ride.end_location}
-- Date/Time: {ride.departure_time.strftime('%m/%d/%Y at %I:%M %p')}
+- Date/Time: {departure_time_str}
 - Pickup Location: {ride_request.pickup_location}
 - Dropoff Location: {ride_request.dropoff_location}
 
@@ -1469,28 +1517,32 @@ Best regards,
 The Ridex Team
 """
         
-        # Send emails
-        from django.core.mail import send_mail
-        
-        # Send to rider
-        send_mail(
-            subject=rider_subject,
-            message=rider_message,
-            from_email=settings.DEFAULT_FROM_EMAIL,
-            recipient_list=[rider.email],
-            fail_silently=False,
-        )
-        logger.info(f"Sent match notification email to rider {rider.email}")
-        
-        # Send to driver
-        send_mail(
-            subject=driver_subject,
-            message=driver_message,
-            from_email=settings.DEFAULT_FROM_EMAIL,
-            recipient_list=[driver.email],
-            fail_silently=False,
-        )
-        logger.info(f"Sent match notification email to driver {driver.email}")
+        # Send emails - wrap in try-except to handle email sending errors
+        try:
+            from django.core.mail import send_mail
+            
+            # Send to rider
+            send_mail(
+                subject=rider_subject,
+                message=rider_message,
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=[rider.email],
+                fail_silently=True,  # Don't raise exceptions on email failure
+            )
+            logger.info(f"Sent match notification email to rider {rider.email}")
+            
+            # Send to driver
+            send_mail(
+                subject=driver_subject,
+                message=driver_message,
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=[driver.email],
+                fail_silently=True,  # Don't raise exceptions on email failure
+            )
+            logger.info(f"Sent match notification email to driver {driver.email}")
+        except Exception as e:
+            logger.error(f"Error sending emails: {str(e)}")
+            # Continue with the request even if email sending fails
         
     except Exception as e:
         logger.error(f"Error sending ride match emails: {str(e)}")
