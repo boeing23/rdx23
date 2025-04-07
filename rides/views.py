@@ -30,6 +30,7 @@ from django.http import JsonResponse
 from django.utils.timezone import make_aware
 from django.utils.dateparse import parse_datetime
 from users.models import User  # For admin dashboard functions
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +38,7 @@ logger = logging.getLogger(__name__)
 geolocator = Nominatim(user_agent="carpool_app")
 
 # OpenRouteService API constants
-ORS_API_KEY = "5b3ce3597851110001cf62482c1ae097a0b848ef81a1e5085aa27c1f"
+ORS_API_KEY = getattr(settings, 'ORS_API_KEY', "5b3ce3597851110001cf62482c1ae097a0b848ef81a1e5085aa27c1f")
 OPENROUTE_BASE_URL = "https://api.openrouteservice.org/v2"
 
 def get_coordinates(address):
@@ -68,6 +69,11 @@ def get_route_driving_distance(start_coords, end_coords):
             # Convert distance from meters to kilometers
             if 'routes' in data and len(data['routes']) > 0:
                 return data['routes'][0]['summary']['distance'] / 1000.0
+        elif response.status_code == 429:  # Rate limit hit
+            logger.warning("OpenRouteService API rate limit hit")
+            # Wait for a bit before retrying
+            time.sleep(2)
+            return get_route_driving_distance(start_coords, end_coords)
             
         # If API call fails, fall back to great_circle
         logger.warning("Failed to get driving distance from API, falling back to straight-line distance")
@@ -489,7 +495,7 @@ def generate_route(start, end, num_points=20):
     route: List of (lng, lat) coordinates
     """
     max_retries = 3
-    retry_delay = 1  # seconds
+    retry_delay = 2  # seconds
     
     try:
         # Validate coordinates
@@ -497,103 +503,6 @@ def generate_route(start, end, num_points=20):
             logger.error(f"Invalid coordinates: start={start}, end={end}")
             raise ValueError("Invalid coordinates")
             
-        # Check if this is the test case for Pheasant Run to Lane Stadium or Janie Lane to Lane Stadium
-        pheasant_run_coords = [-80.4189968, 37.2489617]
-        lane_stadium_coords = [-80.41800385907507, 37.21989015]
-        janie_lane_coords = [-80.41594021829319, 37.2510400809438]
-        
-        # More lenient check using distance for test case detection
-        # Use a small radius (150m) to detect these locations
-        is_near_pheasant_run = False
-        is_near_lane_stadium = False
-        is_near_janie_lane = False
-        
-        try:
-            # Check if start is near Pheasant Run
-            pheasant_run_distance = calculate_distance(start, pheasant_run_coords)
-            is_near_pheasant_run = pheasant_run_distance < 150  # Within 150 meters
-            
-            # Check if start is near Janie Lane
-            janie_lane_distance = calculate_distance(start, janie_lane_coords)
-            is_near_janie_lane = janie_lane_distance < 150  # Within 150 meters
-            
-            # Check if end is near Lane Stadium
-            lane_stadium_distance = calculate_distance(end, lane_stadium_coords)
-            is_near_lane_stadium = lane_stadium_distance < 150  # Within 150 meters
-            
-            logger.info(f"Location check - Near Pheasant Run: {is_near_pheasant_run} ({pheasant_run_distance:.2f}m)")
-            logger.info(f"Location check - Near Janie Lane: {is_near_janie_lane} ({janie_lane_distance:.2f}m)")
-            logger.info(f"Location check - Near Lane Stadium: {is_near_lane_stadium} ({lane_stadium_distance:.2f}m)")
-            
-            is_driver_test = is_near_pheasant_run and is_near_lane_stadium
-            is_rider_test = is_near_janie_lane and is_near_lane_stadium
-        except Exception as e:
-            logger.error(f"Error checking test locations: {str(e)}")
-            # Fall back to exact coordinate check
-            is_driver_test = (
-                abs(float(start[0]) - pheasant_run_coords[0]) < 0.001 and
-                abs(float(start[1]) - pheasant_run_coords[1]) < 0.001 and
-                abs(float(end[0]) - lane_stadium_coords[0]) < 0.001 and
-                abs(float(end[1]) - lane_stadium_coords[1]) < 0.001
-            )
-            
-            is_rider_test = (
-                abs(float(start[0]) - janie_lane_coords[0]) < 0.001 and
-                abs(float(start[1]) - janie_lane_coords[1]) < 0.001 and
-                abs(float(end[0]) - lane_stadium_coords[0]) < 0.001 and
-                abs(float(end[1]) - lane_stadium_coords[1]) < 0.001
-            )
-        
-        if is_driver_test:
-            logger.info("Test route for Pheasant Run to Lane Stadium requested, but test data removed for production")
-            # Test data has been removed for production deployment
-            logger.info("Will proceed with standard route generation")
-        
-        if is_rider_test:
-            logger.info("Test route for Janie Lane to Lane Stadium requested, but test data removed for production")
-            # Test data has been removed for production deployment
-            logger.info("Will proceed with standard route generation")
-            
-        # Validate coordinate format (lng should be -180 to 180, lat should be -90 to 90)
-        for coords in [start, end]:
-            lng, lat = coords
-            if lng > 90 or lng < -90 or lat > 180 or lat < -180:
-                logger.warning(f"Coordinates appear to be in (lat, lng) format instead of (lng, lat): {coords}")
-
-        # Convert to float if strings
-        try:
-            start = (float(start[0]), float(start[1]))
-            end = (float(end[0]), float(end[1]))
-        except (ValueError, TypeError) as e:
-            logger.error(f"Error converting coordinates to float: {str(e)}")
-            raise ValueError(f"Invalid coordinate format: {start}, {end}")
-        
-        # Validate coordinate format (lng should be -180 to 180, lat should be -90 to 90)
-        # If coordinates look reversed, correct them
-        for name, coords in [("Start", start), ("End", end)]:
-            lng, lat = coords
-            if abs(lng) > 90 and abs(lat) <= 90:
-                logger.warning(f"{name} coordinates appear to be in (lat, lng) format instead of (lng, lat): {coords}")
-                logger.warning(f"Auto-correcting coordinate format")
-                if name == "Start":
-                    start = (lat, lng)  # Swap to correct (lng, lat) format
-                else:
-                    end = (lat, lng)
-        
-        # Check for bad coordinates
-        if not (-180 <= start[0] <= 180 and -90 <= start[1] <= 90 and -180 <= end[0] <= 180 and -90 <= end[1] <= 90):
-            logger.warning(f"Coordinates are outside normal ranges: start={start}, end={end}")
-            # Fix automatically if clearly wrong
-            if abs(start[0]) > 180 or abs(start[1]) > 90 or abs(end[0]) > 180 or abs(end[1]) > 90:
-                logger.warning("Coordinates are far outside normal ranges, attempting auto-correction")
-                if abs(start[0]) > 180 or abs(start[1]) > 90:
-                    if abs(start[0]) > 90 and abs(start[1]) <= 90:
-                        start = (start[1], start[0])  # Likely swapped lat/lng
-                if abs(end[0]) > 180 or abs(end[1]) > 90:
-                    if abs(end[0]) > 90 and abs(end[1]) <= 90:
-                        end = (end[1], end[0])  # Likely swapped lat/lng
-                logger.info(f"Auto-corrected coordinates: start={start}, end={end}")
-        
         logger.info(f"Using coordinates for route: start={start}, end={end}")
         
         # Try the directions API with retries
@@ -616,34 +525,21 @@ def generate_route(start, end, num_points=20):
                 
                 logger.debug(f"Request body: {body}")
                 
-                response = requests.post(directions_url, json=body, headers=headers, timeout=10)
+                response = requests.post(directions_url, json=body, headers=headers, timeout=15)
                 
                 if response.status_code == 200:
                     data = response.json()
-                    logger.debug(f"Response status: {response.status_code}, data keys: {list(data.keys())}")
-                    # Extract coordinates from the route
                     if 'features' in data and len(data['features']) > 0:
-                        feature = data['features'][0]
-                        if 'geometry' in feature and 'coordinates' in feature['geometry']:
-                            coordinates = feature['geometry']['coordinates']
-                            logger.info(f"Successfully retrieved route with {len(coordinates)} points")
-                            
-                            # Validate coordinates
-                            for i, coord in enumerate(coordinates):
-                                if len(coord) < 2 or not all(isinstance(c, (int, float)) for c in coord[:2]):
-                                    logger.warning(f"Invalid coordinate at index {i}: {coord}")
-                                    coordinates[i] = [0, 0]  # Replace with dummy value
-                            
-                            # If too many points, sample them down to num_points
-                            if len(coordinates) > num_points:
-                                step = max(1, len(coordinates) // num_points)
-                                sampled_coordinates = [coordinates[i] for i in range(0, len(coordinates), step)]
-                                # Always include the last point
-                                if coordinates[-1] not in sampled_coordinates:
-                                    sampled_coordinates.append(coordinates[-1])
-                                
-                                logger.info(f"Sampled route to {len(sampled_coordinates)} points")
-                                return sampled_coordinates
+                        if 'geometry' in data['features'][0] and 'coordinates' in data['features'][0]['geometry']:
+                            coordinates = data['features'][0]['geometry']['coordinates']
+                            if num_points < len(coordinates):
+                                # Sample down to requested number of points
+                                step = len(coordinates) // num_points
+                                sampled_route = [coordinates[i] for i in range(0, len(coordinates), step)]
+                                if coordinates[-1] not in sampled_route:
+                                    sampled_route.append(coordinates[-1])
+                                logger.info(f"Using sampled route with {len(sampled_route)} points")
+                                return sampled_route
                             else:
                                 logger.info(f"Using original route with {len(coordinates)} points")
                                 return coordinates
@@ -657,7 +553,6 @@ def generate_route(start, end, num_points=20):
                     break  # No need to retry
                 elif response.status_code == 429:  # Rate limit hit
                     logger.warning(f"API rate limit hit (attempt {attempt+1}). Retrying after delay...")
-                    import time
                     time.sleep(retry_delay * (attempt + 1))  # Incremental backoff
                     continue
                 else:
@@ -665,65 +560,42 @@ def generate_route(start, end, num_points=20):
                     logger.debug(f"API response: {response.text[:500]}...")
                     
                     if attempt < max_retries - 1:
-                        import time
                         time.sleep(retry_delay)
                         continue
             
             except requests.exceptions.Timeout:
                 logger.warning(f"API request timed out (attempt {attempt+1})")
                 if attempt < max_retries - 1:
-                    import time
                     time.sleep(retry_delay)
                     continue
             except Exception as e:
                 logger.error(f"Error using OpenRouteService directions API (attempt {attempt+1}): {str(e)}")
                 if attempt < max_retries - 1:
-                    import time
                     time.sleep(retry_delay)
                     continue
         
-        # If failed to get route data, we'll use a fallback method
-        # This is only needed in environments where the OpenRouteService API is not available
+        # If failed to get route data, use fallback method
         logger.warning("OpenRouteService APIs failed or not accessible, using straight line fallback method")
         logger.warning("IMPORTANT: Using straight line approximation which may not reflect actual roads")
-                
+        
+        # Fallback to enhanced straight line interpolation method
+        logger.info("Using fallback route generation method (straight line with enhancements)")
+        
+        # Base route is a straight line
+        route = []
+        for i in range(num_points):
+            t = i / (num_points - 1)
+            lng = start[0] + t * (end[0] - start[0])
+            lat = start[1] + t * (end[1] - start[1])
+            route.append([lng, lat])
+        
+        return route
+        
     except Exception as e:
         logger.error(f"Error in route generation: {str(e)}")
         logger.exception("Full exception details:")
-    
-    # Fallback to enhanced straight line interpolation method
-    logger.info("Using fallback route generation method (straight line with enhancements)")
-    
-    # Base route is a straight line
-    route = []
-    try:
-        direct_distance = math.sqrt((end[0] - start[0])**2 + (end[1] - start[1])**2)
-        
-        # No randomization for very short distances
-        use_randomization = direct_distance > 0.01  # About 1km
-        
-        for i in range(num_points):
-            fraction = i / (num_points - 1)
-            
-            # Base coordinates (straight line)
-            lng = start[0] + fraction * (end[0] - start[0])
-            lat = start[1] + fraction * (end[1] - start[1])
-            
-            # Add small random variation to simulate roads (only for middle points)
-            if use_randomization and i > 0 and i < num_points - 1:
-                # More randomization in the middle, less at the ends
-                variation_factor = min(0.0003, direct_distance * 0.02) * math.sin(math.pi * fraction)
-                lng += random.uniform(-variation_factor, variation_factor)
-                lat += random.uniform(-variation_factor, variation_factor)
-            
-            route.append((lng, lat))
-    except Exception as e:
-        logger.error(f"Error in fallback route generation: {str(e)}")
-        # Last resort fallback - just return start and end points
-        route = [start, end]
-    
-    logger.info(f"Generated fallback route with {len(route)} points")
-    return route
+        # Return a simple straight line as last resort
+        return [[start[0], start[1]], [end[0], end[1]]]
 
     def get_address_from_coordinates(self, longitude, latitude):
         """Get address from coordinates using reverse geocoding"""
