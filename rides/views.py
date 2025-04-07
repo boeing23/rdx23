@@ -39,7 +39,7 @@ logger = logging.getLogger(__name__)
 geolocator = Nominatim(user_agent="carpool_app")
 
 # OpenRouteService API constants
-ORS_API_KEY = getattr(settings, 'ORS_API_KEY', None)
+ORS_API_KEY = getattr(settings, 'OPENROUTE_API_KEY', None)
 if not ORS_API_KEY:
     logger.error("OpenRouteService API key not configured in settings")
 OPENROUTE_BASE_URL = "https://api.openrouteservice.org/v2"
