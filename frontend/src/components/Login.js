@@ -36,13 +36,13 @@ function Login() {
     try {
       console.log('Login attempt with:', { email: formData.username, password: '***' });
       
-      const response = await fetch(`${API_BASE_URL}/api/token/`, {
+      const response = await fetch(`${API_BASE_URL}/api/users/login/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          email: formData.username,
+          username: formData.username,
           password: formData.password,
         }),
       });
@@ -57,15 +57,21 @@ function Login() {
         throw new Error(data.detail || 'Invalid credentials');
       }
 
+      // Verify we received a token
+      if (!data.token) {
+        console.error('No token received in login response', data);
+        throw new Error('Invalid server response. Please try again.');
+      }
+
       // Clear any existing auth data
       localStorage.removeItem('token');
       localStorage.removeItem('userType');
       localStorage.removeItem('userId');
       
       // Store new auth data
-      localStorage.setItem('token', data.access);
-      localStorage.setItem('userId', data.user_id);
+      localStorage.setItem('token', data.token);
       localStorage.setItem('userType', data.user_type);
+      localStorage.setItem('userId', data.user?.id || '');
 
       // Verify storage
       console.log('Stored values:', {
