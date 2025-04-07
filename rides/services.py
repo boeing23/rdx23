@@ -477,12 +477,11 @@ def get_address_from_coordinates(longitude, latitude):
         logger.error(f"Error in reverse geocoding: {str(e)}")
         return None
 
-def create_match_notifications(pending_request, ride_request):
+def create_match_notifications(ride_request):
     """
-    Create notifications for both rider and driver when a pending request is matched with a ride.
+    Create notifications for both rider and driver when a ride request is created or a pending request is matched.
     
     Args:
-        pending_request: The PendingRideRequest that has been matched
         ride_request: The created RideRequest for the match
     
     Returns:
@@ -490,12 +489,49 @@ def create_match_notifications(pending_request, ride_request):
     """
     try:
         ride = ride_request.ride
+        rider = ride_request.rider
+        
+        # Calculate optimal pickup and dropoff points if possible
+        optimal_pickup_point = None
+        optimal_dropoff_point = None
+        
+        try:
+            # Get coordinates for rider and driver
+            driver_start = (ride.start_longitude, ride.start_latitude)
+            driver_end = (ride.end_longitude, ride.end_latitude)
+            
+            # Use ride_request coordinates if available, otherwise fall back to ride coordinates
+            rider_pickup = (getattr(ride_request, 'pickup_longitude', None) or ride.start_longitude, 
+                           getattr(ride_request, 'pickup_latitude', None) or ride.start_latitude)
+            rider_dropoff = (getattr(ride_request, 'dropoff_longitude', None) or ride.end_longitude,
+                            getattr(ride_request, 'dropoff_latitude', None) or ride.end_latitude)
+            
+            # Import the function locally to avoid circular imports
+            from .views import calculate_route_overlap
+            
+            # Calculate route overlap which returns optimal points
+            overlap_percentage, optimal_dropoff_point, optimal_pickup_point = calculate_route_overlap(
+                driver_start, driver_end, rider_pickup, rider_dropoff
+            )
+        except Exception as e:
+            logger.error(f"Error calculating optimal points for notifications: {str(e)}")
+        
+        # Format the message with optimal points if available
+        pickup_message = ""
+        dropoff_message = ""
+        
+        if optimal_pickup_point:
+            pickup_message = f" (Optimal pickup point: {optimal_pickup_point[1]:.6f}, {optimal_pickup_point[0]:.6f})"
+            
+        if optimal_dropoff_point:
+            dropoff_message = f" (Optimal dropoff point: {optimal_dropoff_point[1]:.6f}, {optimal_dropoff_point[0]:.6f})"
         
         # Notify rider
         Notification.objects.create(
-            recipient=pending_request.rider,
+            recipient=rider,
             sender=ride.driver,
-            message=f"Your ride request from {pending_request.pickup_location} to {pending_request.dropoff_location} has been matched with a ride",
+            message=f"Your ride request from {ride_request.pickup_location} to {ride_request.dropoff_location} " +
+                   f"has been matched with a ride{pickup_message}{dropoff_message}",
             ride=ride,
             ride_request=ride_request,
             notification_type='RIDE_MATCH'
@@ -504,14 +540,15 @@ def create_match_notifications(pending_request, ride_request):
         # Notify driver
         Notification.objects.create(
             recipient=ride.driver,
-            sender=pending_request.rider,
-            message=f"A rider has been matched with your ride from {ride.start_location} to {ride.end_location}",
+            sender=rider,
+            message=f"A rider has been matched with your ride from {ride.start_location} to {ride.end_location}" +
+                   f"{pickup_message}{dropoff_message}",
             ride=ride,
             ride_request=ride_request,
             notification_type='RIDE_REQUEST'
         )
         
-        logger.info(f"Created match notifications for pending request {pending_request.id} and ride request {ride_request.id}")
+        logger.info(f"Created match notifications for ride request {ride_request.id}")
     except Exception as e:
         logger.error(f"Error creating match notifications: {str(e)}")
         logger.exception("Full exception details:") 

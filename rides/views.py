@@ -1063,6 +1063,25 @@ class RideViewSet(viewsets.ModelViewSet):
                 is_read=False
             ).order_by('-created_at')
 
+            # Calculate optimal pickup and dropoff points if there's a match
+            optimal_pickup_point = None
+            optimal_dropoff_point = None
+            
+            if pending_request.status == 'MATCH_PROPOSED' and pending_request.proposed_ride:
+                try:
+                    # Get coordinates for rider and driver
+                    driver_start = (pending_request.proposed_ride.start_longitude, pending_request.proposed_ride.start_latitude)
+                    driver_end = (pending_request.proposed_ride.end_longitude, pending_request.proposed_ride.end_latitude)
+                    rider_pickup = (pending_request.pickup_longitude, pending_request.pickup_latitude)
+                    rider_dropoff = (pending_request.dropoff_longitude, pending_request.dropoff_latitude)
+                    
+                    # Calculate route overlap which returns optimal points
+                    overlap_percentage, optimal_dropoff_point, optimal_pickup_point = calculate_route_overlap(
+                        driver_start, driver_end, rider_pickup, rider_dropoff
+                    )
+                except Exception as e:
+                    logger.error(f"Error calculating optimal points: {str(e)}")
+
             return Response({
                 "status": pending_request.status,
                 "has_match": pending_request.status == 'MATCH_PROPOSED',
@@ -1071,7 +1090,9 @@ class RideViewSet(viewsets.ModelViewSet):
                     "driver_name": pending_request.proposed_ride.driver.get_full_name() if pending_request.proposed_ride else None,
                     "pickup": pending_request.pickup_location,
                     "dropoff": pending_request.dropoff_location,
-                    "departure_time": pending_request.departure_time.isoformat() if pending_request.departure_time else None
+                    "departure_time": pending_request.departure_time.isoformat() if pending_request.departure_time else None,
+                    "optimal_pickup_point": optimal_pickup_point,
+                    "optimal_dropoff_point": optimal_dropoff_point
                 } if pending_request.status == 'MATCH_PROPOSED' else None,
                 "notifications": NotificationSerializer(notifications, many=True).data
             })
@@ -1206,6 +1227,26 @@ class RideRequestViewSet(viewsets.ModelViewSet):
                     {"error": "No proposed ride found for this request"},
                     status=status.HTTP_400_BAD_REQUEST
                 )
+                
+            # Calculate optimal pickup and dropoff points
+            optimal_pickup_point = None
+            optimal_dropoff_point = None
+            
+            try:
+                # Get coordinates for rider and driver
+                driver_start = (proposed_ride.start_longitude, proposed_ride.start_latitude)
+                driver_end = (proposed_ride.end_longitude, proposed_ride.end_latitude)
+                rider_pickup = (pending_request.pickup_longitude, pending_request.pickup_latitude)
+                rider_dropoff = (pending_request.dropoff_longitude, pending_request.dropoff_latitude)
+                
+                # Calculate route overlap which returns optimal points
+                overlap_percentage, optimal_dropoff_point, optimal_pickup_point = calculate_route_overlap(
+                    driver_start, driver_end, rider_pickup, rider_dropoff
+                )
+                logger.info(f"Calculated optimal pickup point: {optimal_pickup_point}")
+                logger.info(f"Calculated optimal dropoff point: {optimal_dropoff_point}")
+            except Exception as e:
+                logger.error(f"Error calculating optimal points for match: {str(e)}")
 
             # Create a RideRequest
             ride_request = RideRequest.objects.create(
@@ -1226,7 +1267,22 @@ class RideRequestViewSet(viewsets.ModelViewSet):
             return Response({
                 "status": "success",
                 "message": "Match accepted successfully",
-                "ride_request": RideRequestSerializer(ride_request).data
+                "ride_request": RideRequestSerializer(ride_request).data,
+                "match_details": {
+                    "ride_id": proposed_ride.id,
+                    "driver_name": proposed_ride.driver.get_full_name(),
+                    "driver_id": proposed_ride.driver.id,
+                    "pickup": pending_request.pickup_location,
+                    "dropoff": pending_request.dropoff_location,
+                    "departure_time": proposed_ride.departure_time.isoformat() if proposed_ride.departure_time else None,
+                    "optimal_pickup_point": optimal_pickup_point,
+                    "optimal_dropoff_point": optimal_dropoff_point,
+                    "vehicle_make": getattr(proposed_ride.driver, 'vehicle_make', ''),
+                    "vehicle_model": getattr(proposed_ride.driver, 'vehicle_model', ''),
+                    "vehicle_color": getattr(proposed_ride.driver, 'vehicle_color', ''),
+                    "vehicle_year": getattr(proposed_ride.driver, 'vehicle_year', ''),
+                    "license_plate": getattr(proposed_ride.driver, 'license_plate', '')
+                }
             })
 
         except Exception as e:
