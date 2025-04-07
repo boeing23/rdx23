@@ -344,35 +344,73 @@ const RequestRide = () => {
     try {
       const token = localStorage.getItem('token');
       
-      // Safely parse the JSON from localStorage with error handling
+      // Safely parse the JSON from localStorage with improved error handling
       let currentMatch;
       try {
         const storedMatch = localStorage.getItem('currentMatch');
-        currentMatch = storedMatch ? JSON.parse(storedMatch) : null;
+        console.log('Raw stored match from localStorage:', storedMatch);
+        
+        if (!storedMatch) {
+          throw new Error('No match data found in localStorage');
+        }
+        
+        // Check if it's already an object (improperly stored)
+        if (typeof storedMatch === 'object') {
+          console.warn('Match data already an object, not a string. Using directly.');
+          currentMatch = storedMatch;
+        } else {
+          // Normal case - parse the JSON string
+          currentMatch = JSON.parse(storedMatch);
+        }
       } catch (err) {
         console.error('Error parsing currentMatch from localStorage:', err);
-        setError('Invalid ride data. Please try requesting a new ride.');
-        return;
+        
+        // Try to save a valid JSON string (recovery attempt)
+        try {
+          if (matchDetails) {
+            console.log('Attempting recovery using matchDetails from state');
+            currentMatch = matchDetails;
+            localStorage.setItem('currentMatch', JSON.stringify(matchDetails));
+          }
+        } catch (recoveryErr) {
+          console.error('Recovery attempt failed:', recoveryErr);
+        }
+        
+        if (!currentMatch) {
+          setError('Invalid ride data. Please try requesting a new ride.');
+          return;
+        }
       }
       
       console.log('Current match data:', currentMatch);
       
-      if (!currentMatch || !currentMatch.ride_request) {
-        console.error('No ride request found in current match:', currentMatch);
-        setError('No ride request found. Please try again.');
+      if (!currentMatch) {
+        console.error('No match data found');
+        setError('No match data found. Please try again.');
         return;
       }
 
-      // Get the pending request ID from the match details
-      const pendingRequestId = currentMatch.ride_request.pending_request_id;
-      if (!pendingRequestId) {
-        console.error('No pending request ID found in match:', currentMatch);
-        setError('Invalid match data. Please try again.');
-        return;
-      }
-
-      console.log('Accepting match with pending request ID:', pendingRequestId);
+      // Extract either the pending_request_id (if available) or use the ride_request.id
+      let requestId;
       
+      if (currentMatch.pending_request_id) {
+        requestId = currentMatch.pending_request_id;
+        console.log('Using pending_request_id from match data:', requestId);
+      } else if (currentMatch.ride_request && currentMatch.ride_request.pending_request_id) {
+        requestId = currentMatch.ride_request.pending_request_id;
+        console.log('Using pending_request_id from ride_request:', requestId);
+      } else if (currentMatch.ride_request && currentMatch.ride_request.id) {
+        requestId = currentMatch.ride_request.id;
+        console.log('Using ride_request.id as fallback:', requestId);
+      } else {
+        console.error('Could not find a valid request ID in:', currentMatch);
+        setError('Could not find a valid request ID. Please try requesting a new ride.');
+        return;
+      }
+
+      console.log('Accepting match with request ID:', requestId);
+      
+      // Use the correct endpoint URL and request format
       const response = await fetch(`${API_BASE_URL}/api/rides/requests/accept_match/`, {
         method: 'POST',
         headers: {
@@ -380,16 +418,35 @@ const RequestRide = () => {
           'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
-          pending_request_id: pendingRequestId
+          pending_request_id: requestId
         })
       });
 
-      const data = await response.json();
+      // Check if response is valid JSON
+      let data;
+      const responseText = await response.text();
+      console.log('Raw response:', responseText);
+      
+      try {
+        data = JSON.parse(responseText);
+      } catch (parseError) {
+        console.error('Error parsing response:', parseError);
+        console.error('Response text:', responseText);
+        setError('Server returned invalid response. Please try again.');
+        return;
+      }
+
       console.log('Accept match response:', data);
 
       if (response.ok) {
         // Clear the current match from localStorage since it's been accepted
-        localStorage.removeItem('currentMatch');
+        try {
+          localStorage.removeItem('currentMatch');
+        } catch (err) {
+          console.error('Error removing currentMatch from localStorage:', err);
+          // Continue despite error
+        }
+        
         setShowMatchDialog(false);
         setSuccess('Ride accepted successfully!');
         
