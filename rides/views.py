@@ -637,7 +637,7 @@ def generate_route(start_coords, end_coords, max_retries=3, retry_delay=2):
             logger.info(f"Calling OpenRouteService directions API (attempt {attempt + 1}/{max_retries}) for route from ({start_lng}, {start_lat}) to ({end_lng}, {end_lat})")
             
             response = requests.get(url, headers=headers, params=params, timeout=15)
-            
+                
             if response.status_code == 200:
                 data = response.json()
                 if 'features' in data and data['features']:
@@ -647,9 +647,6 @@ def generate_route(start_coords, end_coords, max_retries=3, retry_delay=2):
                     return coordinates
                 else:
                     logger.warning("No features found in directions API response")
-                    if attempt < max_retries - 1:
-                        time.sleep(retry_delay)
-                        continue
             elif response.status_code == 403:
                 logger.error("OpenRouteService API key rejected (403 Forbidden)")
                 return generate_fallback_route(start_coords, end_coords)
@@ -956,6 +953,7 @@ class RideRequestViewSet(viewsets.ModelViewSet):
             
             # Get the specific ride
             try:
+                # If a specific ride was requested, try to match with that first
                 ride = Ride.objects.get(id=ride_id.id)
                 logger.info(f"Found ride with ID {ride.id}: {ride}")
             except Ride.DoesNotExist:
@@ -988,36 +986,54 @@ class RideRequestViewSet(viewsets.ModelViewSet):
             optimal_pickup_point = compatibility_result.get('optimal_pickup_point')
             optimal_dropoff_point = compatibility_result.get('optimal_dropoff_point')
             
-            # If either optimal point is None, treat it as no match
-            if not optimal_pickup_point or not optimal_dropoff_point:
-                logger.warning(f"Match failed: Missing optimal points")
-                # Create the request with rider explicitly set
-                ride_request = RideRequest(
-                    ride=ride,
-                    rider=request.user,
-                    pickup_location=serializer.validated_data['pickup_location'],
-                    dropoff_location=serializer.validated_data['dropoff_location'],
-                    pickup_latitude=serializer.validated_data['pickup_latitude'],
-                    pickup_longitude=serializer.validated_data['pickup_longitude'],
-                    dropoff_latitude=serializer.validated_data['dropoff_latitude'],
-                    dropoff_longitude=serializer.validated_data['dropoff_longitude'],
-                    departure_time=serializer.validated_data['departure_time'],
-                    seats_needed=serializer.validated_data.get('seats_needed', 1),
-                    status='PENDING'
-                )
-                ride_request.save()
+            # If the requested ride doesn't match well, try to find other potential rides
+            if not optimal_pickup_point or not optimal_dropoff_point or compatibility_score < COMPATIBILITY_THRESHOLD:
+                logger.info("Specific ride doesn't match well. Trying to find other available rides...")
                 
-                logger.info(f"Created pending ride request with ID {ride_request.id} for user {request.user.id}")
+                # Get other available rides
+                available_rides = Ride.objects.filter(
+                    departure_time__gte=timezone.now(),
+                    available_seats__gte=serializer.validated_data.get('seats_needed', 1),
+                    status='SCHEDULED'
+                ).exclude(id=ride_id.id if ride_id else None).exclude(driver=request.user)
                 
-                return Response({
-                    'status': 'error',
-                    'has_match': False,
-                    'error': 'No suitable matching rides found. Your request has been saved and will be matched when a compatible ride becomes available.'
-                }, status=status.HTTP_200_OK)
+                logger.info(f"Found {available_rides.count()} other available rides to check")
+                
+                # Check each ride for compatibility
+                best_match = None
+                best_score = 0
+                best_compatibility_result = None
+                
+                for potential_ride in available_rides:
+                    potential_compatibility = calculate_route_overlap(
+                        driver_start=(potential_ride.start_longitude, potential_ride.start_latitude),
+                        driver_end=(potential_ride.end_longitude, potential_ride.end_latitude),
+                        rider_pickup=(float(serializer.validated_data['pickup_longitude']), float(serializer.validated_data['pickup_latitude'])),
+                        rider_dropoff=(float(serializer.validated_data['dropoff_longitude']), float(serializer.validated_data['dropoff_latitude'])),
+                        get_optimal_points=True,
+                        log_prefix=f"[Ride {potential_ride.id}] "
+                    )
+                    
+                    potential_score = potential_compatibility.get('compatibility_score', 0)
+                    
+                    # Check if this ride is better than our current best match
+                    if potential_score >= COMPATIBILITY_THRESHOLD and potential_score > best_score:
+                        if potential_compatibility.get('optimal_pickup_point') and potential_compatibility.get('optimal_dropoff_point'):
+                            best_match = potential_ride
+                            best_score = potential_score
+                            best_compatibility_result = potential_compatibility
+                
+                # If we found a better match
+                if best_match and best_score > compatibility_score:
+                    logger.info(f"Found better match! Ride {best_match.id} with score {best_score:.2f}")
+                    ride = best_match
+                    compatibility_score = best_score
+                    optimal_pickup_point = best_compatibility_result.get('optimal_pickup_point')
+                    optimal_dropoff_point = best_compatibility_result.get('optimal_dropoff_point')
             
-            # Check if compatibility score meets the threshold
-            if compatibility_score < COMPATIBILITY_THRESHOLD:
-                logger.warning(f"Match failed: Compatibility score {compatibility_score:.2f} below threshold {COMPATIBILITY_THRESHOLD}")
+            # If no good match found after trying all rides
+            if not optimal_pickup_point or not optimal_dropoff_point or compatibility_score < COMPATIBILITY_THRESHOLD:
+                logger.warning(f"No good matches found among any available rides")
                 # Create the request with rider explicitly set
                 ride_request = RideRequest(
                     ride=ride,
@@ -1157,7 +1173,7 @@ class RideRequestViewSet(viewsets.ModelViewSet):
                 # Check if the request is in MATCH_PROPOSED state
                 if pending_request.status != 'MATCH_PROPOSED':
                     return Response(
-                                {"error": f"This request is not in a state to be accepted. Current status: {pending_request.status}"},
+                        {"error": f"This request is not in a state to be accepted. Current status: {pending_request.status}"},
                         status=status.HTTP_400_BAD_REQUEST
                     )
     
@@ -1195,7 +1211,7 @@ class RideRequestViewSet(viewsets.ModelViewSet):
                     logger.error(f"Error calculating optimal points for match: {str(e)}")
                     logger.exception("Full exception details")
                     # Continue with the request even if calculation fails
-    
+
                 # Log the points before creating the ride request
                 logger.info(f"Creating RideRequest with optimal_pickup_point={optimal_pickup_point}, nearest_dropoff_point={optimal_dropoff_point}")
     
@@ -1221,12 +1237,12 @@ class RideRequestViewSet(viewsets.ModelViewSet):
                 logger.info(f"Saved RideRequest with ID {ride_request.id}")
                 logger.info(f"Saved optimal_pickup_point: {ride_request.optimal_pickup_point}")
                 logger.info(f"Saved nearest_dropoff_point: {ride_request.nearest_dropoff_point}")
-    
+
                 # Update the pending request status
                 pending_request.status = 'MATCHED'
                 pending_request.matched_ride_request = ride_request
                 pending_request.save()
-    
+
                 # Decrement the available seats in the ride
                 logger.info(f"BEFORE SEAT UPDATE: Ride {proposed_ride.id} has {proposed_ride.available_seats} available seats")
                 logger.info(f"Going to decrease seats by {pending_request.seats_needed}")
@@ -1259,7 +1275,7 @@ class RideRequestViewSet(viewsets.ModelViewSet):
                 except Exception as e:
                     logger.error(f"Error creating notifications or sending emails: {str(e)}")
                     logger.exception("Full exception details")
-    
+
                 return Response({
                     "status": "success",
                     "message": "Match accepted successfully",
