@@ -993,9 +993,9 @@ class RideRequestViewSet(viewsets.ModelViewSet):
             
             # Notify driver about the new request
             Notification.objects.create(
-                user=ride.driver,
+                recipient=ride.driver,
+                notification_type='RIDE_REQUEST',
                 message=f"{request.user.username} has requested to join your ride.",
-                type='ride_request',
                 ride_request=ride_request
             )
     
