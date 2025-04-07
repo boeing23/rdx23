@@ -23,6 +23,13 @@ import random
 import pytz
 from django.conf import settings
 from django.db import DatabaseError
+from django.db import models
+from django.db.models import Q, F, Count, Sum, Avg
+from django.db.models.functions import Coalesce, ExtractHour
+from django.http import JsonResponse
+from django.utils.timezone import make_aware
+from django.utils.dateparse import parse_datetime
+from users.models import User  # For admin dashboard functions
 
 logger = logging.getLogger(__name__)
 
@@ -1008,7 +1015,7 @@ class RideViewSet(viewsets.ModelViewSet):
 
                     # Create notification for the rider
                     Notification.objects.create(
-                        user=pending_request.rider,
+                        recipient=pending_request.rider,
                         notification_type='MATCH_PROPOSED',
                         message=f"We found a potential ride match from {ride.start_location} to {ride.end_location}",
                         pending_request=pending_request
@@ -1058,7 +1065,7 @@ class RideViewSet(viewsets.ModelViewSet):
 
             # Get any new notifications for this request
             notifications = Notification.objects.filter(
-                user=request.user,
+                recipient=request.user,
                 pending_request=pending_request,
                 is_read=False
             ).order_by('-created_at')
@@ -1127,41 +1134,52 @@ class RideRequestViewSet(viewsets.ModelViewSet):
 
     def create(self, request, *args, **kwargs):
         """Create a new ride request"""
-        # Add rider to request data
-        request.data['rider'] = request.user.id
-        
-        # Validate request data
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-
-        # Get ride object
-        ride = get_object_or_404(Ride, pk=request.data.get('ride'))
-
-        # Check if ride exists and has available seats
-        if not ride:
-            return Response(
-                {"error": "Ride not found"},
-                status=status.HTTP_404_NOT_FOUND
-            )
-
-        if ride.available_seats < serializer.validated_data.get('seats_needed', 1):
-            return Response(
-                {"error": "Not enough available seats"},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        # Create the ride request
         try:
+            # Add rider to request data
+            request.data['rider'] = request.user.id
+            
+            # Log incoming request for debugging
+            logger.info(f"RideRequest create: Received data: {request.data}")
+            
+            # Check if ride ID is present
+            ride_id = request.data.get('ride')
+            if not ride_id:
+                return Response(
+                    {"error": "Ride ID is required"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Validate request data
+            serializer = self.get_serializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+    
+            # Get ride object
+            try:
+                ride = Ride.objects.get(pk=ride_id)
+            except Ride.DoesNotExist:
+                return Response(
+                    {"error": "Ride not found"},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+    
+            # Check if ride has available seats
+            if ride.available_seats < serializer.validated_data.get('seats_needed', 1):
+                return Response(
+                    {"error": "Not enough available seats"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+    
+            # Create the ride request
             ride_request = serializer.save()
             
             # Create notification for the driver
             driver_notification = Notification.objects.create(
-                user=ride.driver,
+                recipient=ride.driver,
                 notification_type='RIDE_REQUEST',
                 message=f"{request.user.get_full_name()} has requested to join your ride from {ride.start_location} to {ride.end_location}",
                 ride_request=ride_request
             )
-
+    
             # Note: We include several explicit match-related fields (isMatched, match_found, match_details)
             # to ensure the frontend correctly recognizes this as a matched ride
             return Response({
@@ -1188,11 +1206,11 @@ class RideRequestViewSet(viewsets.ModelViewSet):
                 "notification_sent": True,
                 "notification_id": driver_notification.id
             }, status=status.HTTP_201_CREATED)
-
+    
         except Exception as e:
-            logger.error(f"Error creating ride request: {str(e)}")
+            logger.error(f"Error creating ride request: {str(e)}", exc_info=True)
             return Response(
-                {"error": "Failed to create ride request"},
+                {"error": f"Failed to create ride request: {str(e)}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
@@ -1319,7 +1337,7 @@ class RideRequestViewSet(viewsets.ModelViewSet):
 
             # Create a notification for the rider
             Notification.objects.create(
-                user=pending_request.rider,
+                recipient=pending_request.rider,
                 notification_type='RIDE_REJECTED',
                 message=f"You have rejected the proposed ride match for your request from {pending_request.pickup_location} to {pending_request.dropoff_location}",
                 pending_request=pending_request
@@ -1387,3 +1405,31 @@ def mark_expired_pending_requests():
         
     except Exception as e:
         logger.error(f"Error marking expired pending requests: {str(e)}")
+
+def fix_notification_field_names():
+    """
+    One-time fix for notification field names. 
+    Migrates any notifications that use 'user' field to 'recipient' field.
+    """
+    try:
+        from django.db import connection
+        with connection.cursor() as cursor:
+            # Check if 'user' column exists in the notifications table
+            cursor.execute("""
+                SELECT COUNT(*) 
+                FROM information_schema.columns 
+                WHERE table_name='rides_notification' AND column_name='user_id'
+            """)
+            if cursor.fetchone()[0] > 0:
+                # Migrate data from user_id to recipient_id
+                cursor.execute("""
+                    UPDATE rides_notification 
+                    SET recipient_id = user_id 
+                    WHERE recipient_id IS NULL AND user_id IS NOT NULL
+                """)
+                logger.info("Successfully migrated notification field names from user to recipient")
+    except Exception as e:
+        logger.error(f"Error fixing notification field names: {str(e)}")
+
+# Run the fix on module import
+fix_notification_field_names()
