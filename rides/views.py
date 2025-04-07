@@ -1283,6 +1283,10 @@ class RideRequestViewSet(viewsets.ModelViewSet):
             # Update the pending request status
             pending_request.status = 'MATCHED'
             pending_request.save()
+            
+            # Decrement the available seats in the ride
+            proposed_ride.available_seats -= pending_request.seats_needed
+            proposed_ride.save()
 
             # Create notifications
             create_match_notifications(ride_request)
