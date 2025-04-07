@@ -22,14 +22,12 @@ import {
   DialogContent,
   DialogActions,
   CircularProgress,
-  Radio,
-  AlertTitle
+  
 } from '@mui/material';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
 import SearchIcon from '@mui/icons-material/Search';
-import GoogleMapReact from 'google-map-react';
 import { getUserCurrentLocation, DEFAULT_LOCATION, geocodeWithPriority } from '../utils/locationUtils';
 
 const RequestRide = () => {
