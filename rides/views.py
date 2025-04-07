@@ -1146,9 +1146,6 @@ class RideRequestViewSet(viewsets.ModelViewSet):
     def create(self, request, *args, **kwargs):
         """Create a new ride request"""
         try:
-            # Add rider to request data
-            request.data['rider'] = request.user.id
-            
             # Log incoming request for debugging
             logger.info(f"RideRequest create: Received data: {request.data}")
             
@@ -1181,7 +1178,7 @@ class RideRequestViewSet(viewsets.ModelViewSet):
                 )
     
             # Create the ride request
-            ride_request = serializer.save()
+            ride_request = serializer.save(rider=request.user)
             
             # Create notification for the driver
             driver_notification = Notification.objects.create(
@@ -1224,9 +1221,6 @@ class RideRequestViewSet(viewsets.ModelViewSet):
                 {"error": f"Failed to create ride request: {str(e)}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-
-    def perform_create(self, serializer):
-        serializer.save(rider=self.request.user)
 
     @action(detail=False, methods=['post'])
     def accept_match(self, request):
