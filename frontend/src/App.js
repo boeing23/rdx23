@@ -12,6 +12,7 @@ import UpdateDriverProfile from './components/UpdateDriverProfile';
 import Navbar from './components/Navbar';
 import AcceptedRides from './components/AcceptedRides';
 import './App.css';
+import { API_BASE_URL } from './config';
 
 function Home() {
   return (
@@ -38,6 +39,37 @@ function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [userType, setUserType] = useState(null);
   const [isInitialized, setIsInitialized] = useState(false);
+  const [backendStatus, setBackendStatus] = useState('checking');
+
+  // Check backend health on startup
+  useEffect(() => {
+    const checkBackendHealth = async () => {
+      try {
+        console.log('Checking backend health...');
+        const response = await fetch(`${API_BASE_URL}/`, {
+          method: 'GET',
+          headers: {
+            'Accept': 'application/json',
+          },
+        });
+        
+        console.log('Backend health check response:', response.status);
+        
+        if (response.ok) {
+          setBackendStatus('online');
+          console.log('Backend is online');
+        } else {
+          setBackendStatus('error');
+          console.error('Backend returned error status:', response.status);
+        }
+      } catch (err) {
+        setBackendStatus('offline');
+        console.error('Backend health check failed:', err.message);
+      }
+    };
+
+    checkBackendHealth();
+  }, []);
 
   // Authentication state handler
   useEffect(() => {
@@ -110,8 +142,15 @@ function App() {
 
   return (
     <Router>
-      <Navbar />
+      <Navbar backendStatus={backendStatus} />
       <Container>
+        {backendStatus === 'offline' && (
+          <Box sx={{ mt: 2, p: 2, bgcolor: 'error.main', color: 'white', borderRadius: 1 }}>
+            <Typography>
+              Cannot connect to the backend server. Please try again later.
+            </Typography>
+          </Box>
+        )}
         <Routes>
           <Route 
             path="/" 

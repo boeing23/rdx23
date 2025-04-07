@@ -10,13 +10,22 @@ import {
   MenuItem, 
   Box, 
   Divider,
-  Avatar
+  Avatar,
+  Badge
 } from '@mui/material';
 import MenuIcon from '@mui/icons-material/Menu';
 import AccountCircle from '@mui/icons-material/AccountCircle';
 import NotificationList from './NotificationList';
+import NotificationsIcon from '@mui/icons-material/Notifications';
+import PersonIcon from '@mui/icons-material/Person';
+import DirectionsCarIcon from '@mui/icons-material/DirectionsCar';
+import LogoutIcon from '@mui/icons-material/Logout';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import ErrorIcon from '@mui/icons-material/Error';
+import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty';
+import { API_BASE_URL } from '../config';
 
-function Navbar() {
+function Navbar({ backendStatus }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [userType, setUserType] = useState(null);
   const [mobileAnchorEl, setMobileAnchorEl] = useState(null);
@@ -133,6 +142,20 @@ function Navbar() {
   // For debugging
   console.log('Navbar render state:', { isAuthenticated, userType });
 
+  // Backend status indicator styles
+  const getStatusIcon = () => {
+    switch(backendStatus) {
+      case 'online':
+        return <CheckCircleIcon style={{ color: 'green', verticalAlign: 'middle' }} />;
+      case 'error':
+        return <ErrorIcon style={{ color: 'orange', verticalAlign: 'middle' }} />;
+      case 'offline':
+        return <ErrorIcon style={{ color: 'red', verticalAlign: 'middle' }} />;
+      default:
+        return <HourglassEmptyIcon style={{ color: 'gray', verticalAlign: 'middle' }} />;
+    }
+  };
+
   const renderMobileMenu = () => (
     <Menu
       anchorEl={mobileAnchorEl}
@@ -222,6 +245,16 @@ function Navbar() {
         >
           ChalBe
         </Typography>
+
+        {/* Backend Status Indicator */}
+        <Box sx={{ display: 'flex', alignItems: 'center', mr: 2 }}>
+          {getStatusIcon()}
+          <Typography variant="caption" sx={{ ml: 0.5, display: { xs: 'none', sm: 'block' } }}>
+            {backendStatus === 'online' ? 'Connected' : 
+             backendStatus === 'offline' ? 'Disconnected' : 
+             backendStatus === 'error' ? 'Error' : 'Checking...'}
+          </Typography>
+        </Box>
 
         {/* Desktop Menu */}
         <Box sx={{ 
