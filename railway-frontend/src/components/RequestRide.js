@@ -392,7 +392,8 @@ const RequestRide = () => {
 
       console.log('Accepting match with ride request ID:', currentMatch.ride_request.id);
       
-      const response = await fetch(`${API_BASE_URL}/api/rides/requests/${currentMatch.ride_request.id}/accept_match/`, {
+      // Use the correct endpoint URL
+      const response = await fetch(`${API_BASE_URL}/api/rides/requests/${currentMatch.ride_request.id}/accept/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -400,7 +401,18 @@ const RequestRide = () => {
         }
       });
 
-      const data = await response.json();
+      // Check if response is valid JSON
+      let data;
+      const responseText = await response.text();
+      try {
+        data = JSON.parse(responseText);
+      } catch (parseError) {
+        console.error('Error parsing response:', parseError);
+        console.error('Response text:', responseText);
+        setError('Server returned invalid response. Please try again.');
+        return;
+      }
+
       console.log('Accept match response:', data);
 
       if (response.ok) {
@@ -650,99 +662,112 @@ const RequestRide = () => {
               <Typography variant="h6" gutterBottom>
                 Driver Details
               </Typography>
-              <Typography>Name: {matchDetails.driver_name}</Typography>
-              <Typography>Email: {matchDetails.driver_email}</Typography>
-              <Typography>Phone: {matchDetails.driver_phone}</Typography>
-              
-              <Typography variant="h6" gutterBottom sx={{ mt: 2 }}>
+              <Grid container spacing={2}>
+                <Grid item xs={12} sm={6}>
+                  <Typography variant="body1">
+                    <strong>Name:</strong> {matchDetails.driver_name || 'Not provided'}
+                  </Typography>
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <Typography variant="body1">
+                    <strong>Email:</strong> {matchDetails.driver_email || 'Not provided'}
+                  </Typography>
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <Typography variant="body1">
+                    <strong>Phone:</strong> {matchDetails.driver_phone || 'Not provided'}
+                  </Typography>
+                </Grid>
+              </Grid>
+
+              <Typography variant="h6" sx={{ mt: 2 }} gutterBottom>
                 Vehicle Details
               </Typography>
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                <Typography>
-                  {matchDetails.vehicle_details?.year || ''} {matchDetails.vehicle_details?.make || ''} {matchDetails.vehicle_details?.model || ''}
-                </Typography>
-                <Typography>Color: {matchDetails.vehicle_details?.color || ''}</Typography>
-                <Typography>License Plate: {matchDetails.vehicle_details?.license_plate || ''}</Typography>
-                <Typography>Max Passengers: {matchDetails.vehicle_details?.max_passengers || ''}</Typography>
-              </Box>
-              
-              <Typography variant="h6" gutterBottom sx={{ mt: 2 }}>
+              <Grid container spacing={2}>
+                <Grid item xs={12} sm={6}>
+                  <Typography variant="body1">
+                    <strong>Make:</strong> {matchDetails.vehicle_details?.make || 'Not provided'}
+                  </Typography>
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <Typography variant="body1">
+                    <strong>Model:</strong> {matchDetails.vehicle_details?.model || 'Not provided'}
+                  </Typography>
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <Typography variant="body1">
+                    <strong>Color:</strong> {matchDetails.vehicle_details?.color || 'Not provided'}
+                  </Typography>
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <Typography variant="body1">
+                    <strong>License Plate:</strong> {matchDetails.vehicle_details?.license_plate || 'Not provided'}
+                  </Typography>
+                </Grid>
+              </Grid>
+
+              <Typography variant="h6" sx={{ mt: 2 }} gutterBottom>
                 Ride Details
               </Typography>
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                <Typography>From: {matchDetails.ride_details?.start_location || ''}</Typography>
-                <Typography>To: {matchDetails.ride_details?.end_location || ''}</Typography>
-                <Typography>
-                  Departure: {matchDetails.ride_details?.departure_time ? new Date(matchDetails.ride_details.departure_time).toLocaleString() : ''}
-                </Typography>
-                <Typography>Available Seats: {matchDetails.ride_details?.available_seats || ''}</Typography>
-              </Box>
-              
-              <Typography variant="h6" gutterBottom sx={{ mt: 2 }}>
+              <Grid container spacing={2}>
+                <Grid item xs={12} sm={6}>
+                  <Typography variant="body1">
+                    <strong>Pickup Location:</strong> {matchDetails.ride_details?.start_location || matchDetails.pickup || 'Not provided'}
+                  </Typography>
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <Typography variant="body1">
+                    <strong>Dropoff Location:</strong> {matchDetails.ride_details?.end_location || matchDetails.dropoff || 'Not provided'}
+                  </Typography>
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <Typography variant="body1">
+                    <strong>Departure Time:</strong> {new Date(matchDetails.ride_details?.departure_time || matchDetails.departure_time).toLocaleString()}
+                  </Typography>
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <Typography variant="body1">
+                    <strong>Available Seats:</strong> {matchDetails.ride_details?.available_seats || 1}
+                  </Typography>
+                </Grid>
+              </Grid>
+
+              <Typography variant="h6" sx={{ mt: 2 }} gutterBottom>
                 Pickup & Drop-off Details
               </Typography>
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                <Typography>Your Pickup: {matchDetails.pickup_location || matchDetails.ride_request?.pickup_location || ''}</Typography>
-                <Typography>Your Dropoff: {matchDetails.dropoff_location || matchDetails.ride_request?.dropoff_location || ''}</Typography>
-                
-                {/* Debug output to check what data is available */}
-                {console.log('Debug - matchDetails for optimal points:', {
-                  from_match_details: {
-                    optimal_pickup: matchDetails.optimal_pickup_point,
-                    optimal_dropoff: matchDetails.optimal_dropoff_point
-                  },
-                  from_ride_request: {
-                    optimal_pickup: matchDetails.ride_request?.optimal_pickup_point,
-                    nearest_dropoff: matchDetails.ride_request?.nearest_dropoff_point
-                  }
-                })}
-                
-                {/* Only show if optimal points are available */}
-                {(matchDetails.optimal_pickup_point || matchDetails.ride_request?.optimal_pickup_point) ? (
-                  <Typography>
-                    <strong>Optimal Pickup Point:</strong> {
-                      typeof matchDetails.optimal_pickup_point === 'object' || typeof matchDetails.ride_request?.optimal_pickup_point === 'object'
-                        ? `Lat: ${(matchDetails.optimal_pickup_point?.[0] || matchDetails.optimal_pickup_point?.latitude || 
-                            matchDetails.ride_request?.optimal_pickup_point?.[0] || 
-                            matchDetails.ride_request?.optimal_pickup_point?.latitude || '').toString().substring(0, 10)}, 
-                           Lng: ${(matchDetails.optimal_pickup_point?.[1] || matchDetails.optimal_pickup_point?.longitude || 
-                            matchDetails.ride_request?.optimal_pickup_point?.[1] || 
-                            matchDetails.ride_request?.optimal_pickup_point?.longitude || '').toString().substring(0, 10)}`
-                        : matchDetails.optimal_pickup_point || matchDetails.ride_request?.optimal_pickup_point || 'Not calculated'
-                    }
+              <Grid container spacing={2}>
+                <Grid item xs={12} sm={6}>
+                  <Typography variant="body1">
+                    <strong>Requested Pickup:</strong> {matchDetails.pickup || 'Not provided'}
                   </Typography>
-                ) : (
-                  <Typography><strong>Optimal Pickup Point:</strong> Not available</Typography>
-                )}
-                
-                {(matchDetails.optimal_dropoff_point || matchDetails.ride_request?.nearest_dropoff_point) ? (
-                  <Typography>
-                    <strong>Optimal Dropoff Point:</strong> {
-                      typeof matchDetails.optimal_dropoff_point === 'object' || typeof matchDetails.ride_request?.nearest_dropoff_point === 'object'
-                        ? `Lat: ${(matchDetails.optimal_dropoff_point?.[0] || matchDetails.optimal_dropoff_point?.latitude || 
-                            matchDetails.ride_request?.nearest_dropoff_point?.[0] || 
-                            matchDetails.ride_request?.nearest_dropoff_point?.latitude || '').toString().substring(0, 10)}, 
-                           Lng: ${(matchDetails.optimal_dropoff_point?.[1] || matchDetails.optimal_dropoff_point?.longitude || 
-                            matchDetails.ride_request?.nearest_dropoff_point?.[1] || 
-                            matchDetails.ride_request?.nearest_dropoff_point?.longitude || '').toString().substring(0, 10)}`
-                        : matchDetails.optimal_dropoff_point || matchDetails.ride_request?.nearest_dropoff_point || 'Not calculated'
-                    }
+                  <Typography variant="body1">
+                    <strong>Optimal Pickup:</strong> {matchDetails.optimal_pickup_point ? 
+                      `${matchDetails.optimal_pickup_point.lat.toFixed(6)}, ${matchDetails.optimal_pickup_point.lng.toFixed(6)}` : 
+                      'Not available'}
                   </Typography>
-                ) : (
-                  <Typography><strong>Optimal Dropoff Point:</strong> Not available</Typography>
-                )}
-              </Box>
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <Typography variant="body1">
+                    <strong>Requested Dropoff:</strong> {matchDetails.dropoff || 'Not provided'}
+                  </Typography>
+                  <Typography variant="body1">
+                    <strong>Optimal Dropoff:</strong> {matchDetails.optimal_dropoff_point ? 
+                      `${matchDetails.optimal_dropoff_point.lat.toFixed(6)}, ${matchDetails.optimal_dropoff_point.lng.toFixed(6)}` : 
+                      'Not available'}
+                  </Typography>
+                </Grid>
+              </Grid>
             </>
           ) : (
-            <Typography>Loading match details...</Typography>
+            <Typography variant="body1" color="error">
+              No match details available. Please try requesting a new ride.
+            </Typography>
           )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleRejectMatch} color="error">
-            Reject
-          </Button>
-          <Button onClick={handleAcceptMatch} color="primary" variant="contained">
-            Accept
+          <Button onClick={() => setShowMatchDialog(false)}>Close</Button>
+          <Button onClick={handleAcceptMatch} variant="contained" color="primary">
+            Accept Ride
           </Button>
         </DialogActions>
       </Dialog>
