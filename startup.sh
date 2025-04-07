@@ -24,12 +24,27 @@ python -c "import django; print(f'Django version: {django.__version__}')" || ech
 echo "=== DATABASE CHECK ==="
 python -c "
 import os, sys, django
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'carpool_project.settings')
+
+# Use production settings when on Railway
+if 'RAILWAY_ENVIRONMENT' in os.environ or 'PRODUCTION' in os.environ:
+    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'carpool_project.settings_production')
+    print('Using production settings for database check')
+else:
+    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'carpool_project.settings')
+    print('Using development settings for database check')
+
 django.setup()
 from django.db import connections
 try:
     connections['default'].ensure_connection()
     print('Database connection successful')
+    # Print connection details safely
+    from django.conf import settings
+    db_settings = settings.DATABASES['default']
+    engine = db_settings.get('ENGINE', 'unknown')
+    name = db_settings.get('NAME', 'unknown')
+    host = db_settings.get('HOST', 'unknown')
+    print(f'Connected to {engine} database {name} on {host}')
 except Exception as e:
     print(f'Database connection failed: {e}')
     print('Continuing despite database error...')

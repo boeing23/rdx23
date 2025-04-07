@@ -11,12 +11,25 @@ from datetime import datetime
 # Set environment variables for production
 os.environ["DJANGO_SETTINGS_MODULE"] = "carpool_project.settings_production"
 os.environ["PRODUCTION"] = "True"
+os.environ["RAILWAY_ENVIRONMENT"] = "True"
 
 # Print debugging information
 print(f"=== RAILWAY WSGI STARTUP: {datetime.now().isoformat()} ===", file=sys.stderr)
 print(f"Python version: {sys.version}", file=sys.stderr)
 print(f"Current directory: {os.getcwd()}", file=sys.stderr)
 print(f"Files in app directory: {os.listdir('.')}", file=sys.stderr)
+
+# Check for DATABASE_URL
+if 'DATABASE_URL' in os.environ:
+    db_url = os.environ['DATABASE_URL']
+    # Safely print the URL (hide credentials)
+    if '@' in db_url:
+        masked_url = db_url.split('@')[0] + '@***'
+    else:
+        masked_url = '***'
+    print(f"Found DATABASE_URL: {masked_url}", file=sys.stderr)
+else:
+    print("WARNING: No DATABASE_URL found in environment. Application may not connect to database.", file=sys.stderr)
 
 try:
     # Attempt to load the Django application
