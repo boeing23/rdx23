@@ -644,6 +644,54 @@ const RequestRide = () => {
                 </Typography>
                 <Typography>Available Seats: {matchDetails.ride_details?.available_seats || ''}</Typography>
               </Box>
+              
+              <Typography variant="h6" gutterBottom sx={{ mt: 2 }}>
+                Pickup & Drop-off Details
+              </Typography>
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                <Typography>Your Pickup: {matchDetails.pickup_location || matchDetails.ride_request?.pickup_location || ''}</Typography>
+                <Typography>Your Dropoff: {matchDetails.dropoff_location || matchDetails.ride_request?.dropoff_location || ''}</Typography>
+                
+                {matchDetails.ride_request?.optimal_pickup_point && (
+                  <Typography>
+                    Optimal Pickup Point: {
+                      typeof matchDetails.ride_request.optimal_pickup_point === 'object' 
+                        ? `Lat: ${matchDetails.ride_request.optimal_pickup_point.latitude || matchDetails.ride_request.optimal_pickup_point[0]}, Lng: ${matchDetails.ride_request.optimal_pickup_point.longitude || matchDetails.ride_request.optimal_pickup_point[1]}`
+                        : matchDetails.ride_request.optimal_pickup_point
+                    }
+                  </Typography>
+                )}
+                
+                {matchDetails.ride_request?.nearest_dropoff_point && (
+                  <Typography>
+                    Optimal Dropoff Point: {
+                      typeof matchDetails.ride_request.nearest_dropoff_point === 'object'
+                        ? `Lat: ${matchDetails.ride_request.nearest_dropoff_point.latitude || matchDetails.ride_request.nearest_dropoff_point[0]}, Lng: ${matchDetails.ride_request.nearest_dropoff_point.longitude || matchDetails.ride_request.nearest_dropoff_point[1]}`
+                        : matchDetails.ride_request.nearest_dropoff_point
+                    }
+                  </Typography>
+                )}
+                
+                {matchDetails.optimal_pickup_point && (
+                  <Typography>
+                    Optimal Pickup: {
+                      typeof matchDetails.optimal_pickup_point === 'object'
+                        ? `Lat: ${matchDetails.optimal_pickup_point.latitude || matchDetails.optimal_pickup_point[0]}, Lng: ${matchDetails.optimal_pickup_point.longitude || matchDetails.optimal_pickup_point[1]}`
+                        : matchDetails.optimal_pickup_point
+                    }
+                  </Typography>
+                )}
+                
+                {matchDetails.optimal_dropoff_point && (
+                  <Typography>
+                    Optimal Dropoff: {
+                      typeof matchDetails.optimal_dropoff_point === 'object'
+                        ? `Lat: ${matchDetails.optimal_dropoff_point.latitude || matchDetails.optimal_dropoff_point[0]}, Lng: ${matchDetails.optimal_dropoff_point.longitude || matchDetails.optimal_dropoff_point[1]}`
+                        : matchDetails.optimal_dropoff_point
+                    }
+                  </Typography>
+                )}
+              </Box>
             </>
           ) : (
             <Typography>Loading match details...</Typography>
