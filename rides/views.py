@@ -894,6 +894,39 @@ class RideRequestViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(instance)
         return Response(serializer.data)
 
+    @action(detail=False, methods=['get'])
+    def accepted(self, request):
+        """
+        Get all accepted ride requests for the current user (both as rider and driver)
+        """
+        try:
+            # Log detailed information for debugging
+            logger.info(f"Fetching accepted rides for user: {request.user.username} (ID: {request.user.id})")
+            
+            # Use Q objects to get rides where the user is either the rider or driver
+            from django.db.models import Q
+            ride_requests = RideRequest.objects.filter(
+                Q(rider=request.user) | Q(ride__driver=request.user),
+                status__in=['ACCEPTED', 'COMPLETED']
+            ).select_related(
+                'ride',
+                'ride__driver',
+                'rider'
+            ).order_by('-departure_time')
+            
+            logger.info(f"Found {ride_requests.count()} accepted rides")
+            
+            # Serialize the ride requests
+            serializer = RideRequestSerializer(ride_requests, many=True)
+            return Response(serializer.data)
+            
+        except Exception as e:
+            logger.error(f"Error fetching accepted rides: {str(e)}")
+            return Response(
+                {"error": f"Error fetching accepted rides: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
     def create(self, request):
         serializer = self.get_serializer(data=request.data)
         
