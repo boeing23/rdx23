@@ -358,11 +358,14 @@ def calculate_route_overlap(driver_start, driver_end, rider_pickup, rider_dropof
                 t = max(0, min(1, t))
                 closest = (p1[0] + t*vec[0], p1[1] + t*vec[1])
                 
-                dist = calculate_distance(closest, target_point)
-                
-                if dist < min_dist:
-                    min_dist = dist
-                    optimal_point = closest
+                try:
+                    dist = calculate_distance(closest, target_point)
+                    if dist < min_dist:
+                        min_dist = dist
+                        optimal_point = closest
+                except Exception as e:
+                    logger.error(f"Error calculating distance: {str(e)}")
+                    continue
             
             return optimal_point, min_dist
         
@@ -1078,7 +1081,14 @@ class RideRequestViewSet(viewsets.ModelViewSet):
             if not pending_request_id:
                 return Response({"error": "pending_request_id is required"}, status=status.HTTP_400_BAD_REQUEST)
 
-            pending_request = get_object_or_404(PendingRideRequest, id=pending_request_id)
+            try:
+                pending_request = PendingRideRequest.objects.get(id=pending_request_id)
+            except PendingRideRequest.DoesNotExist:
+                logger.error(f"PendingRideRequest with id {pending_request_id} not found")
+                return Response(
+                    {"error": "No PendingRideRequest matches the given query."},
+                    status=status.HTTP_404_NOT_FOUND
+                )
             
             # Verify the user is the rider
             if pending_request.rider != request.user:
@@ -1098,7 +1108,7 @@ class RideRequestViewSet(viewsets.ModelViewSet):
                     {"error": "No proposed ride found for this request"},
                     status=status.HTTP_400_BAD_REQUEST
                 )
-                
+            
             # Calculate optimal pickup and dropoff points
             optimal_pickup_point = None
             optimal_dropoff_point = None
