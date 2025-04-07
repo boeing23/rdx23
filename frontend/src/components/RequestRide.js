@@ -162,7 +162,26 @@ const RequestRide = () => {
           // Update state to trigger modal display
           setMatchDetails({
             ...data.match_details,
-            ride_request: data.ride_request
+            ride_request: data.ride_request,
+            // Add proper structure for vehicle_details
+            vehicle_details: {
+              year: data.match_details.vehicle_year,
+              make: data.match_details.vehicle_make,
+              model: data.match_details.vehicle_model,
+              color: data.match_details.vehicle_color,
+              license_plate: data.match_details.license_plate,
+              max_passengers: data.match_details.max_passengers || 1
+            },
+            // Set driver contact info if missing
+            driver_email: data.match_details.driver_email || data.ride_request.ride_details?.driver?.email,
+            driver_phone: data.match_details.driver_phone || data.ride_request.ride_details?.driver?.phone_number,
+            // Add ride_details for consistency
+            ride_details: data.ride_request.ride_details || {
+              start_location: data.match_details.pickup,
+              end_location: data.match_details.dropoff,
+              departure_time: data.match_details.departure_time,
+              available_seats: 1
+            }
           });
           setShowMatchDialog(true);
           setSuccess('Found a matching ride! Please review the details below.');
@@ -170,7 +189,26 @@ const RequestRide = () => {
           // Save both match_details and ride_request to localStorage
           localStorage.setItem('currentMatch', JSON.stringify({
             ...data.match_details,
-            ride_request: data.ride_request
+            ride_request: data.ride_request,
+            // Add proper structure for vehicle_details
+            vehicle_details: {
+              year: data.match_details.vehicle_year,
+              make: data.match_details.vehicle_make,
+              model: data.match_details.vehicle_model,
+              color: data.match_details.vehicle_color,
+              license_plate: data.match_details.license_plate,
+              max_passengers: data.match_details.max_passengers || 1
+            },
+            // Set driver contact info if missing
+            driver_email: data.match_details.driver_email || data.ride_request.ride_details?.driver?.email,
+            driver_phone: data.match_details.driver_phone || data.ride_request.ride_details?.driver?.phone_number,
+            // Add ride_details for consistency
+            ride_details: data.ride_request.ride_details || {
+              start_location: data.match_details.pickup,
+              end_location: data.match_details.dropoff,
+              departure_time: data.match_details.departure_time,
+              available_seats: 1
+            }
           }));
           
           // Clear form
