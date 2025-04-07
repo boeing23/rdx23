@@ -1039,16 +1039,14 @@ class RideViewSet(viewsets.ModelViewSet):
 
     def create(self, request, *args, **kwargs):
         """Create a new ride"""
-        # Add driver to request data
-        request.data['driver'] = request.user.id
-        
         # Validate request data
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
         # Create the ride
         try:
-            ride = serializer.save()
+            # Pass the driver to serializer.save() instead of in request.data
+            ride = serializer.save(driver=request.user)
             
             # Check for pending requests that might match this ride
             self.check_pending_requests(ride)
