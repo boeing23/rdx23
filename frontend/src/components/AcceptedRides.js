@@ -236,14 +236,18 @@ function AcceptedRides() {
   }, [handleRideAction]);
 
   const handleOpenDialog = useCallback((ride) => {
+    console.log('Opening dialog for ride:', ride);
+    console.log('Current state before update:', { openDialog, selectedRide });
     setSelectedRide(ride);
     setOpenDialog(true);
     fetchRideDetails(ride.id);
   }, [fetchRideDetails]);
 
   const handleCloseDialog = useCallback(() => {
+    console.log('Closing dialog, current state:', { openDialog, selectedRide });
     setOpenDialog(false);
-  }, []);
+    setSelectedRide(null);
+  }, [openDialog, selectedRide]);
 
   // Helper function to generate decorative header
   const generateDecorativeHeader = useCallback((status) => {
@@ -288,6 +292,10 @@ function AcceptedRides() {
     };
     return new Date(dateString).toLocaleDateString(undefined, options);
   }, []);
+
+  useEffect(() => {
+    console.log('Dialog state changed:', { openDialog, selectedRide });
+  }, [openDialog, selectedRide]);
 
   if (loading) {
     return (
@@ -390,6 +398,7 @@ function AcceptedRides() {
       
       {/* Ride Details Dialog */}
       <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="md" fullWidth>
+        {console.log('Dialog render state:', { openDialog, selectedRide, detailedRide })}
         {selectedRide && (
           <>
             <DialogTitle>
