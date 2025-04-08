@@ -26,7 +26,6 @@ import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
 import SearchIcon from '@mui/icons-material/Search';
-import OpenRouteMap from './OpenRouteMap';
 
 const RequestRide = () => {
   const navigate = useNavigate();
@@ -368,143 +367,137 @@ const RequestRide = () => {
   }, [showMatchDialog, matchDetails]);
 
   return (
-    <Container maxWidth="lg" sx={{ py: 4 }}>
-      <Typography variant="h4" component="h1" gutterBottom>
-        Request a Ride
-      </Typography>
-      
+    <Container maxWidth="md">
+      <Box sx={{ mt: 4, mb: 4 }}>
+        <Typography variant="h4" gutterBottom>
+          Request a Ride
+        </Typography>
+        <Typography variant="subtitle1" color="textSecondary" gutterBottom>
+          Enter your ride details and we'll match you with available drivers
+        </Typography>
+      </Box>
+
       {error && (
-        <Alert severity="error" sx={{ mb: 2 }}>
+        <Alert severity="info" sx={{ mb: 2 }}>
           {error}
         </Alert>
       )}
-      
+
       {success && (
         <Alert severity="success" sx={{ mb: 2 }}>
           {success}
         </Alert>
       )}
-      
-      <Grid container spacing={3}>
-        <Grid item xs={12} md={6}>
-          <Paper elevation={3} sx={{ p: 3 }}>
-            <form onSubmit={handleSubmit}>
-              <Grid container spacing={2}>
-                <Grid item xs={12}>
-                  <TextField
-                    fullWidth
-                    label="Pickup Location"
-                    value={pickupLocation}
-                    onChange={(e) => setPickupLocation(e.target.value)}
-                    InputProps={{
-                      endAdornment: (
-                        <InputAdornment position="end">
-                          <IconButton
-                            onClick={() => handleLocationSearch(pickupLocation, true)}
-                            edge="end"
-                          >
-                            <SearchIcon />
-                          </IconButton>
-                        </InputAdornment>
-                      ),
-                    }}
-                  />
-                </Grid>
-                
-                <Grid item xs={12}>
-                  <TextField
-                    fullWidth
-                    label="Dropoff Location"
-                    value={dropoffLocation}
-                    onChange={(e) => setDropoffLocation(e.target.value)}
-                    InputProps={{
-                      endAdornment: (
-                        <InputAdornment position="end">
-                          <IconButton
-                            onClick={() => handleLocationSearch(dropoffLocation, false)}
-                            edge="end"
-                          >
-                            <SearchIcon />
-                          </IconButton>
-                        </InputAdornment>
-                      ),
-                    }}
-                  />
-                </Grid>
-                
-                <Grid item xs={12}>
-                  <LocalizationProvider dateAdapter={AdapterDateFns}>
-                    <DateTimePicker
-                      label="Departure Time"
-                      value={departureTime}
-                      onChange={setDepartureTime}
-                      renderInput={(params) => <TextField {...params} fullWidth />}
-                    />
-                  </LocalizationProvider>
-                </Grid>
-                
-                <Grid item xs={12}>
-                  <FormControl fullWidth>
-                    <InputLabel>Number of Seats Needed</InputLabel>
-                    <Select
-                      value={seatsNeeded}
-                      label="Number of Seats Needed"
-                      onChange={(e) => setSeatsNeeded(e.target.value)}
-                    >
-                      {[1, 2, 3, 4, 5, 6, 7].map((num) => (
-                        <MenuItem key={num} value={num}>
-                          {num}
-                        </MenuItem>
-                      ))}
-                    </Select>
-                  </FormControl>
-                </Grid>
-                
-                <Grid item xs={12}>
-                  <Button
-                    type="submit"
-                    variant="contained"
-                    color="primary"
-                    fullWidth
-                    disabled={loading}
-                  >
-                    {loading ? 'Requesting...' : 'Request Ride'}
-                  </Button>
-                </Grid>
-              </Grid>
-            </form>
-          </Paper>
-        </Grid>
-        
-        <Grid item xs={12} md={6}>
-          <Paper elevation={3} sx={{ p: 3 }}>
-            {pickupCoordinates && dropoffCoordinates ? (
-              <OpenRouteMap
-                pickupLocation={pickupLocation}
-                dropoffLocation={dropoffLocation}
-                pickupCoordinates={pickupCoordinates}
-                dropoffCoordinates={dropoffCoordinates}
-              />
-            ) : (
-              <Box
-                sx={{
-                  height: 400,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  bgcolor: 'grey.100',
-                  borderRadius: 1
+
+      <Paper sx={{ p: { xs: 2, sm: 3 } }}>
+        <form onSubmit={handleSubmit}>
+          <Grid container spacing={3}>
+            <Grid item xs={12}>
+              <TextField
+                required
+                fullWidth
+                label="Pickup Location"
+                value={pickupLocation}
+                onChange={(e) => setPickupLocation(e.target.value)}
+                placeholder="e.g., 232 Pheasant Run Drive, Blacksburg, VA"
+                InputProps={{
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      <IconButton
+                        onClick={() => handleLocationSearch(pickupLocation, true)}
+                        edge="end"
+                      >
+                        <SearchIcon />
+                      </IconButton>
+                    </InputAdornment>
+                  ),
                 }}
-              >
-                <Typography color="text.secondary">
-                  Enter pickup and dropoff locations to see the route
-                </Typography>
-              </Box>
+              />
+            </Grid>
+
+            <Grid item xs={12}>
+              <TextField
+                required
+                fullWidth
+                label="Dropoff Location"
+                value={dropoffLocation}
+                onChange={(e) => setDropoffLocation(e.target.value)}
+                placeholder="e.g., 232 Pheasant Run Drive, Blacksburg, VA"
+                InputProps={{
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      <IconButton
+                        onClick={() => handleLocationSearch(dropoffLocation, false)}
+                        edge="end"
+                      >
+                        <SearchIcon />
+                      </IconButton>
+                    </InputAdornment>
+                  ),
+                }}
+              />
+            </Grid>
+
+            <Grid item xs={12} sm={6}>
+              <LocalizationProvider dateAdapter={AdapterDateFns}>
+                <DateTimePicker
+                  label="Departure Time"
+                  value={departureTime}
+                  onChange={setDepartureTime}
+                  renderInput={(params) => <TextField {...params} fullWidth required />}
+                />
+              </LocalizationProvider>
+            </Grid>
+
+            <Grid item xs={12} sm={6}>
+              <FormControl fullWidth required>
+                <InputLabel>Seats Needed</InputLabel>
+                <Select
+                  value={seatsNeeded}
+                  onChange={(e) => setSeatsNeeded(e.target.value)}
+                  label="Seats Needed"
+                >
+                  {[1, 2, 3, 4, 5, 6, 7, 8].map((num) => (
+                    <MenuItem key={num} value={num}>
+                      {num} {num === 1 ? 'seat' : 'seats'}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+
+            {routeData && (
+              <Grid item xs={12}>
+                <Paper sx={{ p: 2, bgcolor: 'grey.50' }}>
+                  <Typography variant="h6" gutterBottom>
+                    Route Information
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Distance: {(routeData.features[0].properties.segments[0].distance * 0.000621371).toFixed(2)} miles
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Duration: {Math.round(routeData.features[0].properties.segments[0].duration / 60)} minutes
+                  </Typography>
+                </Paper>
+              </Grid>
             )}
-          </Paper>
-        </Grid>
-      </Grid>
-      
+
+            <Grid item xs={12}>
+              <Button
+                type="submit"
+                variant="contained"
+                color="primary"
+                size="large"
+                fullWidth
+                disabled={loading || !pickupCoordinates || !dropoffCoordinates || !departureTime}
+              >
+                {loading ? 'Requesting...' : 'Request Ride'}
+              </Button>
+            </Grid>
+          </Grid>
+        </form>
+      </Paper>
+
       <Dialog 
         open={showMatchDialog} 
         onClose={() => {
