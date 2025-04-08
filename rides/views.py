@@ -400,7 +400,7 @@ def calculate_route_overlap(
     logger.info(f"{log_prefix}  Rider pickup: {rider_pickup}, Rider dropoff: {rider_dropoff}")
 
     # Generate driver's route
-        driver_route = generate_route(driver_start, driver_end)
+    driver_route = generate_route(driver_start, driver_end)
     if not driver_route or len(driver_route) < 2:
         logger.error(f"{log_prefix}Failed to generate driver route")
         return {
@@ -539,7 +539,7 @@ def calculate_route_overlap(
         # Calculate deviation score (0-100)
         deviation_score = max(0, 100 - min(deviation_percentage, 100))
         logger.info(f"{log_prefix}Deviation score: {deviation_score:.2f} (deviation: {deviation_percentage:.2f}%)")
-        else:
+    else:
         logger.info(f"{log_prefix}Deviation score: {deviation_score:.2f} (no optimal points)")
 
     # Calculate weighted compatibility score
@@ -678,8 +678,7 @@ def generate_route(start_coords, end_coords, max_retries=3, retry_delay=2):
 
     # Check if API key is available
     if not ORS_API_KEY:
-        logger.error(
-            "OpenRouteService API key not configured, using fallback method")
+        logger.error("OpenRouteService API key not configured, using fallback method")
         return generate_fallback_route(start_coords, end_coords)
 
     # Ensure coordinates are in the correct format (lng, lat)
@@ -687,16 +686,14 @@ def generate_route(start_coords, end_coords, max_retries=3, retry_delay=2):
     end_lng, end_lat = end_coords
 
     # Validate coordinates
-    if not all(isinstance(x, (int, float))
-               for x in [start_lng, start_lat, end_lng, end_lat]):
-        logger.error(
-            f"Invalid coordinate values: start={start_coords}, end={end_coords}")
+    if not all(isinstance(x, (int, float)) for x in [start_lng, start_lat, end_lng, end_lat]):
+        logger.error(f"Invalid coordinate values: start={start_coords}, end={end_coords}")
         return None
 
     # Construct the API request
     url = f"{OPENROUTE_BASE_URL}/directions/driving-car"
-                headers = {
-                    'Authorization': ORS_API_KEY,
+    headers = {
+        'Authorization': ORS_API_KEY,
         'Accept': 'application/json, application/geo+json, application/gpx+xml, img/png; charset=utf-8'
     }
     params = {
@@ -707,14 +704,12 @@ def generate_route(start_coords, end_coords, max_retries=3, retry_delay=2):
     # Try the API request with retries
     for attempt in range(max_retries):
         try:
-            logger.info(
-                f"Calling OpenRouteService directions API (attempt {attempt + 1}/{max_retries}) for route from ({start_lng}, {start_lat}) to ({end_lng}, {end_lat})")
+            logger.info(f"Calling OpenRouteService directions API (attempt {attempt + 1}/{max_retries}) for route from ({start_lng}, {start_lat}) to ({end_lng}, {end_lat})")
 
-            response = requests.get(
-                url, headers=headers, params=params, timeout=15)
-                
-                if response.status_code == 200:
-                    data = response.json()
+            response = requests.get(url, headers=headers, params=params, timeout=15)
+            
+            if response.status_code == 200:
+                data = response.json()
                 if 'features' in data and data['features']:
                     # Extract coordinates from the route
                     coordinates = data['features'][0]['geometry']['coordinates']
@@ -866,14 +861,12 @@ class RideViewSet(viewsets.ModelViewSet):
 
                 # Check each ride for compatibility
                 for ride in available_rides:
-                # Calculate route overlap
+                    # Calculate route overlap
                     overlap_result = calculate_route_overlap(
-                    (ride.start_longitude, ride.start_latitude),
-                    (ride.end_longitude, ride.end_latitude),
-                    (pending_request.pickup_longitude,
-                     pending_request.pickup_latitude),
-                        (pending_request.dropoff_longitude,
-                         pending_request.dropoff_latitude),
+                        (ride.start_longitude, ride.start_latitude),
+                        (ride.end_longitude, ride.end_latitude),
+                        (pending_request.pickup_longitude, pending_request.pickup_latitude),
+                        (pending_request.dropoff_longitude, pending_request.dropoff_latitude),
                         get_optimal_points=True,
                         log_prefix=f"[Pending Request {pending_request.id} - Ride {ride.id}] "
                     )
@@ -965,8 +958,7 @@ class RideViewSet(viewsets.ModelViewSet):
             
             # Verify the user is the rider
             if pending_request.rider != request.user:
-                raise PermissionDenied(
-                    "You can only check status of your own ride requests")
+                raise PermissionDenied("You can only check status of your own ride requests")
 
             # Get any new notifications for this request
             notifications = Notification.objects.filter(
@@ -983,29 +975,18 @@ class RideViewSet(viewsets.ModelViewSet):
             if pending_request.status == 'MATCH_PROPOSED' and pending_request.proposed_ride:
                 try:
                     # Get coordinates for rider and driver
-                    driver_start = (
-    pending_request.proposed_ride.start_longitude,
-     pending_request.proposed_ride.start_latitude)
-                    driver_end = (
-    pending_request.proposed_ride.end_longitude,
-     pending_request.proposed_ride.end_latitude)
-                    rider_pickup = (
-    pending_request.pickup_longitude,
-     pending_request.pickup_latitude)
-                    rider_dropoff = (
-    pending_request.dropoff_longitude,
-     pending_request.dropoff_latitude)
+                    driver_start = (pending_request.proposed_ride.start_longitude, pending_request.proposed_ride.start_latitude)
+                    driver_end = (pending_request.proposed_ride.end_longitude, pending_request.proposed_ride.end_latitude)
+                    rider_pickup = (pending_request.pickup_longitude, pending_request.pickup_latitude)
+                    rider_dropoff = (pending_request.dropoff_longitude, pending_request.dropoff_latitude)
                     
                     # Calculate route overlap which returns optimal points
                     overlap_result = calculate_route_overlap(
                         driver_start, driver_end, rider_pickup, rider_dropoff
                     )
-                    compatibility_score = overlap_result.get(
-                        "compatibility_score", 0)
-                    optimal_pickup_point = overlap_result.get(
-                        "optimal_pickup_point")
-                    optimal_dropoff_point = overlap_result.get(
-                        "optimal_dropoff_point")
+                    compatibility_score = overlap_result.get("compatibility_score", 0)
+                    optimal_pickup_point = overlap_result.get("optimal_pickup_point")
+                    optimal_dropoff_point = overlap_result.get("optimal_dropoff_point")
 
                 except Exception as e:
                     logger.error(f"Error calculating optimal points: {str(e)}")
@@ -1292,8 +1273,8 @@ class RideRequestViewSet(viewsets.ModelViewSet):
                 compatibility_score = 0
             
                 try:
-                    driver_start = (proposed_ride.start_longitude, proposed_ride.start_latitude)
-                    driver_end = (proposed_ride.end_longitude, proposed_ride.end_latitude)
+                    driver_start = (pending_request.proposed_ride.start_longitude, pending_request.proposed_ride.start_latitude)
+                    driver_end = (pending_request.proposed_ride.end_longitude, pending_request.proposed_ride.end_latitude)
                     rider_pickup = (pending_request.pickup_longitude, pending_request.pickup_latitude)
                     rider_dropoff = (pending_request.dropoff_longitude, pending_request.dropoff_latitude)
                     
