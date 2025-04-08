@@ -106,7 +106,7 @@ function AcceptedRides() {
   const fetchRideDetails = useCallback(async (rideId) => {
     try {
       setLoadingDetails(true);
-      setDetailedRide(null); // Reset to avoid showing stale data
+      setDetailedRide(null);
       const cleanToken = getAuthToken();
       
       console.log(`Fetching ride details for ID ${rideId}`);
@@ -126,15 +126,36 @@ function AcceptedRides() {
       // Process the data to ensure we have a map URL
       const rideData = response.data;
       
-      // Log the coordinates used for the map URL
-      console.log('Pickup coordinates:', rideData.pickup_latitude, rideData.pickup_longitude);
-      console.log('Dropoff coordinates:', rideData.dropoff_latitude, rideData.dropoff_longitude);
+      // Validate coordinates - ensure they're valid numbers
+      const hasValidPickupCoords = !!(
+        rideData.pickup_latitude && !isNaN(parseFloat(rideData.pickup_latitude)) &&
+        rideData.pickup_longitude && !isNaN(parseFloat(rideData.pickup_longitude))
+      );
       
-      // If map_url isn't provided, create a simple one
-      if (!rideData.map_url && rideData.pickup_latitude && rideData.pickup_longitude 
-          && rideData.dropoff_latitude && rideData.dropoff_longitude) {
-        console.log('Map URL not found in API response, creating a simple one');
+      const hasValidDropoffCoords = !!(
+        rideData.dropoff_latitude && !isNaN(parseFloat(rideData.dropoff_latitude)) &&
+        rideData.dropoff_longitude && !isNaN(parseFloat(rideData.dropoff_longitude))
+      );
+      
+      // Log the coordinates used for the map URL
+      console.log('Valid pickup coordinates:', hasValidPickupCoords, rideData.pickup_latitude, rideData.pickup_longitude);
+      console.log('Valid dropoff coordinates:', hasValidDropoffCoords, rideData.dropoff_latitude, rideData.dropoff_longitude);
+      
+      // If map_url isn't provided or is invalid, create a simple one
+      if ((!rideData.map_url || rideData.map_url.trim() === '') && hasValidPickupCoords && hasValidDropoffCoords) {
+        console.log('Map URL not found or invalid in API response, creating a simple one');
         rideData.map_url = `https://www.openstreetmap.org/directions?from=${rideData.pickup_latitude},${rideData.pickup_longitude}&to=${rideData.dropoff_latitude},${rideData.dropoff_longitude}`;
+      }
+      
+      // Validate final map URL
+      if (rideData.map_url) {
+        try {
+          const url = new URL(rideData.map_url);
+          console.log('Map URL is valid:', url.href);
+        } catch (error) {
+          console.error('Invalid map URL, clearing it:', error.message);
+          rideData.map_url = '';
+        }
       }
       
       console.log('Map URL (final):', rideData.map_url);
@@ -470,16 +491,13 @@ function AcceptedRides() {
                               variant="contained"
                               color="primary"
                               startIcon={<MapIcon />}
-                              href={detailedRide.map_url}
-                              target="_blank"
-                              rel="noopener noreferrer"
                               sx={{ mb: 2 }}
                               size="large"
                               onClick={(e) => {
+                                e.preventDefault();
                                 console.log('Map button clicked with URL:', detailedRide.map_url);
-                                // Optional: prevent default and open manually to see if there's an issue with href
-                                // e.preventDefault();
-                                // window.open(detailedRide.map_url, '_blank', 'noopener,noreferrer');
+                                // Use window.open instead of href to ensure it works properly
+                                window.open(detailedRide.map_url, '_blank', 'noopener,noreferrer');
                               }}
                             >
                               Open Complete Route Map
@@ -493,18 +511,23 @@ function AcceptedRides() {
                               variant="outlined"
                               color="secondary"
                               startIcon={<MapIcon />}
-                              href={`https://www.openstreetmap.org/directions?from=${detailedRide.pickup_latitude},${detailedRide.pickup_longitude}&to=${detailedRide.dropoff_latitude},${detailedRide.dropoff_longitude}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
                               sx={{ mt: 1 }}
                               disabled={!detailedRide.pickup_latitude || !detailedRide.dropoff_latitude}
                               onClick={(e) => {
-                                const directUrl = `https://www.openstreetmap.org/directions?from=${detailedRide.pickup_latitude},${detailedRide.pickup_longitude}&to=${detailedRide.dropoff_latitude},${detailedRide.dropoff_longitude}`;
-                                console.log('Simple route button clicked with URL:', directUrl);
-                                console.log('Coordinates used:', {
-                                  pickup: [detailedRide.pickup_latitude, detailedRide.pickup_longitude],
-                                  dropoff: [detailedRide.dropoff_latitude, detailedRide.dropoff_longitude]
-                                });
+                                e.preventDefault();
+                                // Validate coordinates before building URL
+                                if (detailedRide.pickup_latitude && detailedRide.pickup_longitude &&
+                                    detailedRide.dropoff_latitude && detailedRide.dropoff_longitude) {
+                                  const directUrl = `https://www.openstreetmap.org/directions?from=${detailedRide.pickup_latitude},${detailedRide.pickup_longitude}&to=${detailedRide.dropoff_latitude},${detailedRide.dropoff_longitude}`;
+                                  console.log('Simple route button clicked with URL:', directUrl);
+                                  console.log('Coordinates used:', {
+                                    pickup: [detailedRide.pickup_latitude, detailedRide.pickup_longitude],
+                                    dropoff: [detailedRide.dropoff_latitude, detailedRide.dropoff_longitude]
+                                  });
+                                  window.open(directUrl, '_blank', 'noopener,noreferrer');
+                                } else {
+                                  console.error('Cannot generate direct route: Missing coordinates');
+                                }
                               }}
                             >
                               Simple Direct Route
@@ -519,17 +542,23 @@ function AcceptedRides() {
                               variant="contained"
                               color="primary"
                               startIcon={<MapIcon />}
-                              href={`https://www.openstreetmap.org/directions?from=${detailedRide.pickup_latitude},${detailedRide.pickup_longitude}&to=${detailedRide.dropoff_latitude},${detailedRide.dropoff_longitude}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
+                              sx={{ mt: 1 }}
                               disabled={!detailedRide.pickup_latitude || !detailedRide.dropoff_latitude}
                               onClick={(e) => {
-                                const directUrl = `https://www.openstreetmap.org/directions?from=${detailedRide.pickup_latitude},${detailedRide.pickup_longitude}&to=${detailedRide.dropoff_latitude},${detailedRide.dropoff_longitude}`;
-                                console.log('Fallback route button clicked with URL:', directUrl);
-                                console.log('Coordinates available:', {
-                                  pickup: [detailedRide.pickup_latitude, detailedRide.pickup_longitude],
-                                  dropoff: [detailedRide.dropoff_latitude, detailedRide.dropoff_longitude]
-                                });
+                                e.preventDefault();
+                                // Validate coordinates before building URL
+                                if (detailedRide.pickup_latitude && detailedRide.pickup_longitude &&
+                                    detailedRide.dropoff_latitude && detailedRide.dropoff_longitude) {
+                                  const directUrl = `https://www.openstreetmap.org/directions?from=${detailedRide.pickup_latitude},${detailedRide.pickup_longitude}&to=${detailedRide.dropoff_latitude},${detailedRide.dropoff_longitude}`;
+                                  console.log('Fallback route button clicked with URL:', directUrl);
+                                  console.log('Coordinates available:', {
+                                    pickup: [detailedRide.pickup_latitude, detailedRide.pickup_longitude],
+                                    dropoff: [detailedRide.dropoff_latitude, detailedRide.dropoff_longitude]
+                                  });
+                                  window.open(directUrl, '_blank', 'noopener,noreferrer');
+                                } else {
+                                  console.error('Cannot generate direct route: Missing coordinates');
+                                }
                               }}
                             >
                               View Direct Route
@@ -538,16 +567,38 @@ function AcceptedRides() {
                         )}
 
                         {/* Display coordinate info to help troubleshoot */}
-                        <Box sx={{ mt: 3, p: 2, bgcolor: 'rgba(0,0,0,0.05)', borderRadius: 1, textAlign: 'left' }}>
-                          <Typography variant="caption" component="div" sx={{ mb: 1 }}>
+                        <Box sx={{ 
+                          mt: 3, 
+                          p: 2, 
+                          bgcolor: 'rgba(0,0,0,0.05)', 
+                          borderRadius: 1, 
+                          textAlign: 'left',
+                          border: '1px solid rgba(0,0,0,0.1)',
+                          boxShadow: '0 2px 4px rgba(0,0,0,0.05)'
+                        }}>
+                          <Typography variant="caption" component="div" sx={{ mb: 1, fontWeight: 'bold' }}>
                             Route coordinates:
                           </Typography>
-                          <Typography variant="caption" component="div">
-                            Pickup: {detailedRide.pickup_latitude}, {detailedRide.pickup_longitude}
-                          </Typography>
-                          <Typography variant="caption" component="div">
-                            Dropoff: {detailedRide.dropoff_latitude}, {detailedRide.dropoff_longitude}
-                          </Typography>
+                          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                            <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                              <LocationOnIcon fontSize="small" sx={{ mr: 1, color: 'primary.main' }} />
+                              <Typography variant="caption" component="div">
+                                <strong>Pickup:</strong> {detailedRide.pickup_latitude}, {detailedRide.pickup_longitude}
+                              </Typography>
+                            </Box>
+                            <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                              <LocationOnIcon fontSize="small" sx={{ mr: 1, color: 'secondary.main' }} />
+                              <Typography variant="caption" component="div">
+                                <strong>Dropoff:</strong> {detailedRide.dropoff_latitude}, {detailedRide.dropoff_longitude}
+                              </Typography>
+                            </Box>
+                          </Box>
+                          {(!detailedRide.pickup_latitude || !detailedRide.pickup_longitude || 
+                            !detailedRide.dropoff_latitude || !detailedRide.dropoff_longitude) && (
+                            <Typography variant="caption" component="div" sx={{ mt: 1, color: 'error.main' }}>
+                              Warning: Some coordinates may be missing or invalid
+                            </Typography>
+                          )}
                         </Box>
                       </Box>
                     </CardMedia>
