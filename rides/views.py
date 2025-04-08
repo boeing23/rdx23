@@ -1230,10 +1230,10 @@ class RideRequestViewSet(viewsets.ModelViewSet):
                         'profile_image': ride.driver.profile.profile_image.url if hasattr(ride.driver, 'profile') and ride.driver.profile and ride.driver.profile.profile_image else None
                     },
                     'vehicle': {
-                        'make': ride.vehicle.make if ride.vehicle else 'Not specified',
-                        'model': ride.vehicle.model if ride.vehicle else 'Not specified',
-                        'color': ride.vehicle.color if ride.vehicle else 'Not specified',
-                        'license_plate': ride.vehicle.license_plate if ride.vehicle else 'Not specified'
+                        'make': ride.driver.vehicle_make if hasattr(ride.driver, 'vehicle_make') else 'Not specified',
+                        'model': ride.driver.vehicle_model if hasattr(ride.driver, 'vehicle_model') else 'Not specified',
+                        'color': ride.driver.vehicle_color if hasattr(ride.driver, 'vehicle_color') else 'Not specified',
+                        'license_plate': ride.driver.license_plate if hasattr(ride.driver, 'license_plate') else 'Not specified'
                     },
                     'optimal_pickup_point': optimal_pickup_point,
                     'optimal_dropoff_point': optimal_dropoff_point,
@@ -1589,18 +1589,11 @@ Optimal Dropoff Point:
 - Maps Link: https://www.google.com/maps/search/?api=1&query={lat},{lng}
 """
         
-        # Try to get vehicle information
+        # Try to get vehicle information directly from driver
         vehicle_make = getattr(driver, 'vehicle_make', 'Not specified')
         vehicle_model = getattr(driver, 'vehicle_model', 'Not specified')
         vehicle_color = getattr(driver, 'vehicle_color', 'Not specified')
         license_plate = getattr(driver, 'license_plate', 'Not specified')
-        
-        # Try to get it from vehicle relationship if available
-        if hasattr(ride, 'vehicle') and ride.vehicle:
-            vehicle_make = getattr(ride.vehicle, 'make', vehicle_make)
-            vehicle_model = getattr(ride.vehicle, 'model', vehicle_model)
-            vehicle_color = getattr(ride.vehicle, 'color', vehicle_color)
-            license_plate = getattr(ride.vehicle, 'license_plate', license_plate)
         
         # Format the departure time
         departure_time_str = 'Not specified'
