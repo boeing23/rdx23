@@ -1,14 +1,63 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { Box, Card, CardContent, Typography, Button, Grid, Alert, CircularProgress } from '@mui/material';
+import { 
+  Box, 
+  Card, 
+  CardContent, 
+  Typography, 
+  Button, 
+  Grid, 
+  Alert, 
+  CircularProgress, 
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Tabs,
+  Tab
+} from '@mui/material';
+import InfoIcon from '@mui/icons-material/Info';
+import MapIcon from '@mui/icons-material/Map';
 import { API_BASE_URL } from '../config';
+import MapComponent from './MapComponent';
+
+// TabPanel component for dialog tabs
+function TabPanel(props) {
+  const { children, value, index, ...other } = props;
+
+  return (
+    <div
+      role="tabpanel"
+      hidden={value !== index}
+      id={`ride-tabpanel-${index}`}
+      aria-labelledby={`ride-tab-${index}`}
+      {...other}
+    >
+      {value === index && (
+        <Box sx={{ py: 2 }}>
+          {children}
+        </Box>
+      )}
+    </div>
+  );
+}
+
+function a11yProps(index) {
+  return {
+    id: `ride-tab-${index}`,
+    'aria-controls': `ride-tabpanel-${index}`,
+  };
+}
 
 const RideList = () => {
   const navigate = useNavigate();
   const [rides, setRides] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [openDialog, setOpenDialog] = useState(false);
+  const [selectedRide, setSelectedRide] = useState(null);
+  const [tabValue, setTabValue] = useState(0);
   const userType = localStorage.getItem('userType') || 'RIDER';
   
   const getAuthToken = useCallback(() => {
@@ -142,6 +191,20 @@ const RideList = () => {
     handleRideAction(requestId, 'reject');
   }, [handleRideAction]);
 
+  const handleOpenRideDetails = useCallback((ride) => {
+    setSelectedRide(ride);
+    setOpenDialog(true);
+    setTabValue(0); // Reset to first tab
+  }, []);
+
+  const handleCloseDialog = useCallback(() => {
+    setOpenDialog(false);
+  }, []);
+
+  const handleTabChange = useCallback((event, newValue) => {
+    setTabValue(newValue);
+  }, []);
+
   const formatDateTime = useCallback((dateString) => {
     const date = new Date(dateString);
     return {
@@ -230,16 +293,28 @@ const RideList = () => {
                           Available Seats: {ride.available_seats}
                         </Typography>
                       </div>
-                      {userType === 'RIDER' && (
+                      <Box sx={{ mt: { xs: 2, sm: 0 }, display: 'flex', flexDirection: 'column', gap: 1 }}>
                         <Button
-                          variant="contained"
+                          variant="outlined"
                           color="primary"
-                          onClick={() => handleRequestRide(ride.id)}
-                          sx={{ mt: { xs: 2, sm: 0 }, alignSelf: { sm: 'flex-start' } }}
+                          onClick={() => handleOpenRideDetails(ride)}
+                          sx={{ width: '100%' }}
+                          startIcon={<MapIcon />}
                         >
-                          Request
+                          View Map
                         </Button>
-                      )}
+                        
+                        {userType === 'RIDER' && (
+                          <Button
+                            variant="contained"
+                            color="primary"
+                            onClick={() => handleRequestRide(ride.id)}
+                            sx={{ width: '100%' }}
+                          >
+                            Request
+                          </Button>
+                        )}
+                      </Box>
                     </div>
                     
                     {ride.ride_requests && ride.ride_requests.length > 0 && userType === 'DRIVER' && (
@@ -281,6 +356,122 @@ const RideList = () => {
           })}
         </Grid>
       )}
+      
+      {/* Ride Details Dialog */}
+      <Dialog
+        open={openDialog}
+        onClose={handleCloseDialog}
+        maxWidth="md"
+        fullWidth
+      >
+        {selectedRide && (
+          <>
+            <DialogTitle>
+              Ride Details: {selectedRide.start_location} to {selectedRide.end_location}
+            </DialogTitle>
+            
+            <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
+              <Tabs
+                value={tabValue}
+                onChange={handleTabChange}
+                variant="fullWidth"
+                aria-label="ride details tabs"
+              >
+                <Tab
+                  icon={<InfoIcon />}
+                  label="Information"
+                  {...a11yProps(0)}
+                />
+                <Tab
+                  icon={<MapIcon />}
+                  label="Map & Directions"
+                  {...a11yProps(1)}
+                />
+              </Tabs>
+            </Box>
+            
+            <DialogContent dividers>
+              <TabPanel value={tabValue} index={0}>
+                <Typography variant="h6" gutterBottom>
+                  Route Information
+                </Typography>
+                <Typography variant="body1" paragraph>
+                  <strong>From:</strong> {selectedRide.start_location}
+                </Typography>
+                <Typography variant="body1" paragraph>
+                  <strong>To:</strong> {selectedRide.end_location}
+                </Typography>
+                
+                <Typography variant="h6" gutterBottom>
+                  Schedule
+                </Typography>
+                <Typography variant="body1" paragraph>
+                  <strong>Departure:</strong> {formatDateTime(selectedRide.departure_time).date} at {formatDateTime(selectedRide.departure_time).time}
+                </Typography>
+                
+                <Typography variant="h6" gutterBottom>
+                  Vehicle Information
+                </Typography>
+                <Typography variant="body1" paragraph>
+                  <strong>Available Seats:</strong> {selectedRide.available_seats}
+                </Typography>
+                {selectedRide.vehicle && (
+                  <>
+                    <Typography variant="body1" paragraph>
+                      <strong>Vehicle:</strong> {selectedRide.vehicle.make} {selectedRide.vehicle.model}, {selectedRide.vehicle.color}
+                    </Typography>
+                    <Typography variant="body1" paragraph>
+                      <strong>License Plate:</strong> {selectedRide.vehicle.license_plate}
+                    </Typography>
+                  </>
+                )}
+                
+                <Typography variant="h6" gutterBottom>
+                  Driver Information
+                </Typography>
+                <Typography variant="body1" paragraph>
+                  <strong>Driver:</strong> {selectedRide.driver_name || 'Name not available'}
+                </Typography>
+                <Typography variant="body1" paragraph>
+                  <strong>Driver Rating:</strong> {selectedRide.driver_rating ? `${selectedRide.driver_rating}/5.0` : 'Not rated yet'}
+                </Typography>
+              </TabPanel>
+              
+              <TabPanel value={tabValue} index={1}>
+                <MapComponent
+                  pickupLocation={selectedRide.start_location}
+                  dropoffLocation={selectedRide.end_location}
+                  pickupCoordinates={{
+                    latitude: selectedRide.start_latitude,
+                    longitude: selectedRide.start_longitude
+                  }}
+                  dropoffCoordinates={{
+                    latitude: selectedRide.end_latitude,
+                    longitude: selectedRide.end_longitude
+                  }}
+                  showUserLocation={true}
+                />
+              </TabPanel>
+            </DialogContent>
+            
+            <DialogActions>
+              <Button onClick={handleCloseDialog}>Close</Button>
+              {userType === 'RIDER' && (
+                <Button
+                  variant="contained"
+                  color="primary"
+                  onClick={() => {
+                    handleCloseDialog();
+                    handleRequestRide(selectedRide.id);
+                  }}
+                >
+                  Request This Ride
+                </Button>
+              )}
+            </DialogActions>
+          </>
+        )}
+      </Dialog>
     </Box>
   );
 };

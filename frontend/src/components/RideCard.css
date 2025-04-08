@@ -1,0 +1,177 @@
+/* Custom Ride Card Styles */
+.ride-cards-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  justify-content: flex-start;
+  margin-top: 20px;
+}
+
+.ride-card {
+  width: 300px;
+  height: 380px;
+  background: white;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.ride-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 12px 16px rgba(0, 0, 0, 0.2);
+}
+
+.ride-card__img {
+  height: 150px;
+  overflow: hidden;
+  position: relative;
+}
+
+.ride-card__img svg,
+.ride-card__img img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.ride-card__avatar {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: white;
+  border: 5px solid white;
+  overflow: hidden;
+  position: absolute;
+  top: 120px;
+  left: 20px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ride-card__avatar svg {
+  width: 80%;
+  height: 80%;
+}
+
+.ride-card__title {
+  font-size: 18px;
+  font-weight: 600;
+  padding: 0 20px;
+  margin-top: 40px;
+  margin-bottom: 8px;
+  color: #333;
+}
+
+.ride-card__subtitle {
+  font-size: 14px;
+  color: #666;
+  padding: 0 20px;
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+}
+
+.ride-card__wrapper {
+  margin-top: auto;
+  padding: 20px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.ride-card__btn {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 30px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  background: transparent;
+  color: #3f51b5;
+  border: 1px solid #3f51b5;
+  transition: all 0.2s ease;
+  text-transform: uppercase;
+  flex: 1;
+  min-width: 80px;
+}
+
+.ride-card__btn:hover {
+  background: rgba(63, 81, 181, 0.1);
+}
+
+.ride-card__btn-solid {
+  background: #3f51b5;
+  color: white;
+  border: 1px solid #3f51b5;
+}
+
+.ride-card__btn-solid:hover {
+  background: #303f9f;
+  color: white;
+}
+
+.ride-card__btn-cancel {
+  background: transparent;
+  color: #f44336;
+  border: 1px solid #f44336;
+}
+
+.ride-card__btn-cancel:hover {
+  background: rgba(244, 67, 54, 0.1);
+}
+
+/* Status-specific styles */
+.ride-card[data-status="ACCEPTED"] {
+  border-top: 4px solid #4caf50;
+}
+
+.ride-card[data-status="ACCEPTED"] .ride-card__img {
+  background: linear-gradient(135deg, #4caf50, #2e7d32);
+}
+
+.ride-card[data-status="ACCEPTED"] .ride-card__avatar svg {
+  fill: #4caf50;
+}
+
+.ride-card[data-status="COMPLETED"] {
+  border-top: 4px solid #2196f3;
+}
+
+.ride-card[data-status="COMPLETED"] .ride-card__img {
+  background: linear-gradient(135deg, #2196f3, #0d47a1);
+}
+
+.ride-card[data-status="COMPLETED"] .ride-card__avatar svg {
+  fill: #2196f3;
+}
+
+.ride-card[data-status="CANCELLED"] {
+  border-top: 4px solid #f44336;
+}
+
+.ride-card[data-status="CANCELLED"] .ride-card__img {
+  background: linear-gradient(135deg, #f44336, #b71c1c);
+}
+
+.ride-card[data-status="CANCELLED"] .ride-card__avatar svg {
+  fill: #f44336;
+}
+
+/* Mobile responsive */
+@media (max-width: 768px) {
+  .ride-cards-container {
+    justify-content: center;
+  }
+  
+  .ride-card {
+    width: 100%;
+    max-width: 340px;
+  }
+} 

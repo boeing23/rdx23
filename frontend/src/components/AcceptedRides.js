@@ -11,7 +11,9 @@ import {
   DialogActions, 
   CircularProgress, 
   Alert, 
-  Paper 
+  Paper,
+  Tabs,
+  Tab
 } from '@mui/material';
 import DirectionsCarIcon from '@mui/icons-material/DirectionsCar';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
@@ -19,9 +21,40 @@ import CancelIcon from '@mui/icons-material/Cancel';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import LocationOnIcon from '@mui/icons-material/LocationOn';
 import DateRangeIcon from '@mui/icons-material/DateRange';
+import MapIcon from '@mui/icons-material/Map';
+import InfoIcon from '@mui/icons-material/Info';
 import './RideCard.css';
+import MapComponent from './MapComponent';
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:8000';
+
+// TabPanel component for dialog tabs
+function TabPanel(props) {
+  const { children, value, index, ...other } = props;
+
+  return (
+    <div
+      role="tabpanel"
+      hidden={value !== index}
+      id={`ride-tabpanel-${index}`}
+      aria-labelledby={`ride-tab-${index}`}
+      {...other}
+    >
+      {value === index && (
+        <Box sx={{ py: 2 }}>
+          {children}
+        </Box>
+      )}
+    </div>
+  );
+}
+
+function a11yProps(index) {
+  return {
+    id: `ride-tab-${index}`,
+    'aria-controls': `ride-tabpanel-${index}`,
+  };
+}
 
 function AcceptedRides() {
   const [rides, setRides] = useState([]);
@@ -29,6 +62,7 @@ function AcceptedRides() {
   const [error, setError] = useState(null);
   const [openDialog, setOpenDialog] = useState(false);
   const [selectedRide, setSelectedRide] = useState(null);
+  const [tabValue, setTabValue] = useState(0);
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -149,10 +183,15 @@ function AcceptedRides() {
   const handleOpenDialog = useCallback((ride) => {
     setSelectedRide(ride);
     setOpenDialog(true);
+    setTabValue(0); // Reset to first tab when opening dialog
   }, []);
 
   const handleCloseDialog = useCallback(() => {
     setOpenDialog(false);
+  }, []);
+
+  const handleTabChange = useCallback((event, newValue) => {
+    setTabValue(newValue);
   }, []);
 
   // Helper function to generate decorative header
@@ -299,43 +338,90 @@ function AcceptedRides() {
       )}
       
       {/* Ride Details Dialog */}
-      <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
+      <Dialog 
+        open={openDialog} 
+        onClose={handleCloseDialog} 
+        maxWidth="md" 
+        fullWidth
+      >
         {selectedRide && (
           <>
             <DialogTitle>
               Ride Details
             </DialogTitle>
+            
+            <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
+              <Tabs 
+                value={tabValue} 
+                onChange={handleTabChange} 
+                variant="fullWidth"
+                aria-label="ride details tabs"
+              >
+                <Tab 
+                  icon={<InfoIcon />} 
+                  label="Information" 
+                  {...a11yProps(0)} 
+                />
+                <Tab 
+                  icon={<MapIcon />} 
+                  label="Map & Directions" 
+                  {...a11yProps(1)} 
+                />
+              </Tabs>
+            </Box>
+            
             <DialogContent dividers>
-              <Typography variant="h6" gutterBottom>
-                Route
-              </Typography>
-              <Typography variant="body1" paragraph>
-                <strong>From:</strong> {selectedRide.origin_display_name}
-              </Typography>
-              <Typography variant="body1" paragraph>
-                <strong>To:</strong> {selectedRide.destination_display_name}
-              </Typography>
+              <TabPanel value={tabValue} index={0}>
+                <Typography variant="h6" gutterBottom>
+                  Route
+                </Typography>
+                <Typography variant="body1" paragraph>
+                  <strong>From:</strong> {selectedRide.origin_display_name}
+                </Typography>
+                <Typography variant="body1" paragraph>
+                  <strong>To:</strong> {selectedRide.destination_display_name}
+                </Typography>
+                
+                <Typography variant="h6" gutterBottom>
+                  Schedule
+                </Typography>
+                <Typography variant="body1" paragraph>
+                  <strong>Departure:</strong> {formatDate(selectedRide.departure_time)}
+                </Typography>
+                
+                <Typography variant="h6" gutterBottom>
+                  Trip Information
+                </Typography>
+                <Typography variant="body1" paragraph>
+                  <strong>Status:</strong> {selectedRide.status}
+                </Typography>
+                <Typography variant="body1" paragraph>
+                  <strong>Distance:</strong> {selectedRide.distance ? `${selectedRide.distance.toFixed(1)} miles` : "Not available"}
+                </Typography>
+                <Typography variant="body1" paragraph>
+                  <strong>Estimated Duration:</strong> {selectedRide.duration ? `${Math.round(selectedRide.duration / 60)} minutes` : "Not available"}
+                </Typography>
+              </TabPanel>
               
-              <Typography variant="h6" gutterBottom>
-                Schedule
-              </Typography>
-              <Typography variant="body1" paragraph>
-                <strong>Departure:</strong> {formatDate(selectedRide.departure_time)}
-              </Typography>
-              
-              <Typography variant="h6" gutterBottom>
-                Trip Information
-              </Typography>
-              <Typography variant="body1" paragraph>
-                <strong>Status:</strong> {selectedRide.status}
-              </Typography>
-              <Typography variant="body1" paragraph>
-                <strong>Distance:</strong> {selectedRide.distance ? `${selectedRide.distance.toFixed(1)} miles` : "Not available"}
-              </Typography>
-              <Typography variant="body1" paragraph>
-                <strong>Estimated Duration:</strong> {selectedRide.duration ? `${Math.round(selectedRide.duration / 60)} minutes` : "Not available"}
-              </Typography>
+              <TabPanel value={tabValue} index={1}>
+                <MapComponent 
+                  pickupLocation={selectedRide.origin_display_name}
+                  dropoffLocation={selectedRide.destination_display_name}
+                  pickupCoordinates={{
+                    latitude: selectedRide.pickup_latitude || selectedRide.origin_latitude,
+                    longitude: selectedRide.pickup_longitude || selectedRide.origin_longitude
+                  }}
+                  dropoffCoordinates={{
+                    latitude: selectedRide.dropoff_latitude || selectedRide.destination_latitude,
+                    longitude: selectedRide.dropoff_longitude || selectedRide.destination_longitude
+                  }}
+                  optimizedPickupCoordinates={selectedRide.optimal_pickup_point}
+                  optimizedDropoffCoordinates={selectedRide.nearest_dropoff_point}
+                  showUserLocation={true}
+                />
+              </TabPanel>
             </DialogContent>
+            
             <DialogActions>
               <Button onClick={handleCloseDialog}>Close</Button>
               
