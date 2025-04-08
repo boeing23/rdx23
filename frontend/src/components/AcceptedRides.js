@@ -11,7 +11,12 @@ import {
   DialogActions, 
   CircularProgress, 
   Alert, 
-  Paper 
+  Paper,
+  Divider,
+  Card,
+  CardMedia,
+  Avatar,
+  Link
 } from '@mui/material';
 import DirectionsCarIcon from '@mui/icons-material/DirectionsCar';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
@@ -19,6 +24,8 @@ import CancelIcon from '@mui/icons-material/Cancel';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import LocationOnIcon from '@mui/icons-material/LocationOn';
 import DateRangeIcon from '@mui/icons-material/DateRange';
+import MapIcon from '@mui/icons-material/Map';
+import PersonIcon from '@mui/icons-material/Person';
 import './RideCard.css';
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:8000';
@@ -29,6 +36,8 @@ function AcceptedRides() {
   const [error, setError] = useState(null);
   const [openDialog, setOpenDialog] = useState(false);
   const [selectedRide, setSelectedRide] = useState(null);
+  const [detailedRide, setDetailedRide] = useState(null);
+  const [loadingDetails, setLoadingDetails] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -93,6 +102,31 @@ function AcceptedRides() {
     }
   }, [getAuthToken, navigate]);
 
+  // Fetch detailed ride info when opening dialog
+  const fetchRideDetails = useCallback(async (rideId) => {
+    try {
+      setLoadingDetails(true);
+      const cleanToken = getAuthToken();
+      
+      const response = await axios.get(
+        `${API_BASE_URL}/api/rides/requests/${rideId}/`,
+        {
+          headers: {
+            Authorization: `Token ${cleanToken}`,
+          },
+        }
+      );
+      
+      console.log('Ride details response:', response.data);
+      setDetailedRide(response.data);
+      setLoadingDetails(false);
+    } catch (error) {
+      console.error('Error fetching ride details:', error);
+      setError('Failed to load ride details. Please try again later.');
+      setLoadingDetails(false);
+    }
+  }, [getAuthToken]);
+
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
@@ -149,7 +183,8 @@ function AcceptedRides() {
   const handleOpenDialog = useCallback((ride) => {
     setSelectedRide(ride);
     setOpenDialog(true);
-  }, []);
+    fetchRideDetails(ride.id);
+  }, [fetchRideDetails]);
 
   const handleCloseDialog = useCallback(() => {
     setOpenDialog(false);
@@ -299,42 +334,127 @@ function AcceptedRides() {
       )}
       
       {/* Ride Details Dialog */}
-      <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
+      <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="md" fullWidth>
         {selectedRide && (
           <>
             <DialogTitle>
-              Ride Details
+              Trip Details
             </DialogTitle>
             <DialogContent dividers>
-              <Typography variant="h6" gutterBottom>
-                Route
-              </Typography>
-              <Typography variant="body1" paragraph>
-                <strong>From:</strong> {selectedRide.origin_display_name}
-              </Typography>
-              <Typography variant="body1" paragraph>
-                <strong>To:</strong> {selectedRide.destination_display_name}
-              </Typography>
-              
-              <Typography variant="h6" gutterBottom>
-                Schedule
-              </Typography>
-              <Typography variant="body1" paragraph>
-                <strong>Departure:</strong> {formatDate(selectedRide.departure_time)}
-              </Typography>
-              
-              <Typography variant="h6" gutterBottom>
-                Trip Information
-              </Typography>
-              <Typography variant="body1" paragraph>
-                <strong>Status:</strong> {selectedRide.status}
-              </Typography>
-              <Typography variant="body1" paragraph>
-                <strong>Distance:</strong> {selectedRide.distance ? `${selectedRide.distance.toFixed(1)} miles` : "Not available"}
-              </Typography>
-              <Typography variant="body1" paragraph>
-                <strong>Estimated Duration:</strong> {selectedRide.duration ? `${Math.round(selectedRide.duration / 60)} minutes` : "Not available"}
-              </Typography>
+              {loadingDetails ? (
+                <Box display="flex" justifyContent="center" my={3}>
+                  <CircularProgress />
+                </Box>
+              ) : detailedRide ? (
+                <>
+                  {/* Map Section */}
+                  {detailedRide.map_url && (
+                    <Card sx={{ mb: 3 }}>
+                      <CardMedia
+                        component="div"
+                        sx={{ height: 400, display: 'flex', flexDirection: 'column', justifyContent: 'center', 
+                              alignItems: 'center', backgroundColor: '#f5f5f5' }}
+                      >
+                        <Box sx={{ textAlign: 'center', p: 2 }}>
+                          <Button
+                            variant="contained"
+                            color="primary"
+                            startIcon={<MapIcon />}
+                            href={detailedRide.map_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            sx={{ mb: 2 }}
+                          >
+                            Open Route Map
+                          </Button>
+                          <Typography variant="caption" display="block">
+                            View the complete route with pickup and drop-off locations
+                          </Typography>
+                        </Box>
+                      </CardMedia>
+                    </Card>
+                  )}
+                  
+                  {/* Route Information */}
+                  <Box sx={{ mb: 3 }}>
+                    <Typography variant="h6" gutterBottom>
+                      Route
+                    </Typography>
+                    <Typography variant="body1" paragraph>
+                      <strong>From:</strong> {detailedRide.pickup_location}
+                    </Typography>
+                    <Typography variant="body1" paragraph>
+                      <strong>To:</strong> {detailedRide.dropoff_location}
+                    </Typography>
+                  </Box>
+                  
+                  <Divider sx={{ my: 2 }} />
+                  
+                  {/* Trip Schedule */}
+                  <Box sx={{ mb: 3 }}>
+                    <Typography variant="h6" gutterBottom>
+                      Schedule
+                    </Typography>
+                    <Typography variant="body1" paragraph>
+                      <strong>Departure:</strong> {formatDate(detailedRide.departure_time)}
+                    </Typography>
+                  </Box>
+                  
+                  <Divider sx={{ my: 2 }} />
+                  
+                  {/* Driver Information (if available) */}
+                  {detailedRide.ride && detailedRide.ride.driver && (
+                    <Box sx={{ mb: 3 }}>
+                      <Typography variant="h6" gutterBottom>
+                        Driver Information
+                      </Typography>
+                      <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                        <Avatar sx={{ mr: 2 }}>
+                          <PersonIcon />
+                        </Avatar>
+                        <Box>
+                          <Typography variant="subtitle1">
+                            {detailedRide.ride.driver.username || 'Driver Name'}
+                          </Typography>
+                          {detailedRide.ride.driver.email && (
+                            <Typography variant="body2" color="text.secondary">
+                              {detailedRide.ride.driver.email}
+                            </Typography>
+                          )}
+                        </Box>
+                      </Box>
+                      
+                      {detailedRide.ride.vehicle && (
+                        <Typography variant="body2" paragraph>
+                          <strong>Vehicle:</strong> {detailedRide.ride.vehicle.make} {detailedRide.ride.vehicle.model}
+                        </Typography>
+                      )}
+                    </Box>
+                  )}
+                  
+                  <Divider sx={{ my: 2 }} />
+                  
+                  {/* Trip Details */}
+                  <Box>
+                    <Typography variant="h6" gutterBottom>
+                      Trip Information
+                    </Typography>
+                    <Typography variant="body1" paragraph>
+                      <strong>Status:</strong> {detailedRide.status}
+                    </Typography>
+                    <Typography variant="body1" paragraph>
+                      <strong>Seats:</strong> {detailedRide.seats_needed || 1}
+                    </Typography>
+                    <Typography variant="body1" paragraph>
+                      <strong>Created:</strong> {formatDate(detailedRide.created_at)}
+                    </Typography>
+                  </Box>
+                </>
+              ) : (
+                <Typography variant="body1" align="center">
+                  Failed to load ride details. Please try again.
+                </Typography>
+              )}
             </DialogContent>
             <DialogActions>
               <Button onClick={handleCloseDialog}>Close</Button>
@@ -345,7 +465,7 @@ function AcceptedRides() {
                     color="error" 
                     onClick={() => handleCancelRide(selectedRide.id)}
                   >
-                    Cancel Ride
+                    Cancel Trip
                   </Button>
                   <Button 
                     color="primary" 

@@ -66,6 +66,28 @@ def reverse_geocode(coordinates):
     return "Location address unavailable"
 
 
+def format_coord(coord):
+    """Format coordinate pair for OpenStreetMap URL (lat,lon format)"""
+    # OpenStreetMap expects coordinates in lat,lon format (reverse of our lon,lat format)
+    if coord and len(coord) >= 2:
+        return f"{coord[1]},{coord[0]}"  # Convert from (longitude, latitude) to (latitude, longitude)
+    return ""
+
+
+def generate_osm_directions_url(start_coords, pickup_coords, dropoff_coords, end_coords=None):
+    """Generate an OpenStreetMap directions URL showing the complete route"""
+    if not all([start_coords, pickup_coords, dropoff_coords]):
+        return None
+        
+    route_points = [format_coord(start_coords), format_coord(pickup_coords), format_coord(dropoff_coords)]
+    
+    # Add end coordinates if provided and different from dropoff
+    if end_coords and end_coords != start_coords:
+        route_points.append(format_coord(end_coords))
+        
+    return f"https://www.openstreetmap.org/directions?route={';'.join(route_points)}"
+
+
 # OpenRouteService API constants
 ORS_API_KEY = getattr(settings, 'OPENROUTE_API_KEY', None)
 if not ORS_API_KEY:
@@ -1052,7 +1074,47 @@ class RideRequestViewSet(viewsets.ModelViewSet):
     def retrieve(self, request, *args, **kwargs):
         instance = self.get_object()
         serializer = self.get_serializer(instance)
-        return Response(serializer.data)
+        data = serializer.data
+        
+        # Add map URL if we have all the required coordinates
+        try:
+            # Get pickup and dropoff coordinates
+            pickup_coords = None
+            dropoff_coords = None
+            
+            if instance.pickup_latitude and instance.pickup_longitude:
+                pickup_coords = (instance.pickup_longitude, instance.pickup_latitude)
+                
+            if instance.dropoff_latitude and instance.dropoff_longitude:
+                dropoff_coords = (instance.dropoff_longitude, instance.dropoff_latitude)
+                
+            # Get driver's start and end coordinates if available
+            driver_start_coords = None
+            driver_end_coords = None
+            
+            if instance.ride and instance.ride.pickup_longitude and instance.ride.pickup_latitude:
+                driver_start_coords = (instance.ride.pickup_longitude, instance.ride.pickup_latitude)
+                
+            if instance.ride and instance.ride.dropoff_longitude and instance.ride.dropoff_latitude:
+                driver_end_coords = (instance.ride.dropoff_longitude, instance.ride.dropoff_latitude)
+            
+            # Generate map URL
+            if pickup_coords and dropoff_coords:
+                start_coords = driver_start_coords if driver_start_coords else pickup_coords
+                end_coords = driver_end_coords if driver_end_coords else dropoff_coords
+                
+                map_url = generate_osm_directions_url(
+                    start_coords=start_coords,
+                    pickup_coords=pickup_coords,
+                    dropoff_coords=dropoff_coords,
+                    end_coords=end_coords
+                )
+                data['map_url'] = map_url
+        except Exception as e:
+            logger.error(f"Error generating map URL: {str(e)}")
+            data['map_url'] = None
+            
+        return Response(data)
 
     @action(detail=False, methods=['get'])
     def accepted(self, request):
