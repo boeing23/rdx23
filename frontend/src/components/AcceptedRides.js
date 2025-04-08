@@ -126,6 +126,10 @@ function AcceptedRides() {
       // Process the data to ensure we have a map URL
       const rideData = response.data;
       
+      // Log the coordinates used for the map URL
+      console.log('Pickup coordinates:', rideData.pickup_latitude, rideData.pickup_longitude);
+      console.log('Dropoff coordinates:', rideData.dropoff_latitude, rideData.dropoff_longitude);
+      
       // If map_url isn't provided, create a simple one
       if (!rideData.map_url && rideData.pickup_latitude && rideData.pickup_longitude 
           && rideData.dropoff_latitude && rideData.dropoff_longitude) {
