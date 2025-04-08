@@ -455,13 +455,13 @@ const DriverAcceptedRides = () => {
       const token = localStorage.getItem('token');
       if (!token) return null;
 
-      // Clean the token
+      // Clean the token (define cleanToken within this function scope)
       const cleanToken = token.trim().replace(/^["'](.*)["']$/, '$1');
       
-      console.log(`Fetching details for driver ID: ${driverId}`);
+      console.log(`Fetching driver name for ID: ${driverId}`);
       
-      // Use the correct endpoint to access users_user table
-      const response = await axios.get(`${API_BASE_URL}/api/users/profile/${driverId}/`, {
+      // Use the users API endpoint to get driver name
+      const response = await axios.get(`${API_BASE_URL}/api/users/${driverId}/`, {
         headers: {
           'Authorization': `Bearer ${cleanToken}`,
           'Content-Type': 'application/json'
@@ -469,29 +469,11 @@ const DriverAcceptedRides = () => {
       });
 
       if (response.data) {
-        console.log('Driver details fetched from users_user table:', response.data);
-        return response.data;
+        console.log('Driver name fetched:', response.data);
+        return response.data; // This contains name and other user details
       }
     } catch (err) {
-      console.error(`Error fetching driver ${driverId} details from users_user table:`, err);
-      
-      // Fallback to regular user endpoint if the specific endpoint fails
-      try {
-        console.log(`Trying fallback endpoint for driver ID: ${driverId}`);
-        const fallbackResponse = await axios.get(`${API_BASE_URL}/api/users/${driverId}/`, {
-          headers: {
-            'Authorization': `Bearer ${cleanToken}`,
-            'Content-Type': 'application/json'
-          }
-        });
-        
-        if (fallbackResponse.data) {
-          console.log('Driver details fetched from fallback endpoint:', fallbackResponse.data);
-          return fallbackResponse.data;
-        }
-      } catch (fallbackErr) {
-        console.error(`Error fetching driver ${driverId} details from fallback endpoint:`, fallbackErr);
-      }
+      console.error(`Error fetching driver ${driverId} name:`, err);
     }
     return null;
   };
