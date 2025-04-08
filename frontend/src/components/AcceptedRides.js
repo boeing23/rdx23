@@ -352,15 +352,33 @@ function AcceptedRides() {
                 </Box>
               ) : detailedRide ? (
                 <>
+                  {/* Debugging Info - will be visible only during testing */}
+                  <Box sx={{ mb: 2, p: 2, bgcolor: '#f5f5f5', borderRadius: 1, fontSize: '0.8rem' }}>
+                    <Typography variant="caption" component="div">
+                      Debug info (temporary):
+                    </Typography>
+                    <pre style={{ whiteSpace: 'pre-wrap', overflow: 'auto', maxHeight: '100px' }}>
+                      {JSON.stringify({
+                        id: detailedRide.id,
+                        hasMapUrl: !!detailedRide.map_url,
+                        mapUrl: detailedRide.map_url,
+                        pickupLat: detailedRide.pickup_latitude,
+                        pickupLng: detailedRide.pickup_longitude,
+                        dropoffLat: detailedRide.dropoff_latitude,
+                        dropoffLng: detailedRide.dropoff_longitude,
+                      }, null, 2)}
+                    </pre>
+                  </Box>
+
                   {/* Map Section */}
-                  {console.log('Rendering map section, map_url:', detailedRide.map_url)}
-                  {detailedRide.map_url ? (
-                    <Card sx={{ mb: 3 }}>
-                      <CardMedia
-                        component="div"
-                        sx={{ height: 400, display: 'flex', flexDirection: 'column', justifyContent: 'center', 
-                              alignItems: 'center', backgroundColor: '#f5f5f5' }}
-                      >
+                  <Card sx={{ mb: 3 }}>
+                    <CardMedia
+                      component="div"
+                      sx={{ height: 400, display: 'flex', flexDirection: 'column', justifyContent: 'center', 
+                            alignItems: 'center', backgroundColor: '#f5f5f5' }}
+                    >
+                      {console.log('Rendering map section, map_url:', detailedRide.map_url)}
+                      {detailedRide.map_url ? (
                         <Box sx={{ textAlign: 'center', p: 2 }}>
                           <Button
                             variant="contained"
@@ -377,15 +395,27 @@ function AcceptedRides() {
                             View the complete route with pickup and drop-off locations
                           </Typography>
                         </Box>
-                      </CardMedia>
-                    </Card>
-                  ) : (
-                    <Box sx={{ textAlign: 'center', p: 2 }}>
-                      <Typography variant="body2" color="text.secondary">
-                        No map data available for this trip
-                      </Typography>
-                    </Box>
-                  )}
+                      ) : (
+                        <Box sx={{ textAlign: 'center', p: 2 }}>
+                          <Typography variant="body2" color="text.secondary">
+                            No map data available for this trip
+                          </Typography>
+                          <Button
+                            variant="outlined"
+                            color="primary"
+                            startIcon={<MapIcon />}
+                            href={`https://www.openstreetmap.org/directions?from=${detailedRide.pickup_latitude},${detailedRide.pickup_longitude}&to=${detailedRide.dropoff_latitude},${detailedRide.dropoff_longitude}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            sx={{ mt: 2 }}
+                            disabled={!detailedRide.pickup_latitude || !detailedRide.dropoff_latitude}
+                          >
+                            Create Simple Route
+                          </Button>
+                        </Box>
+                      )}
+                    </CardMedia>
+                  </Card>
                   
                   {/* Route Information */}
                   <Box sx={{ mb: 3 }}>
