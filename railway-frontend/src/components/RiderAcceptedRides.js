@@ -187,6 +187,11 @@ const RiderAcceptedRides = () => {
             departure_time: ride.departure_time || new Date().toISOString(),
             seats_needed: ride.seats_needed || 1,
             ride_details: null, // Not available in this format
+            // Extract coordinates from the API response
+            pickup_latitude: ride.pickup_latitude || null,
+            pickup_longitude: ride.pickup_longitude || null,
+            dropoff_latitude: ride.dropoff_latitude || null,
+            dropoff_longitude: ride.dropoff_longitude || null,
             driver: {
               id: ride.driver_id || null,
               first_name: firstName,
@@ -421,7 +426,12 @@ const RiderAcceptedRides = () => {
         seats_needed: ride.seats_needed || 1,
         ride_details: ride.ride_details || null,
         driver: driverObj,
-        // Use safe versions of problematic fields
+        // Map coordinate fields from any available source
+        pickup_latitude: ride.pickup_latitude || (safeOptimalPickup ? safeOptimalPickup.latitude : null),
+        pickup_longitude: ride.pickup_longitude || (safeOptimalPickup ? safeOptimalPickup.longitude : null),
+        dropoff_latitude: ride.dropoff_latitude || (safeNearestDropoff ? safeNearestDropoff.latitude : null),
+        dropoff_longitude: ride.dropoff_longitude || (safeNearestDropoff ? safeNearestDropoff.longitude : null),
+        // Keep original fields for backwards compatibility
         optimal_pickup_point: safeOptimalPickup,
         nearest_dropoff_point: safeNearestDropoff,
         optimal_pickup_info: ride.optimal_pickup_info || null,
@@ -860,6 +870,14 @@ const RiderAcceptedRides = () => {
     const driver = ride.driver || {};
     const formatted = formatDate(ride.departure_time);
     
+    // Log coordinates for debugging
+    console.log(`Ride ${ride.id} coordinates:`, {
+      pickup_lat: ride.pickup_latitude,
+      pickup_lng: ride.pickup_longitude,
+      dropoff_lat: ride.dropoff_latitude,
+      dropoff_lng: ride.dropoff_longitude
+    });
+    
     return (
       <div className="ride-tablet">
         <div className="ride-tablet-content">
@@ -962,79 +980,13 @@ const RiderAcceptedRides = () => {
               )}
             </Box>
             
-            {/* Display optimal pickup and dropoff points */}
-            {(ride.optimal_pickup_point || ride.nearest_dropoff_point) && (
-              <>
-                <Divider sx={{ my: 1 }} />
-                <Box sx={{ mt: 1 }}>
-                  <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 1 }}>
-                    Optimal Route Points
-                  </Typography>
-                  
-                  {ride.optimal_pickup_point && (
-                    <Box>
-                      <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
-                        Optimal Pickup:
-                      </Typography>
-                      <Box ml={2}>
-                        <Typography variant="body2">
-                          {ride.optimal_pickup_point.address || 'Address not available'}
-                        </Typography>
-                        {ride.optimal_pickup_point.distance_from_rider && (
-                          <Typography variant="body2" color="text.secondary">
-                            Distance: {(ride.optimal_pickup_point.distance_from_rider / 1000).toFixed(2)} km from requested pickup
-                          </Typography>
-                        )}
-                        <Button 
-                          size="small" 
-                          variant="outlined" 
-                          color="primary"
-                          sx={{ mt: 0.5, fontSize: '0.7rem' }}
-                          onClick={() => window.open(`https://www.google.com/maps/search/?api=1&query=${ride.optimal_pickup_point.latitude},${ride.optimal_pickup_point.longitude}`, '_blank')}
-                        >
-                          View on Maps
-                        </Button>
-                      </Box>
-                    </Box>
-                  )}
-                  
-                  {ride.nearest_dropoff_point && (
-                    <Box mt={1}>
-                      <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
-                        Optimal Dropoff:
-                      </Typography>
-                      <Box ml={2}>
-                        <Typography variant="body2">
-                          {ride.nearest_dropoff_point.address || 'Address not available'}
-                        </Typography>
-                        {ride.nearest_dropoff_point.distance_from_rider && (
-                          <Typography variant="body2" color="text.secondary">
-                            Distance: {(ride.nearest_dropoff_point.distance_from_rider / 1000).toFixed(2)} km from requested dropoff
-                          </Typography>
-                        )}
-                        <Button 
-                          size="small" 
-                          variant="outlined" 
-                          color="primary"
-                          sx={{ mt: 0.5, fontSize: '0.7rem' }}
-                          onClick={() => window.open(`https://www.google.com/maps/search/?api=1&query=${ride.nearest_dropoff_point.latitude},${ride.nearest_dropoff_point.longitude}`, '_blank')}
-                        >
-                          View on Maps
-                        </Button>
-                      </Box>
-                    </Box>
-                  )}
-                </Box>
-              </>
-            )}
-            
-            {/* Route Map */}
-            {(ride.optimal_pickup_point && ride.nearest_dropoff_point) && (
+            {/* Route Map - Updated to use direct coordinate fields */}
+            {(ride.pickup_latitude && ride.pickup_longitude && ride.dropoff_latitude && ride.dropoff_longitude) ? (
               <Box sx={{ mt: 2, height: '200px', width: '100%', border: '1px solid #ccc', borderRadius: '4px', overflow: 'hidden' }}>
                 <MapContainer 
                   center={[
-                    (ride.optimal_pickup_point.latitude + ride.nearest_dropoff_point.latitude) / 2,
-                    (ride.optimal_pickup_point.longitude + ride.nearest_dropoff_point.longitude) / 2
+                    (ride.pickup_latitude + ride.dropoff_latitude) / 2,
+                    (ride.pickup_longitude + ride.dropoff_longitude) / 2
                   ]} 
                   zoom={13} 
                   style={{ height: '100%', width: '100%' }}
@@ -1043,31 +995,41 @@ const RiderAcceptedRides = () => {
                     attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                     url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                   />
-                  {ride.optimal_pickup_point && (
-                    <Marker 
-                      position={[ride.optimal_pickup_point.latitude, ride.optimal_pickup_point.longitude]}
-                    >
-                      <Popup>Pickup: {ride.optimal_pickup_point.address || ride.pickup_location}</Popup>
-                    </Marker>
-                  )}
-                  {ride.nearest_dropoff_point && (
-                    <Marker 
-                      position={[ride.nearest_dropoff_point.latitude, ride.nearest_dropoff_point.longitude]}
-                    >
-                      <Popup>Dropoff: {ride.nearest_dropoff_point.address || ride.dropoff_location}</Popup>
-                    </Marker>
-                  )}
-                  {(ride.optimal_pickup_point && ride.nearest_dropoff_point) && (
-                    <Polyline 
-                      positions={[
-                        [ride.optimal_pickup_point.latitude, ride.optimal_pickup_point.longitude],
-                        [ride.nearest_dropoff_point.latitude, ride.nearest_dropoff_point.longitude]
-                      ]}
-                      color="#861F41"
-                      weight={4}
-                    />
-                  )}
+                  <Marker 
+                    position={[ride.pickup_latitude, ride.pickup_longitude]}
+                  >
+                    <Popup>Pickup: {ride.pickup_location}</Popup>
+                  </Marker>
+                  <Marker 
+                    position={[ride.dropoff_latitude, ride.dropoff_longitude]}
+                  >
+                    <Popup>Dropoff: {ride.dropoff_location}</Popup>
+                  </Marker>
+                  <Polyline 
+                    positions={[
+                      [ride.pickup_latitude, ride.pickup_longitude],
+                      [ride.dropoff_latitude, ride.dropoff_longitude]
+                    ]}
+                    color="#861F41"
+                    weight={4}
+                  />
                 </MapContainer>
+              </Box>
+            ) : (
+              /* Fallback when coordinates aren't available */
+              <Box sx={{ mt: 2, p: 2, border: '1px dashed #ccc', borderRadius: '4px', textAlign: 'center' }}>
+                <Typography variant="body2" color="textSecondary">
+                  Map view not available for this ride.
+                </Typography>
+                <Button 
+                  variant="outlined" 
+                  size="small" 
+                  sx={{ mt: 1 }}
+                  startIcon={<LocationOn />}
+                  onClick={() => window.open(`https://www.google.com/maps/dir/${ride.pickup_location}/${ride.dropoff_location}`, '_blank')}
+                >
+                  View on Google Maps
+                </Button>
               </Box>
             )}
             
@@ -1355,4 +1317,4 @@ const RiderAcceptedRides = () => {
   );
 };
 
-export default RiderAcceptedRides; 
+export default RiderAcceptedRides;
