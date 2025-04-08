@@ -16,7 +16,8 @@ import {
   Card,
   CardMedia,
   Avatar,
-  Link
+  Link,
+  Chip
 } from '@mui/material';
 import DirectionsCarIcon from '@mui/icons-material/DirectionsCar';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
@@ -30,6 +31,69 @@ import './RideCard.css';
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:8000';
 
+// Helper function to extract driver information from ride data
+const getDriverInfo = (ride) => {
+  console.log('Getting driver info from:', ride);
+  
+  // If ride has driver_name directly, use it
+  if (ride.driver_name && ride.driver_name.trim() !== '') {
+    console.log('Using driver_name from ride:', ride.driver_name);
+    return {
+      id: ride.driver_id || (ride.ride?.driver?.id || ride.ride?.driver),
+      name: ride.driver_name,
+      // Keep any other driver properties if they exist
+      ...(ride.driver || {})
+    };
+  }
+  
+  // If ride has ride.driver_name, use it
+  if (ride.ride && ride.ride.driver_name && ride.ride.driver_name.trim() !== '') {
+    console.log('Using driver_name from ride.ride:', ride.ride.driver_name);
+    return {
+      id: ride.ride.driver_id || ride.ride.driver,
+      name: ride.ride.driver_name,
+      // Keep any other driver properties if they exist
+      ...(ride.driver || {})
+    };
+  }
+  
+  // Fall back to driver object if it exists
+  if (ride.driver) {
+    console.log('Using driver object:', ride.driver);
+    const driverName = ride.driver.name || 
+                       ride.driver.full_name || 
+                       `${ride.driver.first_name || ''} ${ride.driver.last_name || ''}`.trim() ||
+                       ride.driver.username;
+    
+    return {
+      ...ride.driver,
+      name: driverName || 'Unknown Driver'
+    };
+  }
+  
+  // Fall back to ride.ride.driver if it exists
+  if (ride.ride && ride.ride.driver) {
+    console.log('Using ride.ride.driver object:', ride.ride.driver);
+    const driverObj = typeof ride.ride.driver === 'object' ? ride.ride.driver : { id: ride.ride.driver };
+    const driverName = driverObj.name || 
+                       driverObj.full_name || 
+                       `${driverObj.first_name || ''} ${driverObj.last_name || ''}`.trim() ||
+                       driverObj.username;
+    
+    return {
+      ...driverObj,
+      name: driverName || 'Unknown Driver'
+    };
+  }
+  
+  // Last resort: return a placeholder
+  console.log('No driver info found, returning placeholder');
+  return {
+    id: null,
+    name: 'Unknown Driver'
+  };
+};
+
 function AcceptedRides() {
   const [rides, setRides] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -40,6 +104,74 @@ function AcceptedRides() {
   const [loadingDetails, setLoadingDetails] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
+
+  // Helper functions for ride status and formatting
+  const formatDate = (dateString) => {
+    if (!dateString) return 'Date unavailable';
+    try {
+      const date = new Date(dateString);
+      return date.toLocaleDateString('en-US', { 
+        weekday: 'short', 
+        month: 'short', 
+        day: 'numeric', 
+        year: 'numeric' 
+      });
+    } catch (error) {
+      console.error('Date formatting error:', error);
+      return 'Invalid date';
+    }
+  };
+
+  const formatTime = (dateString) => {
+    if (!dateString) return 'Time unavailable';
+    try {
+      const date = new Date(dateString);
+      return date.toLocaleTimeString('en-US', { 
+        hour: '2-digit', 
+        minute: '2-digit' 
+      });
+    } catch (error) {
+      console.error('Time formatting error:', error);
+      return 'Invalid time';
+    }
+  };
+
+  const getStatusLabel = (status) => {
+    switch (status) {
+      case 'PENDING': return 'Pending';
+      case 'ACCEPTED': return 'Accepted';
+      case 'REJECTED': return 'Rejected';
+      case 'COMPLETED': return 'Completed';
+      case 'CANCELLED': return 'Cancelled';
+      default: return status || 'Unknown';
+    }
+  };
+
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'PENDING': return 'warning';
+      case 'ACCEPTED': return 'success';
+      case 'REJECTED': return 'error';
+      case 'COMPLETED': return 'primary';
+      case 'CANCELLED': return 'default';
+      default: return 'default';
+    }
+  };
+
+  const getStatusIcon = (status) => {
+    switch (status) {
+      case 'ACCEPTED': return <CheckCircleIcon />;
+      case 'CANCELLED': return <CancelIcon />;
+      case 'COMPLETED': return <CheckCircleIcon />;
+      default: return <AccessTimeIcon />;
+    }
+  };
+
+  const handleViewDetails = (ride) => {
+    setSelectedRide(ride);
+    fetchRideDetails(ride.id);
+    setOpenDialog(true);
+  };
 
   // Get auth token with error handling
   const getAuthToken = useCallback(() => {
@@ -287,33 +419,6 @@ function AcceptedRides() {
     );
   }, []);
 
-  // Helper function to get status icon
-  const getStatusIcon = useCallback((status) => {
-    switch (status) {
-      case 'ACCEPTED':
-        return <AccessTimeIcon />;
-      case 'COMPLETED':
-        return <CheckCircleIcon />;
-      case 'CANCELLED':
-        return <CancelIcon />;
-      default:
-        return <DirectionsCarIcon />;
-    }
-  }, []);
-
-  // Function to format date for display
-  const formatDate = useCallback((dateString) => {
-    const options = { 
-      weekday: 'short', 
-      year: 'numeric', 
-      month: 'short', 
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    };
-    return new Date(dateString).toLocaleDateString(undefined, options);
-  }, []);
-
   useEffect(() => {
     console.log('Dialog state changed:', { openDialog, selectedRide });
   }, [openDialog, selectedRide]);
@@ -359,62 +464,91 @@ function AcceptedRides() {
           </Box>
         </Paper>
       ) : (
-        <div className="ride-cards-container">
-          {rides.map((ride) => (
-            <div 
-              key={ride.id} 
-              className="ride-card"
-              data-status={ride.status}
-            >
-              <div className="ride-card__img">
-                {generateDecorativeHeader(ride.status)}
-              </div>
-              <div className="ride-card__avatar">
-                {getStatusIcon(ride.status)}
-              </div>
-              <h3 className="ride-card__title">
-                {ride.origin_display_name} → {ride.destination_display_name}
-              </h3>
-              <div className="ride-card__subtitle">
-                <DateRangeIcon fontSize="small" sx={{ verticalAlign: 'middle', mr: 0.5 }} />
-                {formatDate(ride.departure_time)}
-              </div>
-              <div className="ride-card__subtitle">
-                <LocationOnIcon fontSize="small" sx={{ verticalAlign: 'middle', mr: 0.5 }} />
-                {ride.distance ? `${ride.distance.toFixed(1)} miles` : "Distance unavailable"}
-              </div>
-              <div className="ride-card__subtitle">
-                Status: {ride.status}
-              </div>
-
-              <div className="ride-card__wrapper">
-                <button 
-                  className="ride-card__btn ride-card__btn-solid"
-                  onClick={() => handleOpenDialog(ride)}
-                >
-                  Details
-                </button>
+        <Box sx={{ mt: 2, mb: 2 }}>
+          {rides.map((ride) => {
+            // Get driver information 
+            const driverInfo = getDriverInfo(ride);
+            
+            return (
+              <Paper 
+                key={ride.id} 
+                elevation={3} 
+                sx={{ 
+                  mb: 2, 
+                  p: 2,
+                  transition: 'transform 0.2s',
+                  '&:hover': {
+                    transform: 'translateY(-2px)',
+                    boxShadow: 3
+                  }
+                }}
+              >
+                <Box sx={{ mb: 1 }}>
+                  <Typography variant="h6" component="div">
+                    Ride with {driverInfo.name || 'Unknown Driver'}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary" sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                    <DateRangeIcon sx={{ mr: 1, fontSize: 'small' }} />
+                    {formatDate(ride.departure_time)}
+                  </Typography>
+                </Box>
                 
-                {ride.status === 'ACCEPTED' && (
-                  <>
-                    <button 
-                      className="ride-card__btn ride-card__btn-cancel"
-                      onClick={() => handleCancelRide(ride.id)}
-                    >
-                      Cancel
-                    </button>
-                    <button 
-                      className="ride-card__btn"
-                      onClick={() => handleCompleteRide(ride.id)}
-                    >
-                      Complete
-                    </button>
-                  </>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
+                <Divider sx={{ mb: 2 }} />
+                
+                <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 2 }}>
+                  <Box sx={{ flex: 1 }}>
+                    <Typography sx={{ display: 'flex', alignItems: 'flex-start', mb: 1 }}>
+                      <LocationOnIcon sx={{ mr: 1, mt: 0.5, color: 'primary.main' }} />
+                      <Box>
+                        <strong>From:</strong> {ride.pickup_location}
+                      </Box>
+                    </Typography>
+                    <Typography sx={{ display: 'flex', alignItems: 'flex-start', mb: 1 }}>
+                      <LocationOnIcon sx={{ mr: 1, mt: 0.5, color: 'error.main' }} />
+                      <Box>
+                        <strong>To:</strong> {ride.dropoff_location}
+                      </Box>
+                    </Typography>
+                  </Box>
+                  
+                  <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                    <Typography sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                      <AccessTimeIcon sx={{ mr: 1, fontSize: 'small' }} />
+                      <strong>Departure:</strong> {formatDate(ride.departure_time)}
+                    </Typography>
+                    <Typography sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                      <PersonIcon sx={{ mr: 1, fontSize: 'small' }} />
+                      <strong>Seats:</strong> {ride.seats_needed}
+                    </Typography>
+                    <Typography sx={{ display: 'flex', alignItems: 'center' }}>
+                      <DirectionsCarIcon sx={{ mr: 1, fontSize: 'small' }} />
+                      <strong>Vehicle:</strong> {driverInfo.vehicle_make} {driverInfo.vehicle_model}
+                      {driverInfo.vehicle_color && ` (${driverInfo.vehicle_color})`}
+                    </Typography>
+                  </Box>
+                </Box>
+                
+                <Divider sx={{ my: 2 }} />
+                
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Chip 
+                    label={getStatusLabel(ride.status)} 
+                    color={getStatusColor(ride.status)}
+                    icon={getStatusIcon(ride.status)}
+                  />
+                  <Button
+                    variant="contained"
+                    color="primary"
+                    onClick={() => handleViewDetails(ride)}
+                    startIcon={<MapIcon />}
+                  >
+                    View Details
+                  </Button>
+                </Box>
+              </Paper>
+            );
+          })}
+        </Box>
       )}
       
       {/* Ride Details Dialog */}
@@ -644,39 +778,39 @@ function AcceptedRides() {
                         </Avatar>
                         <Box>
                           <Typography variant="subtitle1">
-                            {detailedRide.ride.driver.first_name} {detailedRide.ride.driver.last_name}
+                            {getDriverInfo(detailedRide).name}
                           </Typography>
                           <Typography variant="body2" color="text.secondary">
-                            {detailedRide.ride.driver.email}
+                            {getDriverInfo(detailedRide).email}
                           </Typography>
                           <Typography variant="body2" color="text.secondary">
-                            Phone: {detailedRide.ride.driver.phone_number}
+                            Phone: {getDriverInfo(detailedRide).phone_number}
                           </Typography>
                         </Box>
                       </Box>
                       
-                      {detailedRide.ride.driver.vehicle_make && detailedRide.ride.driver.vehicle_model && (
+                      {getDriverInfo(detailedRide).vehicle_make && getDriverInfo(detailedRide).vehicle_model && (
                         <Box sx={{ mt: 2 }}>
                           <Typography variant="subtitle2" gutterBottom>
                             Vehicle Information
                           </Typography>
                           <Typography variant="body2">
-                            {detailedRide.ride.driver.vehicle_make} {detailedRide.ride.driver.vehicle_model}
-                            {detailedRide.ride.driver.vehicle_year && ` (${detailedRide.ride.driver.vehicle_year})`}
+                            {getDriverInfo(detailedRide).vehicle_make} {getDriverInfo(detailedRide).vehicle_model}
+                            {getDriverInfo(detailedRide).vehicle_year && ` (${getDriverInfo(detailedRide).vehicle_year})`}
                           </Typography>
-                          {detailedRide.ride.driver.vehicle_color && (
+                          {getDriverInfo(detailedRide).vehicle_color && (
                             <Typography variant="body2">
-                              Color: {detailedRide.ride.driver.vehicle_color}
+                              Color: {getDriverInfo(detailedRide).vehicle_color}
                             </Typography>
                           )}
-                          {detailedRide.ride.driver.license_plate && (
+                          {getDriverInfo(detailedRide).license_plate && (
                             <Typography variant="body2">
-                              License Plate: {detailedRide.ride.driver.license_plate}
+                              License Plate: {getDriverInfo(detailedRide).license_plate}
                             </Typography>
                           )}
-                          {detailedRide.ride.driver.max_passengers && (
+                          {getDriverInfo(detailedRide).max_passengers && (
                             <Typography variant="body2">
-                              Maximum Passengers: {detailedRide.ride.driver.max_passengers}
+                              Maximum Passengers: {getDriverInfo(detailedRide).max_passengers}
                             </Typography>
                           )}
                         </Box>
