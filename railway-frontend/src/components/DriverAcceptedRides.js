@@ -459,7 +459,9 @@ const DriverAcceptedRides = () => {
       const cleanToken = token.trim().replace(/^["'](.*)["']$/, '$1');
       
       console.log(`Fetching details for driver ID: ${driverId}`);
-      const response = await axios.get(`${API_BASE_URL}/api/users/${driverId}/`, {
+      
+      // Use the correct endpoint to access users_user table
+      const response = await axios.get(`${API_BASE_URL}/api/users/profile/${driverId}/`, {
         headers: {
           'Authorization': `Bearer ${cleanToken}`,
           'Content-Type': 'application/json'
@@ -467,11 +469,29 @@ const DriverAcceptedRides = () => {
       });
 
       if (response.data) {
-        console.log('Driver details fetched:', response.data);
+        console.log('Driver details fetched from users_user table:', response.data);
         return response.data;
       }
     } catch (err) {
-      console.error(`Error fetching driver ${driverId} details:`, err);
+      console.error(`Error fetching driver ${driverId} details from users_user table:`, err);
+      
+      // Fallback to regular user endpoint if the specific endpoint fails
+      try {
+        console.log(`Trying fallback endpoint for driver ID: ${driverId}`);
+        const fallbackResponse = await axios.get(`${API_BASE_URL}/api/users/${driverId}/`, {
+          headers: {
+            'Authorization': `Bearer ${cleanToken}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (fallbackResponse.data) {
+          console.log('Driver details fetched from fallback endpoint:', fallbackResponse.data);
+          return fallbackResponse.data;
+        }
+      } catch (fallbackErr) {
+        console.error(`Error fetching driver ${driverId} details from fallback endpoint:`, fallbackErr);
+      }
     }
     return null;
   };
