@@ -46,6 +46,7 @@ from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 from django.views.generic import ListView, DetailView, CreateView, UpdateView, DeleteView
+from django.db import connection
 
 logger = logging.getLogger(__name__)
 
@@ -437,7 +438,7 @@ def calculate_segment_overlap(route1, route2, threshold=200):
                     break
             except Exception as e:
                 logger.error(
-    f"Error in calculating distance for overlap: {str(e)}")
+                    f"Error in calculating distance for overlap: {str(e)}")
                 continue
 
     return (proximity_count / len(route1)) * 100 if route1 else 0
@@ -598,7 +599,9 @@ def calculate_route_overlap(
         deviation_score = max(0, 100 - min(deviation_percentage, 100))
         logger.info(f"{log_prefix}Deviation score: {deviation_score:.2f} (deviation: {deviation_percentage:.2f}%)")
     else:
-        logger.info(f"{log_prefix}Deviation score: {deviation_score:.2f} (no optimal points)")
+        # Set deviation score to 0 when no optimal points are available
+        deviation_score = 0
+        logger.info(f"{log_prefix}Deviation score: {deviation_score} (no optimal points)")
 
     # Calculate weighted compatibility score
     weights = {'direction': 0.4, 'coverage': 0.3, 'deviation': 0.3}
@@ -1881,3 +1884,54 @@ def check_destination_compatibility(driver_start_coords, driver_end_coords, dest
         logger.exception("Exception details:")
         
     return False, None
+
+# Function to repair driver_name field if missing
+def ensure_driver_name_field():
+    """Ensure the driver_name field exists in the rides_ride table."""
+    try:
+        # First check if the column exists
+        with connection.cursor() as cursor:
+            cursor.execute("""
+                SELECT column_name 
+                FROM information_schema.columns 
+                WHERE table_name = 'rides_ride' AND column_name = 'driver_name';
+            """)
+            has_column = bool(cursor.fetchone())
+            
+            if not has_column:
+                # Add the column if it doesn't exist
+                cursor.execute("""
+                    ALTER TABLE rides_ride 
+                    ADD COLUMN driver_name VARCHAR(255);
+                """)
+                connection.commit()
+                
+                # Populate the column with data
+                cursor.execute("""
+                    UPDATE rides_ride r
+                    SET driver_name = u.first_name || ' ' || u.last_name
+                    FROM users_user u
+                    WHERE r.driver_id = u.id;
+                """)
+                connection.commit()
+                logger.info("Added and populated driver_name column.")
+            else:
+                # Make sure all rows have a driver_name
+                cursor.execute("""
+                    UPDATE rides_ride r
+                    SET driver_name = u.first_name || ' ' || u.last_name
+                    FROM users_user u
+                    WHERE r.driver_id = u.id AND (r.driver_name IS NULL OR r.driver_name = '');
+                """)
+                rows_updated = cursor.rowcount
+                if rows_updated > 0:
+                    connection.commit()
+                    logger.info(f"Updated {rows_updated} driver_name values.")
+                    
+        return True
+    except Exception as e:
+        logger.error(f"Error ensuring driver_name field: {str(e)}")
+        return False
+
+# Try to ensure the driver_name field exists when the app starts
+ensure_driver_name_field()
