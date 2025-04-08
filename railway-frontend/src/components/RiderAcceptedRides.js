@@ -34,6 +34,9 @@ import './RideTablet.css';
 import { MapContainer, TileLayer, Marker, Popup, Polyline } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
+import { View, Text, FlatList, StyleSheet, TouchableOpacity } from 'react-native-web';
+// Remove unnecessary imports
+// import { Icon } from 'react-native-elements';
 
 // Fix Leaflet marker icon issues
 delete L.Icon.Default.prototype._getIconUrl;
@@ -42,11 +45,6 @@ L.Icon.Default.mergeOptions({
   iconUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon.png',
   shadowUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-shadow.png'
 });
-
-// Replace with web components
-import { View, Text, FlatList, StyleSheet, TouchableOpacity } from 'react-native-web';
-// Remove unnecessary imports
-// import { Icon } from 'react-native-elements';
 
 const RiderAcceptedRides = () => {
   const navigate = useNavigate();
