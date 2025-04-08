@@ -5,31 +5,31 @@ echo "=== RAILWAY APP STARTUP === $(date -u)"
 echo "Current directory: $(pwd)"
 export PORT=${PORT:-8000}
 
-# Retry mechanism for database connection
+# Set PostgreSQL environment variables if using DATABASE_PUBLIC_URL
+if [ -n "$DATABASE_PUBLIC_URL" ]; then
+  # Extract components from the URL - example: postgresql://user:pass@hostname:port/dbname
+  export PGDATABASE=$(echo $DATABASE_PUBLIC_URL | sed -E 's/.*\/([^?]*).*/\1/')
+  export PGUSER=$(echo $DATABASE_PUBLIC_URL | sed -E 's/.*:\/\/([^:]*).*/\1/')
+  export PGPASSWORD=$(echo $DATABASE_PUBLIC_URL | sed -E 's/.*:\/\/[^:]*:([^@]*)@.*/\1/')
+  export PGHOST=$(echo $DATABASE_PUBLIC_URL | sed -E 's/.*@([^:]*).*/\1/')
+  export PGPORT=$(echo $DATABASE_PUBLIC_URL | sed -E 's/.*:([0-9]*)\/.*/\1/')
+  
+  echo "Extracted PostgreSQL settings from DATABASE_PUBLIC_URL:"
+  echo "- PGHOST: $PGHOST"
+  echo "- PGPORT: $PGPORT"
+  echo "- PGDATABASE: $PGDATABASE"
+  echo "- PGUSER: $PGUSER"
+  # Password not shown for security
+fi
+
+# Retry mechanism for database connection using PGHOST and PGPORT
 echo "=== CHECKING DATABASE CONNECTION ==="
-MAX_RETRIES=30
+MAX_RETRIES=15
 RETRY_INTERVAL=5
 count=0
 
-# Try connecting with PUBLIC_URL first if available
-if [ -n "$DATABASE_PUBLIC_URL" ]; then
-  echo "Trying connection with DATABASE_PUBLIC_URL..."
-  until python -c "import psycopg2; conn = psycopg2.connect(\"${DATABASE_PUBLIC_URL}\"); conn.close()" 2>/dev/null
-  do
-    count=$((count+1))
-    if [ $count -ge 5 ]; then
-      echo "Failed to connect with PUBLIC_URL after 5 attempts, trying internal URL..."
-      break
-    fi
-    echo "Database public connection not available, retrying in ${RETRY_INTERVAL}s... (Attempt $count/5)"
-    sleep $RETRY_INTERVAL
-  done
-fi
-
-# Reset counter for internal URL
-count=0
-echo "Checking database connection with DATABASE_URL..."
-until python -c "import psycopg2; conn = psycopg2.connect(\"${DATABASE_URL}\"); conn.close()" 2>/dev/null
+echo "Checking direct PostgreSQL connection..."
+until PGPASSWORD=$PGPASSWORD psql -h $PGHOST -p $PGPORT -U $PGUSER -d $PGDATABASE -c "SELECT 1" > /dev/null 2>&1
 do
   count=$((count+1))
   if [ $count -ge $MAX_RETRIES ]; then
