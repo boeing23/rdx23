@@ -1109,6 +1109,7 @@ class RideRequestViewSet(viewsets.ModelViewSet):
 
     def retrieve(self, request, *args, **kwargs):
         instance = self.get_object()
+        logger.info(f"Retrieving detailed data for ride request {instance.id}")
         serializer = self.get_serializer(instance)
         data = serializer.data
         
@@ -1132,12 +1133,12 @@ class RideRequestViewSet(viewsets.ModelViewSet):
             driver_start_coords = None
             driver_end_coords = None
             
-            if instance.ride and instance.ride.pickup_longitude and instance.ride.pickup_latitude:
-                driver_start_coords = (instance.ride.pickup_longitude, instance.ride.pickup_latitude)
+            if instance.ride and instance.ride.start_latitude and instance.ride.start_longitude:
+                driver_start_coords = (instance.ride.start_longitude, instance.ride.start_latitude)
                 logger.info(f"Driver start coordinates: {driver_start_coords}")
                 
-            if instance.ride and instance.ride.dropoff_longitude and instance.ride.dropoff_latitude:
-                driver_end_coords = (instance.ride.dropoff_longitude, instance.ride.dropoff_latitude)
+            if instance.ride and instance.ride.end_latitude and instance.ride.end_longitude:
+                driver_end_coords = (instance.ride.end_longitude, instance.ride.end_latitude)
                 logger.info(f"Driver end coordinates: {driver_end_coords}")
             
             # Generate map URL
@@ -1155,9 +1156,15 @@ class RideRequestViewSet(viewsets.ModelViewSet):
                 data['map_url'] = map_url
             else:
                 logger.warning(f"Cannot generate map URL: missing coordinates - pickup: {pickup_coords}, dropoff: {dropoff_coords}")
-                data['map_url'] = None
+                # Generate a simple direct route if we have pickup and dropoff coordinates
+                if instance.pickup_latitude and instance.pickup_longitude and instance.dropoff_latitude and instance.dropoff_longitude:
+                    simple_url = f"https://www.openstreetmap.org/directions?from={instance.pickup_latitude},{instance.pickup_longitude}&to={instance.dropoff_latitude},{instance.dropoff_longitude}"
+                    logger.info(f"Generated simple map URL: {simple_url}")
+                    data['map_url'] = simple_url
+                else:
+                    data['map_url'] = None
         except Exception as e:
-            logger.error(f"Error generating map URL: {str(e)}")
+            logger.error(f"Error generating map URL: {str(e)}", exc_info=True)
             data['map_url'] = None
             
         return Response(data)

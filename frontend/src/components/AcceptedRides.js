@@ -106,6 +106,7 @@ function AcceptedRides() {
   const fetchRideDetails = useCallback(async (rideId) => {
     try {
       setLoadingDetails(true);
+      setDetailedRide(null); // Reset to avoid showing stale data
       const cleanToken = getAuthToken();
       
       console.log(`Fetching ride details for ID ${rideId}`);
@@ -121,9 +122,20 @@ function AcceptedRides() {
       
       console.log('Ride details raw response:', response);
       console.log('Ride details data:', response.data);
-      console.log('Map URL in response:', response.data.map_url);
       
-      setDetailedRide(response.data);
+      // Process the data to ensure we have a map URL
+      const rideData = response.data;
+      
+      // If map_url isn't provided, create a simple one
+      if (!rideData.map_url && rideData.pickup_latitude && rideData.pickup_longitude 
+          && rideData.dropoff_latitude && rideData.dropoff_longitude) {
+        console.log('Map URL not found in API response, creating a simple one');
+        rideData.map_url = `https://www.openstreetmap.org/directions?from=${rideData.pickup_latitude},${rideData.pickup_longitude}&to=${rideData.dropoff_latitude},${rideData.dropoff_longitude}`;
+      }
+      
+      console.log('Map URL (final):', rideData.map_url);
+      
+      setDetailedRide(rideData);
       setLoadingDetails(false);
     } catch (error) {
       console.error('Error fetching ride details:', error);
@@ -357,15 +369,36 @@ function AcceptedRides() {
                     <Typography variant="caption" component="div">
                       Debug info (temporary):
                     </Typography>
-                    <pre style={{ whiteSpace: 'pre-wrap', overflow: 'auto', maxHeight: '100px' }}>
+                    <pre style={{ whiteSpace: 'pre-wrap', overflow: 'auto', maxHeight: '150px' }}>
                       {JSON.stringify({
                         id: detailedRide.id,
                         hasMapUrl: !!detailedRide.map_url,
                         mapUrl: detailedRide.map_url,
-                        pickupLat: detailedRide.pickup_latitude,
-                        pickupLng: detailedRide.pickup_longitude,
-                        dropoffLat: detailedRide.dropoff_latitude,
-                        dropoffLng: detailedRide.dropoff_longitude,
+                        pickup: {
+                          lat: detailedRide.pickup_latitude,
+                          lng: detailedRide.pickup_longitude,
+                          address: detailedRide.pickup_location
+                        },
+                        dropoff: {
+                          lat: detailedRide.dropoff_latitude,
+                          lng: detailedRide.dropoff_longitude,
+                          address: detailedRide.dropoff_location
+                        },
+                        ride: detailedRide.ride ? {
+                          id: detailedRide.ride.id,
+                          start: {
+                            lat: detailedRide.ride.start_latitude,
+                            lng: detailedRide.ride.start_longitude,
+                            address: detailedRide.ride.start_location
+                          },
+                          end: {
+                            lat: detailedRide.ride.end_latitude,
+                            lng: detailedRide.ride.end_longitude,
+                            address: detailedRide.ride.end_location
+                          }
+                        } : null,
+                        hasOptimalPickup: !!detailedRide.optimal_pickup_point,
+                        hasNearestDropoff: !!detailedRide.nearest_dropoff_point,
                       }, null, 2)}
                     </pre>
                   </Box>
@@ -378,42 +411,76 @@ function AcceptedRides() {
                             alignItems: 'center', backgroundColor: '#f5f5f5' }}
                     >
                       {console.log('Rendering map section, map_url:', detailedRide.map_url)}
-                      {detailedRide.map_url ? (
-                        <Box sx={{ textAlign: 'center', p: 2 }}>
-                          <Button
-                            variant="contained"
-                            color="primary"
-                            startIcon={<MapIcon />}
-                            href={detailedRide.map_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            sx={{ mb: 2 }}
-                          >
-                            Open Route Map
-                          </Button>
-                          <Typography variant="caption" display="block">
-                            View the complete route with pickup and drop-off locations
+                      
+                      <Box sx={{ textAlign: 'center', p: 2, width: '100%' }}>
+                        <Typography variant="h6" gutterBottom>
+                          Trip Route
+                        </Typography>
+                        
+                        {detailedRide.map_url ? (
+                          <>
+                            <Button
+                              variant="contained"
+                              color="primary"
+                              startIcon={<MapIcon />}
+                              href={detailedRide.map_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              sx={{ mb: 2 }}
+                              size="large"
+                            >
+                              Open Complete Route Map
+                            </Button>
+                            <Typography variant="caption" display="block" sx={{ mb: 2 }}>
+                              View the complete route with pickup and drop-off locations
+                            </Typography>
+                            
+                            {/* Direct Point-to-Point Route Option */}
+                            <Button
+                              variant="outlined"
+                              color="secondary"
+                              startIcon={<MapIcon />}
+                              href={`https://www.openstreetmap.org/directions?from=${detailedRide.pickup_latitude},${detailedRide.pickup_longitude}&to=${detailedRide.dropoff_latitude},${detailedRide.dropoff_longitude}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              sx={{ mt: 1 }}
+                              disabled={!detailedRide.pickup_latitude || !detailedRide.dropoff_latitude}
+                            >
+                              Simple Direct Route
+                            </Button>
+                          </>
+                        ) : (
+                          <>
+                            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                              No map data available for the complete trip route
+                            </Typography>
+                            <Button
+                              variant="contained"
+                              color="primary"
+                              startIcon={<MapIcon />}
+                              href={`https://www.openstreetmap.org/directions?from=${detailedRide.pickup_latitude},${detailedRide.pickup_longitude}&to=${detailedRide.dropoff_latitude},${detailedRide.dropoff_longitude}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              disabled={!detailedRide.pickup_latitude || !detailedRide.dropoff_latitude}
+                            >
+                              View Direct Route
+                            </Button>
+                          </>
+                        )}
+
+                        {/* Display coordinate info to help troubleshoot */}
+                        <Box sx={{ mt: 3, p: 2, bgcolor: 'rgba(0,0,0,0.05)', borderRadius: 1, textAlign: 'left' }}>
+                          <Typography variant="caption" component="div" sx={{ mb: 1 }}>
+                            Route coordinates:
+                          </Typography>
+                          <Typography variant="caption" component="div">
+                            Pickup: {detailedRide.pickup_latitude}, {detailedRide.pickup_longitude}
+                          </Typography>
+                          <Typography variant="caption" component="div">
+                            Dropoff: {detailedRide.dropoff_latitude}, {detailedRide.dropoff_longitude}
                           </Typography>
                         </Box>
-                      ) : (
-                        <Box sx={{ textAlign: 'center', p: 2 }}>
-                          <Typography variant="body2" color="text.secondary">
-                            No map data available for this trip
-                          </Typography>
-                          <Button
-                            variant="outlined"
-                            color="primary"
-                            startIcon={<MapIcon />}
-                            href={`https://www.openstreetmap.org/directions?from=${detailedRide.pickup_latitude},${detailedRide.pickup_longitude}&to=${detailedRide.dropoff_latitude},${detailedRide.dropoff_longitude}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            sx={{ mt: 2 }}
-                            disabled={!detailedRide.pickup_latitude || !detailedRide.dropoff_latitude}
-                          >
-                            Create Simple Route
-                          </Button>
-                        </Box>
-                      )}
+                      </Box>
                     </CardMedia>
                   </Card>
                   
