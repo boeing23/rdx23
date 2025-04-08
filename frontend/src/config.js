@@ -1,5 +1,5 @@
 // API Configuration
-export const API_BASE_URL = 'https://rdx23-production.up.railway.app';
+export const API_BASE_URL = 'https://compassionate-nurturing-production.up.railway.app';
 
 // For local development, uncomment this line instead:
 // export const API_BASE_URL = 'http://localhost:8000';

@@ -185,7 +185,8 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:3006",  # Additional React port
     "http://127.0.0.1:3006",
     "https://ridex-frontend.up.railway.app",
-    "https://rdx23-production-frontend.up.railway.app"
+    "https://rdx23-production-frontend.up.railway.app",
+    "https://compassionate-nurturing-production.up.railway.app"
 ]
 
 CORS_ALLOW_METHODS = [
