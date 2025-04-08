@@ -156,6 +156,10 @@ const DriverAcceptedRides = () => {
             has_rider: !!ride.rider
           });
           
+          // Get driver information using our helper function
+          const driverInfo = getDriverInfo(ride);
+          console.log('Driver info extracted:', driverInfo);
+          
           // Return a new object with all existing properties plus any needed mapping
           return {
             ...ride,
@@ -165,7 +169,9 @@ const DriverAcceptedRides = () => {
             dropoff_latitude: ride.dropoff_latitude || (ride.nearest_dropoff_point ? ride.nearest_dropoff_point.latitude : null),
             dropoff_longitude: ride.dropoff_longitude || (ride.nearest_dropoff_point ? ride.nearest_dropoff_point.longitude : null),
             // Ensure driver data is properly mapped
-            driver_id: ride.driver_id || (ride.ride && ride.ride.driver) || null
+            driver_id: ride.driver_id || (ride.ride && ride.ride.driver) || null,
+            // Add the extracted driver info
+            driver: driverInfo || ride.driver
           };
         });
         
@@ -299,8 +305,39 @@ const DriverAcceptedRides = () => {
   };
 
   const getFullName = (user) => {
-    if (!user) return 'Unknown User';
-    return `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.email || 'Unknown User';
+    if (!user) return 'Unknown';
+    
+    // Check various places the name might be stored
+    if (user.full_name) return user.full_name;
+    if (user.firstName && user.lastName) return `${user.firstName} ${user.lastName}`;
+    if (user.name) return user.name;
+    if (user.user && user.user.full_name) return user.user.full_name;
+    
+    // If we have id but no name, return a placeholder with the ID
+    if (user.id) return `Driver #${user.id}`;
+    
+    return 'Unknown';
+  };
+
+  // Helper function to extract driver info from ride object
+  const getDriverInfo = (ride) => {
+    // Try to get driver from different places in the ride object
+    let driver = null;
+    
+    // Check direct driver object
+    if (ride.driver && (ride.driver.id || ride.driver.full_name)) {
+      driver = ride.driver;
+    } 
+    // Check if driver is nested in ride.ride
+    else if (ride.ride && ride.ride.driver) {
+      driver = ride.ride.driver;
+    }
+    // Check if we only have driver_id and need to create a minimal driver object
+    else if (ride.driver_id) {
+      driver = { id: ride.driver_id };
+    }
+    
+    return driver;
   };
 
   const getPhoneNumber = (user) => {
