@@ -166,6 +166,40 @@ function AcceptedRides() {
     fetchData();
   }, [location.search, navigate, completePastRides, fetchAcceptedRides]);
 
+  useEffect(() => {
+    if (detailedRide) {
+      console.log('=== MAP URL DEBUGGING ===');
+      console.log('Detailed ride loaded:', detailedRide.id);
+      console.log('Map URL present:', !!detailedRide.map_url);
+      if (detailedRide.map_url) {
+        console.log('Map URL value:', detailedRide.map_url);
+        
+        // Test URL validity
+        try {
+          const url = new URL(detailedRide.map_url);
+          console.log('Map URL is valid. Protocol:', url.protocol, 'Host:', url.host);
+        } catch (error) {
+          console.error('Map URL is invalid:', error.message);
+        }
+      } else {
+        console.log('Map URL is missing, checking coordinates...');
+        
+        // Check if coordinates are available for a fallback URL
+        const hasPickupCoords = !!(detailedRide.pickup_latitude && detailedRide.pickup_longitude);
+        const hasDropoffCoords = !!(detailedRide.dropoff_latitude && detailedRide.dropoff_longitude);
+        
+        console.log('Has pickup coordinates:', hasPickupCoords);
+        console.log('Has dropoff coordinates:', hasDropoffCoords);
+        
+        if (hasPickupCoords && hasDropoffCoords) {
+          const fallbackUrl = `https://www.openstreetmap.org/directions?from=${detailedRide.pickup_latitude},${detailedRide.pickup_longitude}&to=${detailedRide.dropoff_latitude},${detailedRide.dropoff_longitude}`;
+          console.log('Fallback URL that could be used:', fallbackUrl);
+        }
+      }
+      console.log('=== END MAP URL DEBUGGING ===');
+    }
+  }, [detailedRide]);
+
   const handleRideAction = useCallback(async (id, action) => {
     try {
       const cleanToken = getAuthToken();
@@ -432,6 +466,12 @@ function AcceptedRides() {
                               rel="noopener noreferrer"
                               sx={{ mb: 2 }}
                               size="large"
+                              onClick={(e) => {
+                                console.log('Map button clicked with URL:', detailedRide.map_url);
+                                // Optional: prevent default and open manually to see if there's an issue with href
+                                // e.preventDefault();
+                                // window.open(detailedRide.map_url, '_blank', 'noopener,noreferrer');
+                              }}
                             >
                               Open Complete Route Map
                             </Button>
@@ -449,6 +489,14 @@ function AcceptedRides() {
                               rel="noopener noreferrer"
                               sx={{ mt: 1 }}
                               disabled={!detailedRide.pickup_latitude || !detailedRide.dropoff_latitude}
+                              onClick={(e) => {
+                                const directUrl = `https://www.openstreetmap.org/directions?from=${detailedRide.pickup_latitude},${detailedRide.pickup_longitude}&to=${detailedRide.dropoff_latitude},${detailedRide.dropoff_longitude}`;
+                                console.log('Simple route button clicked with URL:', directUrl);
+                                console.log('Coordinates used:', {
+                                  pickup: [detailedRide.pickup_latitude, detailedRide.pickup_longitude],
+                                  dropoff: [detailedRide.dropoff_latitude, detailedRide.dropoff_longitude]
+                                });
+                              }}
                             >
                               Simple Direct Route
                             </Button>
@@ -466,6 +514,14 @@ function AcceptedRides() {
                               target="_blank"
                               rel="noopener noreferrer"
                               disabled={!detailedRide.pickup_latitude || !detailedRide.dropoff_latitude}
+                              onClick={(e) => {
+                                const directUrl = `https://www.openstreetmap.org/directions?from=${detailedRide.pickup_latitude},${detailedRide.pickup_longitude}&to=${detailedRide.dropoff_latitude},${detailedRide.dropoff_longitude}`;
+                                console.log('Fallback route button clicked with URL:', directUrl);
+                                console.log('Coordinates available:', {
+                                  pickup: [detailedRide.pickup_latitude, detailedRide.pickup_longitude],
+                                  dropoff: [detailedRide.dropoff_latitude, detailedRide.dropoff_longitude]
+                                });
+                              }}
                             >
                               View Direct Route
                             </Button>
