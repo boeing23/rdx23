@@ -157,26 +157,27 @@ const RequestRide = () => {
         // If match details exist in the response
         if (data.match_details) {
           console.log('Found match details:', data.match_details);
-          console.log('Found ride request:', data.ride_request);
           
-          // Add proper structure to matchDetails
+          // No ride_request in the response, but match_details exists
+          // Add proper structure to matchDetails with ride_id from the response
           const structuredMatchDetails = {
             ...data.match_details,
-            ride_request: data.ride_request,
+            // Store the ride ID explicitly 
+            ride_id: data.match_details.ride_id,
             // Add proper structure for vehicle_details
             vehicle_details: {
-              year: data.match_details.vehicle_year || '',
-              make: data.match_details.vehicle_make || '',
-              model: data.match_details.vehicle_model || '',
-              color: data.match_details.vehicle_color || '',
-              license_plate: data.match_details.license_plate || '',
-              max_passengers: data.match_details.max_passengers || 1
+              year: data.match_details.vehicle?.year || '',
+              make: data.match_details.vehicle?.make || '',
+              model: data.match_details.vehicle?.model || '',
+              color: data.match_details.vehicle?.color || '',
+              license_plate: data.match_details.vehicle?.license_plate || '',
+              max_passengers: data.match_details.vehicle?.max_passengers || 1
             },
             // Set driver contact info if missing
-            driver_email: data.match_details.driver_email || data.ride_request.ride_details?.driver?.email || '',
-            driver_phone: data.match_details.driver_phone || data.ride_request.ride_details?.driver?.phone_number || '',
+            driver_email: data.match_details.driver?.email || '',
+            driver_phone: data.match_details.driver?.phone_number || '',
             // Add ride_details for consistency
-            ride_details: data.ride_request.ride_details || {
+            ride_details: {
               start_location: data.match_details.pickup || '',
               end_location: data.match_details.dropoff || '',
               departure_time: data.match_details.departure_time || new Date().toISOString(),
@@ -205,10 +206,7 @@ const RequestRide = () => {
           setSeatsNeeded(1);
           
           console.log('Set showMatchDialog to:', true);
-          console.log('Updated matchDetails with ride request:', {
-            ...data.match_details,
-            ride_request: data.ride_request
-          });
+          console.log('Updated matchDetails:', structuredMatchDetails);
         } else {
           console.log('No match details found in response');
           setError('No matching rides found. Please try different locations or times.');
@@ -281,20 +279,21 @@ const RequestRide = () => {
       
       console.log('Current match data:', currentMatch);
       
-      if (!currentMatch || !currentMatch.ride_request) {
-        console.error('No ride request found in current match:', currentMatch);
-        setError('No ride request found. Please try again.');
+      if (!currentMatch || !currentMatch.ride_id) {
+        console.error('No ride ID found in current match:', currentMatch);
+        setError('No ride ID found. Please try again.');
         return;
       }
 
-      console.log('Accepting match with ride request ID:', currentMatch.ride_request.id);
+      console.log('Accepting match with ride ID:', currentMatch.ride_id);
       
-      const response = await fetch(`${API_BASE_URL}/api/rides/requests/${currentMatch.ride_request.id}/accept_match/`, {
+      const response = await fetch(`${API_BASE_URL}/api/rides/requests/accept/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
-        }
+        },
+        body: JSON.stringify({ ride_id: currentMatch.ride_id })
       });
 
       const data = await response.json();
@@ -333,16 +332,18 @@ const RequestRide = () => {
         return;
       }
       
-      if (!currentMatch || !currentMatch.ride_request) {
-        setError('No match found. Please try again.');
+      if (!currentMatch || !currentMatch.ride_id) {
+        setError('No ride ID found. Please try again.');
         return;
       }
 
-      const response = await fetch(`${API_BASE_URL}/api/rides/requests/${currentMatch.ride_request.id}/reject_match/`, {
+      const response = await fetch(`${API_BASE_URL}/api/rides/requests/reject/`, {
         method: 'POST',
         headers: {
+          'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
-        }
+        },
+        body: JSON.stringify({ ride_id: currentMatch.ride_id })
       });
 
       if (response.ok) {
