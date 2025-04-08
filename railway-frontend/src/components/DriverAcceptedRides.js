@@ -134,11 +134,37 @@ const DriverAcceptedRides = () => {
           return;
         }
         
+        // Log details of the first ride to see its structure
+        if (data.length > 0) {
+          console.log('Sample accepted ride data:', data[0]);
+          console.log('Available fields:', Object.keys(data[0]));
+          console.log('Coordinate fields present:', {
+            pickup_latitude: 'pickup_latitude' in data[0],
+            pickup_longitude: 'pickup_longitude' in data[0],
+            dropoff_latitude: 'dropoff_latitude' in data[0],
+            dropoff_longitude: 'dropoff_longitude' in data[0]
+          });
+        }
+        
+        // Process rides to ensure coordinate fields are properly mapped
+        const processedRides = data.map(ride => {
+          // Return a new object with all existing properties plus any needed mapping
+          return {
+            ...ride,
+            // Make sure coordinate fields are properly handled
+            pickup_latitude: ride.pickup_latitude || (ride.optimal_pickup_point ? ride.optimal_pickup_point.latitude : null),
+            pickup_longitude: ride.pickup_longitude || (ride.optimal_pickup_point ? ride.optimal_pickup_point.longitude : null),
+            dropoff_latitude: ride.dropoff_latitude || (ride.nearest_dropoff_point ? ride.nearest_dropoff_point.latitude : null),
+            dropoff_longitude: ride.dropoff_longitude || (ride.nearest_dropoff_point ? ride.nearest_dropoff_point.longitude : null)
+          };
+        });
+        
         // Sort rides by departure time (most recent first)
-        const sortedRides = data.sort((a, b) => 
+        const sortedRides = processedRides.sort((a, b) => 
           new Date(b.departure_time) - new Date(a.departure_time)
         );
         
+        console.log(`Processed ${sortedRides.length} rides with coordinates`);
         setAcceptedRides(sortedRides);
         setError(''); // Clear any previous errors
         setLoading(false);
@@ -175,6 +201,18 @@ const DriverAcceptedRides = () => {
   };
 
   const handleRideClick = (ride) => {
+    console.log("Selected ride data:", {
+      id: ride.id,
+      status: ride.status,
+      pickup_location: ride.pickup_location,
+      dropoff_location: ride.dropoff_location,
+      pickup_latitude: ride.pickup_latitude,
+      pickup_longitude: ride.pickup_longitude,
+      dropoff_latitude: ride.dropoff_latitude,
+      dropoff_longitude: ride.dropoff_longitude,
+      rider: ride.rider,
+      all_keys: Object.keys(ride)
+    });
     setSelectedRide(ride);
   };
 
@@ -513,27 +551,47 @@ const DriverAcceptedRides = () => {
                       </Typography>
                       <Box sx={{ height: '250px', width: '100%', border: '1px solid #ccc', borderRadius: '4px', overflow: 'hidden' }}>
                         {(() => {
-                          // Extract coordinates from addresses or use fallback coordinates
-                          // For demonstration, using Virginia Tech coordinates as fallback
-                          const pickupCoords = [37.2284, -80.4234]; // Fallback to Virginia Tech
-                          const dropoffCoords = [37.2384, -80.4134]; // Slightly offset for demo
+                          // Log available coordinates for debugging
+                          console.log("Ride coordinates:", {
+                            pickup_lat: selectedRide.pickup_latitude,
+                            pickup_lng: selectedRide.pickup_longitude,
+                            dropoff_lat: selectedRide.dropoff_latitude,
+                            dropoff_lng: selectedRide.dropoff_longitude
+                          });
                           
-                          try {
-                            // Try to extract coordinates from pickup_location if it contains lat,lng format
-                            const pickupMatch = selectedRide.pickup_location.match(/\(?\s*(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)\s*\)?/);
-                            if (pickupMatch) {
-                              pickupCoords[0] = parseFloat(pickupMatch[1]);
-                              pickupCoords[1] = parseFloat(pickupMatch[2]);
+                          // Use direct coordinate fields if available, otherwise fallback to extraction or defaults
+                          const pickupCoords = [
+                            selectedRide.pickup_latitude || 37.2284, 
+                            selectedRide.pickup_longitude || -80.4234
+                          ];
+                          const dropoffCoords = [
+                            selectedRide.dropoff_latitude || 37.2384, 
+                            selectedRide.dropoff_longitude || -80.4134
+                          ];
+                          
+                          // If direct coordinates aren't available, try to extract from location text
+                          if (!selectedRide.pickup_latitude || !selectedRide.pickup_longitude) {
+                            try {
+                              const pickupMatch = selectedRide.pickup_location.match(/\(?\s*(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)\s*\)?/);
+                              if (pickupMatch) {
+                                pickupCoords[0] = parseFloat(pickupMatch[1]);
+                                pickupCoords[1] = parseFloat(pickupMatch[2]);
+                              }
+                            } catch (e) {
+                              console.error("Error parsing pickup coordinates:", e);
                             }
-                            
-                            // Try to extract coordinates from dropoff_location if it contains lat,lng format
-                            const dropoffMatch = selectedRide.dropoff_location.match(/\(?\s*(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)\s*\)?/);
-                            if (dropoffMatch) {
-                              dropoffCoords[0] = parseFloat(dropoffMatch[1]);
-                              dropoffCoords[1] = parseFloat(dropoffMatch[2]);
+                          }
+                          
+                          if (!selectedRide.dropoff_latitude || !selectedRide.dropoff_longitude) {
+                            try {
+                              const dropoffMatch = selectedRide.dropoff_location.match(/\(?\s*(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)\s*\)?/);
+                              if (dropoffMatch) {
+                                dropoffCoords[0] = parseFloat(dropoffMatch[1]);
+                                dropoffCoords[1] = parseFloat(dropoffMatch[2]);
+                              }
+                            } catch (e) {
+                              console.error("Error parsing dropoff coordinates:", e);
                             }
-                          } catch (e) {
-                            console.error("Error parsing coordinates:", e);
                           }
                           
                           // Calculate center position
