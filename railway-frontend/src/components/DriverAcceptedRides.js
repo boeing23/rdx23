@@ -28,6 +28,7 @@ import { format } from 'date-fns';
 import { MapContainer, TileLayer, Marker, Popup, Polyline } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
+import axios from 'axios';
 
 // Fix Leaflet marker icon issues
 delete L.Icon.Default.prototype._getIconUrl;
@@ -45,6 +46,7 @@ const DriverAcceptedRides = () => {
   const [openCancelDialog, setOpenCancelDialog] = useState(false);
   const [openCompleteDialog, setOpenCompleteDialog] = useState(false);
   const [isRetrying, setIsRetrying] = useState(false);
+  const [driverDetails, setDriverDetails] = useState(null);
 
   const fetchAcceptedRides = async () => {
     try {
@@ -169,7 +171,7 @@ const DriverAcceptedRides = () => {
             dropoff_latitude: ride.dropoff_latitude || (ride.nearest_dropoff_point ? ride.nearest_dropoff_point.latitude : null),
             dropoff_longitude: ride.dropoff_longitude || (ride.nearest_dropoff_point ? ride.nearest_dropoff_point.longitude : null),
             // Ensure driver data is properly mapped
-            driver_id: ride.driver_id || (ride.ride && ride.ride.driver) || null,
+            driver_id: driverInfo?.id || ride.driver_id || (ride.ride && ride.ride.driver) || null,
             // Add the extracted driver info
             driver: driverInfo || ride.driver
           };
@@ -182,6 +184,45 @@ const DriverAcceptedRides = () => {
         
         console.log(`Processed ${sortedRides.length} rides with coordinates`);
         setAcceptedRides(sortedRides);
+        
+        // After setting the rides, fetch driver details if needed
+        if (sortedRides.length > 0) {
+          // Get unique driver IDs
+          const driverIds = [...new Set(
+            sortedRides
+              .filter(ride => ride.driver_id && !ride.driver?.full_name)
+              .map(ride => ride.driver_id)
+          )];
+          
+          if (driverIds.length > 0) {
+            console.log('Fetching details for drivers:', driverIds);
+            
+            // Fetch details for all drivers in parallel
+            const driversDetailsPromises = driverIds.map(fetchDriverDetails);
+            const driversDetails = await Promise.all(driversDetailsPromises);
+            
+            // Update rides with driver details
+            const updatedRides = sortedRides.map(ride => {
+              if (!ride.driver_id) return ride;
+              
+              const driverDetail = driversDetails.find(d => d && d.id === ride.driver_id);
+              if (!driverDetail) return ride;
+              
+              return {
+                ...ride,
+                driver: {
+                  ...ride.driver,
+                  ...driverDetail,
+                  full_name: driverDetail.full_name || 
+                             `${driverDetail.first_name || ''} ${driverDetail.last_name || ''}`.trim()
+                }
+              };
+            });
+            
+            setAcceptedRides(updatedRides);
+          }
+        }
+        
         setError(''); // Clear any previous errors
         setLoading(false);
       } finally {
@@ -216,22 +257,48 @@ const DriverAcceptedRides = () => {
     fetchAcceptedRides();
   };
 
-  const handleRideClick = (ride) => {
+  const handleRideClick = async (ride) => {
     console.log("Selected ride data:", {
       id: ride.id,
       status: ride.status,
       pickup_location: ride.pickup_location,
       dropoff_location: ride.dropoff_location,
-      pickup_latitude: ride.pickup_latitude,
-      pickup_longitude: ride.pickup_longitude,
-      dropoff_latitude: ride.dropoff_latitude,
-      dropoff_longitude: ride.dropoff_longitude,
       rider: ride.rider,
-      ride_object: ride.ride,
-      ride_driver_id: ride.ride?.driver,
-      direct_driver_id: ride.driver_id,
-      all_keys: Object.keys(ride)
+      driver_id: ride.driver_id,
+      driver: ride.driver
     });
+    
+    // If the ride doesn't have complete driver info but has a driver ID, fetch it
+    if (ride.driver_id && (!ride.driver || !ride.driver.full_name)) {
+      try {
+        console.log(`Fetching complete driver details for ID: ${ride.driver_id}`);
+        const driverDetail = await fetchDriverDetails(ride.driver_id);
+        
+        if (driverDetail) {
+          // Update this specific ride with driver details
+          const updatedRide = {
+            ...ride,
+            driver: {
+              ...ride.driver,
+              ...driverDetail
+            }
+          };
+          
+          // Update in the list
+          setAcceptedRides(prevRides => 
+            prevRides.map(r => r.id === ride.id ? updatedRide : r)
+          );
+          
+          // Select the updated ride
+          setSelectedRide(updatedRide);
+          return;
+        }
+      } catch (err) {
+        console.error('Error fetching driver details:', err);
+      }
+    }
+    
+    // If no driver details fetching was needed or it failed, just select the ride
     setSelectedRide(ride);
   };
 
@@ -310,11 +377,13 @@ const DriverAcceptedRides = () => {
     // Check various places the name might be stored
     if (user.full_name) return user.full_name;
     if (user.firstName && user.lastName) return `${user.firstName} ${user.lastName}`;
+    if (user.first_name && user.last_name) return `${user.first_name} ${user.last_name}`;
     if (user.name) return user.name;
     if (user.user && user.user.full_name) return user.user.full_name;
+    if (user.username) return user.username;
     
     // If we have id but no name, return a placeholder with the ID
-    if (user.id) return `Driver #${user.id}`;
+    if (user.id) return `User #${user.id}`;
     
     return 'Unknown';
   };
@@ -322,22 +391,31 @@ const DriverAcceptedRides = () => {
   // Helper function to extract driver info from ride object
   const getDriverInfo = (ride) => {
     // Try to get driver from different places in the ride object
-    let driver = null;
+    let driverId = null;
     
     // Check direct driver object
-    if (ride.driver && (ride.driver.id || ride.driver.full_name)) {
-      driver = ride.driver;
+    if (ride.driver && typeof ride.driver === 'object' && ride.driver.id) {
+      return ride.driver;
     } 
+    // Check direct driver ID
+    else if (ride.driver && typeof ride.driver === 'number') {
+      driverId = ride.driver;
+    }
     // Check if driver is nested in ride.ride
     else if (ride.ride && ride.ride.driver) {
-      driver = ride.ride.driver;
+      driverId = ride.ride.driver;
     }
-    // Check if we only have driver_id and need to create a minimal driver object
+    // Check if we only have driver_id
     else if (ride.driver_id) {
-      driver = { id: ride.driver_id };
+      driverId = ride.driver_id;
     }
     
-    return driver;
+    // If we only have an ID, return a minimal object
+    if (driverId) {
+      return { id: driverId };
+    }
+    
+    return null;
   };
 
   const getPhoneNumber = (user) => {
@@ -368,6 +446,34 @@ const DriverAcceptedRides = () => {
 
   const handleCloseCompleteDialog = () => {
     setOpenCompleteDialog(false);
+  };
+
+  const fetchDriverDetails = async (driverId) => {
+    try {
+      if (!driverId) return null;
+      
+      const token = localStorage.getItem('token');
+      if (!token) return null;
+
+      // Clean the token
+      const cleanToken = token.trim().replace(/^["'](.*)["']$/, '$1');
+      
+      console.log(`Fetching details for driver ID: ${driverId}`);
+      const response = await axios.get(`${API_BASE_URL}/api/users/${driverId}/`, {
+        headers: {
+          'Authorization': `Bearer ${cleanToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.data) {
+        console.log('Driver details fetched:', response.data);
+        return response.data;
+      }
+    } catch (err) {
+      console.error(`Error fetching driver ${driverId} details:`, err);
+    }
+    return null;
   };
 
   if (loading) {
