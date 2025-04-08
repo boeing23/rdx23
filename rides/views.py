@@ -68,24 +68,60 @@ def reverse_geocode(coordinates):
 
 def format_coord(coord):
     """Format coordinate pair for OpenStreetMap URL (lat,lon format)"""
-    # OpenStreetMap expects coordinates in lat,lon format (reverse of our lon,lat format)
-    if coord and len(coord) >= 2:
-        return f"{coord[1]},{coord[0]}"  # Convert from (longitude, latitude) to (latitude, longitude)
-    return ""
+    try:
+        # OpenStreetMap expects coordinates in lat,lon format (reverse of our lon,lat format)
+        if coord and len(coord) >= 2:
+            result = f"{coord[1]},{coord[0]}"  # Convert from (longitude, latitude) to (latitude, longitude)
+            logger.info(f"Formatted coordinates: {coord} -> {result}")
+            return result
+        else:
+            logger.warning(f"Invalid coordinate format: {coord}")
+            return ""
+    except Exception as e:
+        logger.error(f"Error formatting coordinates {coord}: {str(e)}")
+        return ""
 
 
 def generate_osm_directions_url(start_coords, pickup_coords, dropoff_coords, end_coords=None):
     """Generate an OpenStreetMap directions URL showing the complete route"""
-    if not all([start_coords, pickup_coords, dropoff_coords]):
+    try:
+        logger.info(f"Generating directions URL with: start={start_coords}, pickup={pickup_coords}, dropoff={dropoff_coords}, end={end_coords}")
+        
+        if not all([start_coords, pickup_coords, dropoff_coords]):
+            logger.warning("Missing required coordinates for directions URL")
+            return None
+            
+        route_points = []
+        
+        # Format each coordinate and add to route points if valid
+        start_point = format_coord(start_coords)
+        if start_point:
+            route_points.append(start_point)
+            
+        pickup_point = format_coord(pickup_coords)
+        if pickup_point:
+            route_points.append(pickup_point)
+            
+        dropoff_point = format_coord(dropoff_coords)
+        if dropoff_point:
+            route_points.append(dropoff_point)
+        
+        # Add end coordinates if provided and different from dropoff
+        if end_coords and end_coords != start_coords:
+            end_point = format_coord(end_coords)
+            if end_point:
+                route_points.append(end_point)
+                
+        if len(route_points) < 2:
+            logger.warning(f"Not enough valid points for route: {route_points}")
+            return None
+            
+        url = f"https://www.openstreetmap.org/directions?route={';'.join(route_points)}"
+        logger.info(f"Generated URL: {url}")
+        return url
+    except Exception as e:
+        logger.error(f"Error generating OSM directions URL: {str(e)}")
         return None
-        
-    route_points = [format_coord(start_coords), format_coord(pickup_coords), format_coord(dropoff_coords)]
-    
-    # Add end coordinates if provided and different from dropoff
-    if end_coords and end_coords != start_coords:
-        route_points.append(format_coord(end_coords))
-        
-    return f"https://www.openstreetmap.org/directions?route={';'.join(route_points)}"
 
 
 # OpenRouteService API constants
@@ -1078,15 +1114,19 @@ class RideRequestViewSet(viewsets.ModelViewSet):
         
         # Add map URL if we have all the required coordinates
         try:
+            logger.info(f"Generating map URL for ride request {instance.id}")
+            
             # Get pickup and dropoff coordinates
             pickup_coords = None
             dropoff_coords = None
             
             if instance.pickup_latitude and instance.pickup_longitude:
                 pickup_coords = (instance.pickup_longitude, instance.pickup_latitude)
+                logger.info(f"Pickup coordinates: {pickup_coords}")
                 
             if instance.dropoff_latitude and instance.dropoff_longitude:
                 dropoff_coords = (instance.dropoff_longitude, instance.dropoff_latitude)
+                logger.info(f"Dropoff coordinates: {dropoff_coords}")
                 
             # Get driver's start and end coordinates if available
             driver_start_coords = None
@@ -1094,9 +1134,11 @@ class RideRequestViewSet(viewsets.ModelViewSet):
             
             if instance.ride and instance.ride.pickup_longitude and instance.ride.pickup_latitude:
                 driver_start_coords = (instance.ride.pickup_longitude, instance.ride.pickup_latitude)
+                logger.info(f"Driver start coordinates: {driver_start_coords}")
                 
             if instance.ride and instance.ride.dropoff_longitude and instance.ride.dropoff_latitude:
                 driver_end_coords = (instance.ride.dropoff_longitude, instance.ride.dropoff_latitude)
+                logger.info(f"Driver end coordinates: {driver_end_coords}")
             
             # Generate map URL
             if pickup_coords and dropoff_coords:
@@ -1109,7 +1151,11 @@ class RideRequestViewSet(viewsets.ModelViewSet):
                     dropoff_coords=dropoff_coords,
                     end_coords=end_coords
                 )
+                logger.info(f"Generated map URL: {map_url}")
                 data['map_url'] = map_url
+            else:
+                logger.warning(f"Cannot generate map URL: missing coordinates - pickup: {pickup_coords}, dropoff: {dropoff_coords}")
+                data['map_url'] = None
         except Exception as e:
             logger.error(f"Error generating map URL: {str(e)}")
             data['map_url'] = None

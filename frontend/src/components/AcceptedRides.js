@@ -108,6 +108,8 @@ function AcceptedRides() {
       setLoadingDetails(true);
       const cleanToken = getAuthToken();
       
+      console.log(`Fetching ride details for ID ${rideId}`);
+      
       const response = await axios.get(
         `${API_BASE_URL}/api/rides/requests/${rideId}/`,
         {
@@ -117,7 +119,10 @@ function AcceptedRides() {
         }
       );
       
-      console.log('Ride details response:', response.data);
+      console.log('Ride details raw response:', response);
+      console.log('Ride details data:', response.data);
+      console.log('Map URL in response:', response.data.map_url);
+      
       setDetailedRide(response.data);
       setLoadingDetails(false);
     } catch (error) {
@@ -348,7 +353,8 @@ function AcceptedRides() {
               ) : detailedRide ? (
                 <>
                   {/* Map Section */}
-                  {detailedRide.map_url && (
+                  {console.log('Rendering map section, map_url:', detailedRide.map_url)}
+                  {detailedRide.map_url ? (
                     <Card sx={{ mb: 3 }}>
                       <CardMedia
                         component="div"
@@ -373,6 +379,12 @@ function AcceptedRides() {
                         </Box>
                       </CardMedia>
                     </Card>
+                  ) : (
+                    <Box sx={{ textAlign: 'center', p: 2 }}>
+                      <Typography variant="body2" color="text.secondary">
+                        No map data available for this trip
+                      </Typography>
+                    </Box>
                   )}
                   
                   {/* Route Information */}
