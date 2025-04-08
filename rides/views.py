@@ -809,6 +809,9 @@ class RideViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         """Get rides for the current user"""
+        # Mark past rides as complete before returning the queryset
+        mark_past_rides_complete()
+        
         user = self.request.user
         logger.info(f"Getting rides for user: {user.username}, type: {getattr(user, 'user_type', 'unknown')}")
         
@@ -1014,6 +1017,24 @@ class RideViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
+    @action(detail=False, methods=['post'])
+    def complete_past_rides(self, request):
+        """Manually trigger marking past rides as complete"""
+        try:
+            mark_past_rides_complete()
+            count = Ride.objects.filter(status='COMPLETED').count()
+            return Response({
+                "status": "success",
+                "message": "Past rides have been marked as complete",
+                "completed_rides_count": count
+            })
+        except Exception as e:
+            logger.error(f"Error completing past rides: {str(e)}")
+            return Response(
+                {"error": f"Error completing past rides: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
 
 class RideRequestViewSet(viewsets.ModelViewSet):
     queryset = RideRequest.objects.all()
@@ -1021,6 +1042,9 @@ class RideRequestViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
+        # Mark past rides as complete
+        mark_past_rides_complete()
+        
         user = self.request.user
         # Return all ride requests for this user
         return RideRequest.objects.filter(rider=user)
@@ -1036,6 +1060,9 @@ class RideRequestViewSet(viewsets.ModelViewSet):
         Get all accepted ride requests for the current user (both as rider and driver)
         """
         try:
+            # Mark past rides as complete before retrieving the list
+            mark_past_rides_complete()
+            
             # Log detailed information for debugging
             logger.info(
                 f"Fetching accepted rides for user: {request.user.username} (ID: {request.user.id})")

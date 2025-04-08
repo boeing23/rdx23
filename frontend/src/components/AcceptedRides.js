@@ -87,10 +87,37 @@ const AcceptedRides = () => {
     }
   };
 
+  const completePastRides = async () => {
+    console.log('AcceptedRides - Checking for past rides to complete');
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        console.log('AcceptedRides - No token found, skipping past rides check');
+        return;
+      }
+
+      // Call the endpoint to complete past rides
+      const response = await fetch(`${API_BASE_URL}/api/rides/rides/complete_past_rides/`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      const data = await response.json();
+      console.log('AcceptedRides - Past rides completion check:', data);
+    } catch (err) {
+      console.error('AcceptedRides - Error completing past rides:', err);
+      // Don't show an error to the user, just log it
+    }
+  };
+
   // Fetch rides when component mounts and when location changes
   useEffect(() => {
     console.log('AcceptedRides - Fetching rides due to mount or location change');
-    fetchAcceptedRides();
+    // First complete past rides, then fetch the updated list
+    completePastRides().then(() => fetchAcceptedRides());
   }, [location.search]); // Only re-fetch when the URL query parameters change
 
   const handleChangeTab = (event, newValue) => {

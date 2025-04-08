@@ -75,9 +75,41 @@ const RideList = () => {
     }
   };
 
+  const completePastRides = async () => {
+    console.log('RideList - Checking for past rides to complete');
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        console.log('RideList - No token found, skipping past rides check');
+        return;
+      }
+
+      // Clean token format
+      const cleanToken = token.trim().replace(/^["'](.*)["']$/, '$1');
+
+      // Call the endpoint to complete past rides
+      const response = await axios.post(
+        `${API_BASE_URL}/api/rides/rides/complete_past_rides/`, 
+        {}, 
+        {
+          headers: {
+            'Authorization': `Bearer ${cleanToken}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+      
+      console.log('RideList - Past rides completion check:', response.data);
+    } catch (err) {
+      console.error('RideList - Error completing past rides:', err);
+      // Don't show an error to the user, just log it
+    }
+  };
+
   useEffect(() => {
     console.log('RideList - useEffect triggered');
-    fetchRides();
+    // First complete past rides, then fetch the updated list
+    completePastRides().then(() => fetchRides());
   }, [navigate]); // Add navigate to dependencies
 
   const handleRequestRide = async (rideId) => {

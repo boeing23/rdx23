@@ -42,8 +42,42 @@ function NotificationList() {
     }
   };
 
+  const completePastRides = async () => {
+    console.log('NotificationList - Checking for past rides to complete');
+    try {
+      const token = getToken();
+      if (!token) {
+        console.log('NotificationList - No token found, skipping past rides check');
+        return;
+      }
+
+      // Clean token format
+      const cleanToken = token.trim().replace(/^["'](.*)["']$/, '$1');
+
+      // Call the endpoint to complete past rides
+      const response = await fetch(`${API_BASE_URL}/api/rides/rides/complete_past_rides/`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${cleanToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log('NotificationList - Past rides completion check:', data);
+      }
+    } catch (err) {
+      console.error('NotificationList - Error completing past rides:', err);
+      // Don't show an error to the user, just log it
+    }
+  };
+
   const fetchNotifications = async () => {
     try {
+      // First check for past rides
+      await completePastRides();
+      
       const token = getToken();
       if (!token) {
         console.error('No authentication token found');
