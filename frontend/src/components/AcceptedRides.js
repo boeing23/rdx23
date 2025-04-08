@@ -15,7 +15,17 @@ import {
   Tab,
   Tabs
 } from '@mui/material';
-import { Schedule, DirectionsCar, LocationOn, Person, Phone, Email, Event } from '@mui/icons-material';
+import { 
+  Schedule, 
+  DirectionsCar, 
+  LocationOn, 
+  Person, 
+  Phone, 
+  Email, 
+  Event,
+  MyLocation,
+  PinDrop
+} from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { API_BASE_URL } from '../config';
 
@@ -72,6 +82,33 @@ const AcceptedRides = () => {
 
       const data = await response.json();
       console.log('Fetched accepted rides:', data);
+      
+      // Log field names for debugging
+      if (data && data.length > 0) {
+        console.log('Sample ride fields:', Object.keys(data[0]));
+        
+        // Check for optimal pickup point
+        console.log('Has optimal_pickup_point?', Boolean(data[0].optimal_pickup_point));
+        if (data[0].optimal_pickup_point) {
+          console.log('Optimal pickup value:', data[0].optimal_pickup_point);
+          console.log('Type of optimal pickup:', typeof data[0].optimal_pickup_point);
+        }
+        
+        // Check for nearest dropoff point
+        console.log('Has nearest_dropoff_point?', Boolean(data[0].nearest_dropoff_point));
+        if (data[0].nearest_dropoff_point) {
+          console.log('Nearest dropoff value:', data[0].nearest_dropoff_point);
+          console.log('Type of nearest dropoff:', typeof data[0].nearest_dropoff_point);
+        }
+        
+        // Check for driver details
+        console.log('Has driver_details?', Boolean(data[0].driver_details));
+        if (data[0].driver_details) {
+          console.log('Driver details value:', data[0].driver_details);
+        }
+        
+        console.log('Full accepted rides data:', data);
+      }
       
       // Sort rides by departure time (most recent first)
       const sortedRides = data.sort((a, b) => 
@@ -213,20 +250,6 @@ const AcceptedRides = () => {
 
   const renderRideCard = (ride) => {
     console.log('Processing ride data in renderRideCard:', ride);
-    console.log('Has optimal_pickup_point?', Boolean(ride.optimal_pickup_point));
-    if (ride.optimal_pickup_point) {
-      console.log('Optimal pickup value:', ride.optimal_pickup_point);
-      console.log('Type of optimal pickup:', typeof ride.optimal_pickup_point);
-    }
-    console.log('Has nearest_dropoff_point?', Boolean(ride.nearest_dropoff_point));
-    if (ride.nearest_dropoff_point) {
-      console.log('Nearest dropoff value:', ride.nearest_dropoff_point);
-      console.log('Type of nearest dropoff:', typeof ride.nearest_dropoff_point);
-    }
-    console.log('Has driver_details?', Boolean(ride.driver_details));
-    if (ride.driver_details) {
-      console.log('Driver details value:', ride.driver_details);
-    }
     
     // Try to get driver details from multiple potential sources
     const driverInfo = ride.driver_details || (ride.ride_details && ride.ride_details.driver) || {};
@@ -236,11 +259,7 @@ const AcceptedRides = () => {
     const rideData = ride.ride_details || ride.ride || {};
     
     const isDriver = userType === 'DRIVER';
-    console.log('Rendering ride with driver info:', driverInfo);
     
-    // Force development mode for debugging
-    const isDevelopment = true; // this would normally be process.env.NODE_ENV === 'development'
-
     // Helper function to get full name
     const getFullName = (user) => {
       if (!user) return 'N/A';
@@ -265,28 +284,15 @@ const AcceptedRides = () => {
     // Get formatted date/time
     const dateTime = formatDateTime(rideData.departure_time || ride.departure_time);
     
-    // Extract and debug locations
-    console.log('Building pickup location from:', {
-      optimal_pickup_info: ride.optimal_pickup_info,
-      optimal_pickup_point: ride.optimal_pickup_point,
-      ride_start: rideData.start_location,
-      pickup: ride.pickup_location
-    });
-    
-    console.log('Building dropoff location from:', {
-      nearest_dropoff_info: ride.nearest_dropoff_info,
-      nearest_dropoff_point: ride.nearest_dropoff_point,
-      ride_end: rideData.end_location,
-      dropoff: ride.dropoff_location
-    });
-    
-    // Determine locations - prioritize optimal pickup/dropoff points when available
-    const startLocation = ride.optimal_pickup_info?.address || 
-                         (ride.optimal_pickup_point && typeof ride.optimal_pickup_point === 'object' ? 
-                          ride.optimal_pickup_point.address : null) ||
-                         rideData.start_location || 
-                         ride.pickup_location || 
-                         'N/A';
+    // Handle different formats of optimal pickup point
+    let pickupAddress = null;
+    if (ride.optimal_pickup_info?.address) {
+      pickupAddress = ride.optimal_pickup_info.address;
+    } else if (ride.optimal_pickup_point) {
+      if (typeof ride.optimal_pickup_point === 'object') {
+        pickupAddress = ride.optimal_pickup_point.address || null;
+      }
+    }
     
     // Handle different formats of nearest_dropoff_point
     let dropoffAddress = null;
@@ -302,92 +308,150 @@ const AcceptedRides = () => {
         }
       }
     }
-                         
-    const endLocation = dropoffAddress || 
-                       rideData.end_location || 
-                       ride.dropoff_location || 
-                       'N/A';
     
-    console.log('Final locations:', { startLocation, endLocation });
+    // Determine locations - prioritize optimal pickup/dropoff points when available
+    const startLocation = pickupAddress || rideData.start_location || ride.pickup_location || 'N/A';
+    const endLocation = dropoffAddress || rideData.end_location || ride.dropoff_location || 'N/A';
+    
+    // Check if we have optimized locations that differ from the original
+    const hasOptimalPickup = pickupAddress && pickupAddress !== ride.pickup_location;
+    const hasOptimalDropoff = dropoffAddress && dropoffAddress !== ride.dropoff_location;
 
     return (
-      <Card sx={{ mb: 3 }}>
-        <CardContent>
+      <Card sx={{ mb: 3, width: '100%', maxWidth: '900px', mx: 'auto' }}>
+        <CardContent sx={{ p: 3 }}>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <Box>
-              <Typography variant="h6" gutterBottom>Ride Details</Typography>
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                <Typography>
-                  <LocationOn color="primary" sx={{ mr: 1, verticalAlign: 'text-bottom' }} />
-                  <strong>From:</strong> {startLocation}
-                </Typography>
-                <Typography>
-                  <LocationOn color="primary" sx={{ mr: 1, verticalAlign: 'text-bottom' }} />
-                  <strong>To:</strong> {endLocation}
-                </Typography>
-                <Typography>
-                  <Event color="primary" sx={{ mr: 1, verticalAlign: 'text-bottom' }} />
-                  <strong>Date:</strong> {dateTime.date}
-                </Typography>
-                <Typography>
-                  <Schedule color="primary" sx={{ mr: 1, verticalAlign: 'text-bottom' }} />
-                  <strong>Time:</strong> {dateTime.time}
-                </Typography>
-                <Typography>
-                  <strong>Status:</strong> {getStatusChip(ride.status)}
-                </Typography>
-              </Box>
+            {/* Ride Status Header */}
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+              <Typography variant="h6" fontWeight="600">Ride #{ride.id}</Typography>
+              {getStatusChip(ride.status)}
             </Box>
-
-            {/* Always show driver details during development, or when user is not a driver */}
-            {(!isDriver || isDevelopment) && (
-              <Box>
-                <Typography variant="subtitle1" gutterBottom>Driver Details</Typography>
-                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <Person sx={{ color: 'primary.main' }} />
-                    <Typography>{getFullName(driverInfo)}</Typography>
-                  </Box>
-                  
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <Email sx={{ color: 'primary.main' }} />
-                    <Typography>{driverInfo.email || 'N/A'}</Typography>
-                  </Box>
-                  
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <Phone sx={{ color: 'primary.main' }} />
-                    <Typography>{driverInfo.phone_number || 'N/A'}</Typography>
-                  </Box>
-                  
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <DirectionsCar sx={{ color: 'primary.main' }} />
-                    <Typography>
-                      {driverInfo.vehicle_make || 'N/A'} {driverInfo.vehicle_model || ''}
-                      {driverInfo.vehicle_color ? ` (${driverInfo.vehicle_color})` : ''}
-                    </Typography>
-                  </Box>
-                </Box>
-              </Box>
-            )}
             
-            {/* Debug information - only visible during development */}
-            {isDevelopment && (
-              <Box sx={{ mt: 2, p: 2, bgcolor: '#f5f5f5', borderRadius: 1 }}>
-                <Typography variant="subtitle2" gutterBottom>Debug Info:</Typography>
-                <Typography variant="body2">
-                  isDriver: {String(isDriver)}<br />
-                  User Type: {userType}<br />
-                  Has driver_details: {String(Boolean(ride.driver_details))}<br />
-                  Has ride_details: {String(Boolean(ride.ride_details))}<br />
-                  Has optimal pickup: {String(Boolean(ride.optimal_pickup_point))}<br />
-                  Has nearest dropoff: {String(Boolean(ride.nearest_dropoff_point))}
-                </Typography>
+            <Divider />
+            
+            {/* Ride Details */}
+            <Box sx={{ mt: 2 }}>
+              <Typography variant="subtitle1" fontWeight="600" gutterBottom>Ride Details</Typography>
+              <Grid container spacing={2}>
+                <Grid item xs={12} md={6}>
+                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+                      <LocationOn color="primary" sx={{ mt: 0.5 }} />
+                      <Box>
+                        <Typography variant="body2" color="text.secondary">From:</Typography>
+                        <Typography>{startLocation}</Typography>
+                        {hasOptimalPickup && (
+                          <Typography variant="body2" color="primary" sx={{ mt: 0.5, fontSize: '0.85rem' }}>
+                            <MyLocation fontSize="small" sx={{ verticalAlign: 'text-bottom', mr: 0.5 }} />
+                            Optimal pickup point for your ride
+                          </Typography>
+                        )}
+                      </Box>
+                    </Box>
+                    
+                    <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+                      <PinDrop color="error" sx={{ mt: 0.5 }} />
+                      <Box>
+                        <Typography variant="body2" color="text.secondary">To:</Typography>
+                        <Typography>{endLocation}</Typography>
+                        {hasOptimalDropoff && (
+                          <Typography variant="body2" color="error" sx={{ mt: 0.5, fontSize: '0.85rem' }}>
+                            <MyLocation fontSize="small" sx={{ verticalAlign: 'text-bottom', mr: 0.5 }} />
+                            Optimal dropoff point for your route
+                          </Typography>
+                        )}
+                      </Box>
+                    </Box>
+                  </Box>
+                </Grid>
+                
+                <Grid item xs={12} md={6}>
+                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <Event color="primary" />
+                      <Box>
+                        <Typography variant="body2" color="text.secondary">Date:</Typography>
+                        <Typography>{dateTime.date}</Typography>
+                      </Box>
+                    </Box>
+                    
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <Schedule color="primary" />
+                      <Box>
+                        <Typography variant="body2" color="text.secondary">Time:</Typography>
+                        <Typography>{dateTime.time}</Typography>
+                      </Box>
+                    </Box>
+                    
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <Person color="primary" />
+                      <Box>
+                        <Typography variant="body2" color="text.secondary">Seats:</Typography>
+                        <Typography>{ride.seats_needed} seat(s)</Typography>
+                      </Box>
+                    </Box>
+                  </Box>
+                </Grid>
+              </Grid>
+            </Box>
+            
+            <Divider sx={{ my: 1 }} />
+            
+            {/* Driver Details - Show for riders or in debug mode */}
+            {!isDriver && (
+              <Box sx={{ mt: 2 }}>
+                <Typography variant="subtitle1" fontWeight="600" gutterBottom>Driver Details</Typography>
+                <Grid container spacing={2}>
+                  <Grid item xs={12} md={6}>
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Person color="primary" />
+                        <Box>
+                          <Typography variant="body2" color="text.secondary">Name:</Typography>
+                          <Typography>{getFullName(driverInfo)}</Typography>
+                        </Box>
+                      </Box>
+                      
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Email color="primary" />
+                        <Box>
+                          <Typography variant="body2" color="text.secondary">Email:</Typography>
+                          <Typography>{driverInfo.email || 'N/A'}</Typography>
+                        </Box>
+                      </Box>
+                    </Box>
+                  </Grid>
+                  
+                  <Grid item xs={12} md={6}>
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Phone color="primary" />
+                        <Box>
+                          <Typography variant="body2" color="text.secondary">Phone:</Typography>
+                          <Typography>{driverInfo.phone_number || 'N/A'}</Typography>
+                        </Box>
+                      </Box>
+                      
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <DirectionsCar color="primary" />
+                        <Box>
+                          <Typography variant="body2" color="text.secondary">Vehicle:</Typography>
+                          <Typography>
+                            {driverInfo.vehicle_make || 'N/A'} {driverInfo.vehicle_model || ''}
+                            {driverInfo.vehicle_color ? ` (${driverInfo.vehicle_color})` : ''}
+                            {driverInfo.license_plate ? ` - ${driverInfo.license_plate}` : ''}
+                          </Typography>
+                        </Box>
+                      </Box>
+                    </Box>
+                  </Grid>
+                </Grid>
               </Box>
             )}
             
             {/* Ride Actions */}
             {ride.status === 'ACCEPTED' && (
-              <Box sx={{ mt: 2, display: 'flex', justifyContent: 'flex-end' }}>
+              <Box sx={{ mt: 3, display: 'flex', justifyContent: 'flex-end' }}>
                 <Button 
                   variant="outlined" 
                   color="error" 
@@ -414,8 +478,8 @@ const AcceptedRides = () => {
   };
 
   return (
-    <Container>
-      <Typography variant="h4" gutterBottom sx={{ mt: 3 }}>
+    <Container maxWidth="lg" sx={{ py: 4 }}>
+      <Typography variant="h4" gutterBottom sx={{ mb: 3, fontWeight: 600 }}>
         My Trips
       </Typography>
       
@@ -425,9 +489,9 @@ const AcceptedRides = () => {
           {userType === 'RIDER' ? " Try requesting a ride!" : " Wait for ride requests from riders."}
         </Alert>
       ) : (
-        <Grid container spacing={3} sx={{ mt: 1 }}>
+        <Box sx={{ mt: 1 }}>
           {acceptedRides.map(ride => renderRideCard(ride))}
-        </Grid>
+        </Box>
       )}
     </Container>
   );
