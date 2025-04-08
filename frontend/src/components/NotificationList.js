@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Box,
   List,
@@ -24,36 +24,32 @@ function NotificationList() {
   const buttonRef = useRef(null);
   const open = Boolean(anchorEl);
 
-  const getToken = () => {
+  const getToken = useCallback(() => {
     try {
       const token = localStorage.getItem('token');
       console.log('Token from localStorage:', token ? 'Present' : 'Missing');
-      if (token) {
-        console.log('Token length:', token.length);
-        console.log('Token format check:', token.startsWith('ey') ? 'Valid JWT format' : 'Invalid JWT format');
-        // Log first few characters of token (for debugging)
-        console.log('Token preview:', token.substring(0, 10) + '...');
-        return token;
+      if (!token) {
+        throw new Error('No authentication token found');
       }
-      return null;
+      
+      console.log('Token length:', token.length);
+      console.log('Token format check:', token.startsWith('ey') ? 'Valid JWT format' : 'Invalid JWT format');
+      // Log first few characters of token (for debugging)
+      console.log('Token preview:', token.substring(0, 10) + '...');
+      
+      // Clean token format
+      return token.trim().replace(/^["'](.*)["']$/, '$1');
     } catch (error) {
       console.error('Error retrieving token from localStorage:', error);
-      return null;
+      throw error;
     }
-  };
+  }, []);
 
-  const completePastRides = async () => {
+  const completePastRides = useCallback(async () => {
     console.log('NotificationList - Checking for past rides to complete');
     try {
-      const token = getToken();
-      if (!token) {
-        console.log('NotificationList - No token found, skipping past rides check');
-        return;
-      }
-
-      // Clean token format
-      const cleanToken = token.trim().replace(/^["'](.*)["']$/, '$1');
-
+      const cleanToken = getToken();
+      
       // Call the endpoint to complete past rides
       const response = await fetch(`${API_BASE_URL}/api/rides/rides/complete_past_rides/`, {
         method: 'POST',
@@ -69,24 +65,16 @@ function NotificationList() {
       }
     } catch (err) {
       console.error('NotificationList - Error completing past rides:', err);
-      // Don't show an error to the user, just log it
+      // Don't show this error to the user, just log it
     }
-  };
+  }, [getToken]);
 
-  const fetchNotifications = async () => {
+  const fetchNotifications = useCallback(async () => {
     try {
       // First check for past rides
       await completePastRides();
       
-      const token = getToken();
-      if (!token) {
-        console.error('No authentication token found');
-        setError('Please log in to view notifications');
-        return;
-      }
-
-      // Clean token format
-      const cleanToken = token.trim().replace(/^["'](.*)["']$/, '$1');
+      const cleanToken = getToken();
       
       console.log('Fetching notifications with token...');
       console.log('Token format check:', cleanToken.substring(0, 10) + '...');
@@ -143,9 +131,13 @@ function NotificationList() {
       }
     } catch (err) {
       console.error('Error fetching notifications:', err);
-      setError('Network error while fetching notifications. Please check your connection.');
+      if (err.message === 'No authentication token found') {
+        setError('Please log in to view notifications');
+      } else {
+        setError('Network error while fetching notifications. Please check your connection.');
+      }
     }
-  };
+  }, [getToken, completePastRides]);
 
   useEffect(() => {
     // Fetch notifications when component mounts and periodically
@@ -154,18 +146,11 @@ function NotificationList() {
     // Poll for new notifications every 30 seconds
     const interval = setInterval(fetchNotifications, 30000);
     return () => clearInterval(interval);
-  }, []);
+  }, [fetchNotifications]);
 
-  const handleMarkAsRead = async (notificationId) => {
+  const handleMarkAsRead = useCallback(async (notificationId) => {
     try {
-      const token = getToken();
-      if (!token) {
-        setError('No authentication token found');
-        return;
-      }
-
-      // Clean token format
-      const cleanToken = token.trim().replace(/^["'](.*)["']$/, '$1');
+      const cleanToken = getToken();
 
       const response = await fetch(`${API_BASE_URL}/api/rides/notifications/${notificationId}/mark_as_read/`, {
         method: 'POST',
@@ -198,21 +183,15 @@ function NotificationList() {
       }
     } catch (err) {
       console.error('Error marking notification as read:', err);
+      setError('Failed to mark notification as read');
     }
-  };
+  }, [getToken]);
   
-  // New function to accept a ride match
-  const handleAcceptRideMatch = async (rideRequestId) => {
+  // Function to accept a ride match
+  const handleAcceptRideMatch = useCallback(async (rideRequestId) => {
     try {
-      const token = getToken();
-      if (!token) {
-        alert('Please log in to accept rides');
-        return;
-      }
-
-      // Clean token format
-      const cleanToken = token.trim().replace(/^["'](.*)["']$/, '$1');
-
+      const cleanToken = getToken();
+      
       console.log(`Accepting ride request ${rideRequestId}`);
       
       // Use the correct URL based on the server configuration
@@ -246,179 +225,137 @@ function NotificationList() {
             window.dispatchEvent(new Event('auth-change'));
             return;
           }
+          
+          alert('Failed to accept ride match. Please try again later.');
         } catch (e) {
           console.error('Could not parse error response:', e);
+          alert('Failed to accept ride match. Please try again later.');
         }
-        
-        alert('Failed to accept ride match. Please try again.');
       }
-    } catch (error) {
-      console.error('Error accepting ride match:', error);
-      alert('Network error while accepting ride match');
+    } catch (err) {
+      console.error('Error accepting ride match:', err);
+      alert(err.message || 'Error accepting ride match');
     }
-  };
+  }, [getToken, fetchNotifications]);
 
-  const formatDate = (dateString) => {
-    try {
-      return new Date(dateString).toLocaleString();
-    } catch (error) {
-      console.error('Error formatting date:', error);
-      return 'Invalid date';
-    }
-  };
+  const formatDate = useCallback((dateString) => {
+    const date = new Date(dateString);
+    return date.toLocaleString();
+  }, []);
 
-  const handleClick = (event) => {
+  const handleClick = useCallback((event) => {
     setAnchorEl(event.currentTarget);
-  };
+  }, []);
 
-  const handleClose = () => {
+  const handleClose = useCallback(() => {
     setAnchorEl(null);
-  };
-  
-  // Function to render accept button for ride match notifications
-  const renderAcceptButton = (notification) => {
-    console.log('Checking notification for Accept button:', notification.id, notification.notification_type);
-    
-    // Check if notification is a ride match notification and has ride_request data
-    if (notification.notification_type === 'RIDE_MATCH') {
-      console.log('Found RIDE_MATCH notification:', notification.id);
+  }, []);
+
+  const renderAcceptButton = useCallback((notification) => {
+    // Only show accept button for ride match notifications that haven't been acted upon
+    if (notification.notification_type === 'RIDE_MATCH' && !notification.action_taken) {
+      const matchData = notification.data || {};
+      const rideRequestId = matchData.ride_request_id;
       
-      if (notification.ride_request) {
-        console.log(`Rendering Accept button for ride request ${notification.ride_request}`);
+      if (rideRequestId) {
         return (
-          <Button
-            variant="contained"
-            color="primary"
-            size="small"
-            startIcon={<DirectionsCarIcon />}
-            onClick={() => handleAcceptRideMatch(notification.ride_request)}
-            sx={{ ml: 1, mt: 1 }}
-          >
-            Accept Ride
-          </Button>
+          <Box mt={1} display="flex" justifyContent="flex-end">
+            <Button 
+              variant="contained" 
+              color="primary" 
+              size="small"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleAcceptRideMatch(rideRequestId);
+              }}
+            >
+              Accept Match
+            </Button>
+          </Box>
         );
-      } else {
-        console.warn('RIDE_MATCH notification missing ride_request data:', notification);
       }
     }
     return null;
-  };
-  
-  // Function to render notification content based on type
-  const renderNotificationContent = (notification) => {
-    console.log('Rendering notification content for type:', notification.notification_type);
-    
-    switch(notification.notification_type) {
+  }, [handleAcceptRideMatch]);
+
+  const renderNotificationContent = useCallback((notification) => {
+    // Helper function to render notification content based on type
+    switch (notification.notification_type) {
       case 'RIDE_MATCH':
         return (
           <>
-            <Typography variant="body1" component="div" fontWeight="bold">
-              Ride Match Found!
-            </Typography>
-            <Typography variant="body2" component="div">
-              {notification.message}
-            </Typography>
-            {notification.ride_details && (
-              <Box sx={{ mt: 1, p: 1, bgcolor: 'rgba(0, 0, 0, 0.04)', borderRadius: 1 }}>
-                <Typography variant="body2">
-                  From: {notification.ride_details.start_location}
-                </Typography>
-                <Typography variant="body2">
-                  To: {notification.ride_details.end_location}
-                </Typography>
-                <Typography variant="body2">
-                  Departure: {formatDate(notification.ride_details.departure_time)}
-                </Typography>
-              </Box>
-            )}
-          </>
-        );
-        
-      case 'RIDE_PENDING':
-        return (
-          <>
-            <Typography variant="body1" component="div" fontWeight="bold" color="info.main">
-              Ride Request Saved
-            </Typography>
-            <Typography variant="body2" component="div">
-              {notification.message}
-            </Typography>
-            <Box sx={{ mt: 1, p: 1, bgcolor: 'rgba(0, 100, 255, 0.04)', borderRadius: 1 }}>
-              <Typography variant="body2" color="info.main">
-                We'll notify you when a matching ride is found!
+            <Box display="flex" alignItems="center">
+              <DirectionsCarIcon color="primary" style={{ marginRight: 8 }} />
+              <Typography variant="body1">
+                {notification.message}
               </Typography>
             </Box>
+            <Typography variant="caption" color="textSecondary">
+              {formatDate(notification.created_at)}
+            </Typography>
+            {renderAcceptButton(notification)}
           </>
         );
-        
-      case 'RIDE_ACCEPTED':
+      
+      case 'RIDE_REQUEST_ACCEPTED':
         return (
           <>
-            <Typography variant="body1" component="div" fontWeight="bold" color="success.main">
-              Ride Accepted
-            </Typography>
-            <Typography variant="body2" component="div">
-              {notification.message}
-            </Typography>
-          </>
-        );
-        
-      case 'RIDE_COMPLETED':
-        return (
-          <>
-            <Typography variant="body1" component="div" fontWeight="bold" color="success.main">
-              Ride Completed
-            </Typography>
-            <Typography variant="body2" component="div">
-              {notification.message}
+            <Box display="flex" alignItems="center">
+              <CheckCircleIcon color="success" style={{ marginRight: 8 }} />
+              <Typography variant="body1">
+                {notification.message}
+              </Typography>
+            </Box>
+            <Typography variant="caption" color="textSecondary">
+              {formatDate(notification.created_at)}
             </Typography>
           </>
         );
-        
+      
       default:
         return (
-          <Typography variant="body1" component="div">
-            {notification.message}
-          </Typography>
+          <>
+            <Typography variant="body1">
+              {notification.message}
+            </Typography>
+            <Typography variant="caption" color="textSecondary">
+              {formatDate(notification.created_at)}
+            </Typography>
+          </>
         );
     }
-  };
+  }, [formatDate, renderAcceptButton]);
+
+  // Helper function to get notification item style based on read status
+  const getNotificationStyle = useCallback((isRead) => {
+    return {
+      backgroundColor: isRead ? 'transparent' : 'rgba(66, 165, 245, 0.1)',
+      borderLeft: isRead ? 'none' : '3px solid #42a5f5',
+      padding: '8px 16px',
+      transition: 'background-color 0.3s',
+      '&:hover': {
+        backgroundColor: 'rgba(0, 0, 0, 0.05)',
+      }
+    };
+  }, []);
 
   return (
-    <div style={{ display: 'inline-block', marginLeft: '10px' }}>
-      <IconButton 
+    <>
+      <IconButton
         ref={buttonRef}
-        color="inherit" 
+        color="inherit"
         onClick={handleClick}
-        sx={{ 
-          '&:hover': {
-            backgroundColor: 'rgba(255, 255, 255, 0.1)'
-          }
-        }}
+        aria-label={`${unreadCount} unread notifications`}
       >
         <Badge badgeContent={unreadCount} color="error">
           <NotificationsIcon />
         </Badge>
       </IconButton>
-
+      
       <Popover
         open={open}
         anchorEl={anchorEl}
         onClose={handleClose}
-        slotProps={{
-          paper: {
-            elevation: 4,
-            sx: {
-              width: 400,
-              maxHeight: 500,
-              overflow: 'auto',
-              mt: 1,
-              '@media (max-width: 600px)': {
-                width: '300px',
-              }
-            }
-          }
-        }}
         anchorOrigin={{
           vertical: 'bottom',
           horizontal: 'right',
@@ -427,96 +364,55 @@ function NotificationList() {
           vertical: 'top',
           horizontal: 'right',
         }}
+        PaperProps={{
+          elevation: 3,
+          sx: { 
+            width: 320, 
+            maxHeight: 400, 
+            overflow: 'auto',
+            borderRadius: 1,
+          }
+        }}
       >
-        <Box sx={{ 
-          p: 2, 
-          bgcolor: 'primary.main',
-          color: 'primary.contrastText',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center'
-        }}>
+        <Box sx={{ p: 2, borderBottom: '1px solid rgba(0, 0, 0, 0.12)' }}>
           <Typography variant="h6">Notifications</Typography>
-          {unreadCount > 0 && (
-            <Typography variant="body2">
-              {unreadCount} unread
+          {error && (
+            <Typography color="error" variant="body2">
+              {error}
             </Typography>
           )}
         </Box>
-        <Divider />
-        <List sx={{ p: 0 }}>
-          {error ? (
-            <ListItem>
-              <ListItemText 
-                primary={error}
-                sx={{ textAlign: 'center', color: 'error.main' }}
-              />
-            </ListItem>
-          ) : notifications.length === 0 ? (
-            <ListItem>
-              <ListItemText 
-                primary="No notifications" 
-                sx={{ textAlign: 'center' }}
-              />
-            </ListItem>
-          ) : (
-            notifications.map((notification) => {
-              // Determine background color based on notification type
-              let bgColor = notification.is_read ? 'inherit' : 'action.hover';
-              if (notification.notification_type === 'RIDE_PENDING') {
-                bgColor = notification.is_read ? 'rgba(0, 100, 255, 0.05)' : 'rgba(0, 100, 255, 0.1)';
-              } else if (notification.notification_type === 'RIDE_MATCH') {
-                bgColor = notification.is_read ? 'rgba(0, 200, 0, 0.05)' : 'rgba(0, 200, 0, 0.1)';
-              }
-              
-              return (
-                <ListItem
-                  key={notification.id}
-                  sx={{
-                    bgcolor: bgColor,
-                    '&:hover': { bgcolor: 'action.selected' },
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'flex-start',
-                    py: 2,
-                    borderBottom: '1px solid rgba(0, 0, 0, 0.1)'
+        
+        {notifications.length === 0 ? (
+          <Box sx={{ p: 2 }}>
+            <Typography variant="body2" color="textSecondary" align="center">
+              No notifications
+            </Typography>
+          </Box>
+        ) : (
+          <List sx={{ p: 0 }}>
+            {notifications.map((notification) => (
+              <React.Fragment key={notification.id}>
+                <ListItem 
+                  sx={getNotificationStyle(notification.is_read)}
+                  onClick={() => {
+                    if (!notification.is_read) {
+                      handleMarkAsRead(notification.id);
+                    }
                   }}
                 >
-                  <Box sx={{ display: 'flex', width: '100%' }}>
-                    <ListItemText
-                      primary={
-                        renderNotificationContent(notification)
-                      }
-                      secondary={
-                        <Typography variant="caption" color="text.secondary">
-                          {formatDate(notification.created_at)}
-                        </Typography>
-                      }
-                      sx={{ 
-                        flex: 1,
-                        '& .MuiListItemText-primary': {
-                          mb: 0.5
-                        }
-                      }}
-                    />
-                    {!notification.is_read && (
-                      <IconButton
-                        size="small"
-                        onClick={() => handleMarkAsRead(notification.id)}
-                        sx={{ ml: 1 }}
-                      >
-                        <CheckCircleIcon color="primary" />
-                      </IconButton>
-                    )}
-                  </Box>
-                  {renderAcceptButton(notification)}
+                  <ListItemText 
+                    disableTypography
+                    primary={renderNotificationContent(notification)}
+                  />
                 </ListItem>
-              );
-            })
-          )}
-        </List>
+                <Divider component="li" />
+              </React.Fragment>
+            ))}
+          </List>
+        )}
       </Popover>
-    </div>
+    </>
   );
 }
 
