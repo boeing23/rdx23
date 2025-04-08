@@ -6,14 +6,21 @@ import {
   Box,
   Card,
   CardContent,
+  CardActionArea,
   Grid,
   Divider,
   Chip,
   Alert,
   Button,
   Paper,
-  Tab,
-  Tabs
+  Accordion,
+  AccordionSummary,
+  AccordionDetails,
+  List,
+  ListItem,
+  ListItemText,
+  ListItemIcon,
+  ListItemSecondaryAction
 } from '@mui/material';
 import { 
   Schedule, 
@@ -24,7 +31,9 @@ import {
   Email, 
   Event,
   MyLocation,
-  PinDrop
+  PinDrop,
+  ExpandMore,
+  AccessTime
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { API_BASE_URL } from '../config';
@@ -33,7 +42,8 @@ const AcceptedRides = () => {
   const [acceptedRides, setAcceptedRides] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [tabValue, setTabValue] = useState(0);
+  const [selectedRide, setSelectedRide] = useState(null);
+  const [expandedRide, setExpandedRide] = useState(null);
   const [userType, setUserType] = useState('');
   const location = useLocation();
   const navigate = useNavigate();
@@ -52,9 +62,6 @@ const AcceptedRides = () => {
       }
 
       console.log('Fetching accepted rides...');
-      console.log('User type:', currentUserType);
-      console.log('User ID:', userId);
-      console.log('Token:', token ? `${token.substring(0, 10)}...` : 'No token');
       
       const response = await fetch(`${API_BASE_URL}/api/rides/requests/accepted/`, {
         headers: {
@@ -63,9 +70,6 @@ const AcceptedRides = () => {
           'Accept': 'application/json'
         },
       });
-
-      // Log the response status for debugging
-      console.log('Response status:', response.status);
       
       if (!response.ok) {
         if (response.status === 401) {
@@ -86,28 +90,10 @@ const AcceptedRides = () => {
       // Log field names for debugging
       if (data && data.length > 0) {
         console.log('Sample ride fields:', Object.keys(data[0]));
-        
-        // Check for optimal pickup point
-        console.log('Has optimal_pickup_point?', Boolean(data[0].optimal_pickup_point));
-        if (data[0].optimal_pickup_point) {
-          console.log('Optimal pickup value:', data[0].optimal_pickup_point);
-          console.log('Type of optimal pickup:', typeof data[0].optimal_pickup_point);
-        }
-        
-        // Check for nearest dropoff point
-        console.log('Has nearest_dropoff_point?', Boolean(data[0].nearest_dropoff_point));
-        if (data[0].nearest_dropoff_point) {
-          console.log('Nearest dropoff value:', data[0].nearest_dropoff_point);
-          console.log('Type of nearest dropoff:', typeof data[0].nearest_dropoff_point);
-        }
-        
-        // Check for driver details
-        console.log('Has driver_details?', Boolean(data[0].driver_details));
-        if (data[0].driver_details) {
-          console.log('Driver details value:', data[0].driver_details);
-        }
-        
         console.log('Full accepted rides data:', data);
+        
+        // If we have rides, automatically select the first one
+        setSelectedRide(data[0]?.id || null);
       }
       
       // Sort rides by departure time (most recent first)
@@ -157,10 +143,6 @@ const AcceptedRides = () => {
     completePastRides().then(() => fetchAcceptedRides());
   }, [location.search]); // Only re-fetch when the URL query parameters change
 
-  const handleChangeTab = (event, newValue) => {
-    setTabValue(newValue);
-  };
-
   const getStatusChip = (status) => {
     switch (status) {
       case 'ACCEPTED':
@@ -174,7 +156,11 @@ const AcceptedRides = () => {
     }
   };
 
-  const handleCancelRide = async (rideRequestId) => {
+  const handleCancelRide = async (rideRequestId, event) => {
+    if (event) {
+      event.stopPropagation(); // Prevent accordion from toggling
+    }
+    
     try {
       const token = localStorage.getItem('token');
       
@@ -203,7 +189,11 @@ const AcceptedRides = () => {
     }
   };
 
-  const handleCompleteRide = async (rideRequestId) => {
+  const handleCompleteRide = async (rideRequestId, event) => {
+    if (event) {
+      event.stopPropagation(); // Prevent accordion from toggling
+    }
+    
     try {
       const token = localStorage.getItem('token');
       
@@ -232,9 +222,17 @@ const AcceptedRides = () => {
     }
   };
 
+  const handleRideClick = (rideId) => {
+    setSelectedRide(rideId === selectedRide ? null : rideId);
+  };
+
+  const handleAccordionChange = (rideId) => (event, isExpanded) => {
+    setExpandedRide(isExpanded ? rideId : null);
+  };
+
   if (loading) {
     return (
-      <Container>
+      <Container maxWidth="md">
         <Typography>Loading your trips...</Typography>
       </Container>
     );
@@ -242,44 +240,114 @@ const AcceptedRides = () => {
 
   if (error) {
     return (
-      <Container>
+      <Container maxWidth="md">
         <Alert severity="error">{error}</Alert>
       </Container>
     );
   }
 
-  const renderRideCard = (ride) => {
-    console.log('Processing ride data in renderRideCard:', ride);
+  // Helper function to get full name
+  const getFullName = (user) => {
+    if (!user) return 'N/A';
+    const firstName = user.first_name || '';
+    const lastName = user.last_name || '';
+    return `${firstName} ${lastName}`.trim() || user.username || 'N/A';
+  };
+
+  // Format date for better display
+  const formatDateTime = (dateTimeStr) => {
+    try {
+      const date = new Date(dateTimeStr);
+      return {
+        date: date.toLocaleDateString(),
+        time: date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})
+      };
+    } catch (e) {
+      return { date: 'Invalid date', time: 'Invalid time' };
+    }
+  };
+
+  const renderRideListItem = (ride) => {
+    // Get ride data from either the ride object or the ride.ride_details object
+    const rideData = ride.ride_details || ride.ride || {};
+    const dateTime = formatDateTime(rideData.departure_time || ride.departure_time);
     
+    // Get pickup/dropoff locations
+    const pickupLocation = ride.pickup_location || 'N/A';
+    const dropoffLocation = ride.dropoff_location || 'N/A';
+    
+    // Shorten location names for the list view
+    const shortenLocation = (location, maxLength = 25) => {
+      if (location.length <= maxLength) return location;
+      
+      // Try to extract meaningful part from the address
+      const parts = location.split(',');
+      if (parts.length > 1) {
+        // Use first part plus the next meaningful part
+        const firstPart = parts[0].trim();
+        const secondPart = parts.slice(1).find(p => p.trim().length > 3)?.trim() || '';
+        
+        if (firstPart) {
+          if (secondPart && (firstPart.length + secondPart.length + 3) <= maxLength) {
+            return `${firstPart}, ${secondPart}...`;
+          }
+          return `${firstPart.substring(0, maxLength - 3)}...`;
+        }
+      }
+      
+      return `${location.substring(0, maxLength - 3)}...`;
+    };
+
+    return (
+      <Accordion 
+        key={ride.id}
+        expanded={expandedRide === ride.id}
+        onChange={handleAccordionChange(ride.id)}
+        sx={{ 
+          mb: 1,
+          borderLeft: expandedRide === ride.id ? '4px solid #1976d2' : 'none',
+          boxShadow: expandedRide === ride.id ? '0 4px 6px rgba(0,0,0,0.1)' : '0 1px 3px rgba(0,0,0,0.08)',
+        }}
+      >
+        <AccordionSummary
+          expandIcon={<ExpandMore />}
+          sx={{ 
+            minHeight: '72px',
+            '&.Mui-expanded': { minHeight: '72px' },
+            '& .MuiAccordionSummary-content': { margin: '12px 0' }
+          }}
+        >
+          <Box sx={{ display: 'flex', flexDirection: 'column', flexGrow: 1 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+              <Typography variant="subtitle1" fontWeight="500">
+                {shortenLocation(pickupLocation)} → {shortenLocation(dropoffLocation)}
+              </Typography>
+              {getStatusChip(ride.status)}
+            </Box>
+            <Box sx={{ display: 'flex', alignItems: 'center', mt: 0.5 }}>
+              <AccessTime fontSize="small" sx={{ fontSize: '1rem', color: 'text.secondary', mr: 0.5 }} />
+              <Typography variant="body2" color="text.secondary">
+                {dateTime.date}, {dateTime.time}
+              </Typography>
+            </Box>
+          </Box>
+        </AccordionSummary>
+        
+        <AccordionDetails sx={{ pt: 0, pb: 2 }}>
+          {renderRideDetails(ride)}
+        </AccordionDetails>
+      </Accordion>
+    );
+  };
+
+  const renderRideDetails = (ride) => {
     // Try to get driver details from multiple potential sources
     const driverInfo = ride.driver_details || (ride.ride_details && ride.ride_details.driver) || {};
-    console.log('Selected driver info:', driverInfo);
     
     // Get ride data from either the ride object or the ride.ride_details object
     const rideData = ride.ride_details || ride.ride || {};
     
     const isDriver = userType === 'DRIVER';
-    
-    // Helper function to get full name
-    const getFullName = (user) => {
-      if (!user) return 'N/A';
-      const firstName = user.first_name || '';
-      const lastName = user.last_name || '';
-      return `${firstName} ${lastName}`.trim() || user.username || 'N/A';
-    };
-
-    // Format date for better display
-    const formatDateTime = (dateTimeStr) => {
-      try {
-        const date = new Date(dateTimeStr);
-        return {
-          date: date.toLocaleDateString(),
-          time: date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})
-        };
-      } catch (e) {
-        return { date: 'Invalid date', time: 'Invalid time' };
-      }
-    };
     
     // Get formatted date/time
     const dateTime = formatDateTime(rideData.departure_time || ride.departure_time);
@@ -318,168 +386,169 @@ const AcceptedRides = () => {
     const hasOptimalDropoff = dropoffAddress && dropoffAddress !== ride.dropoff_location;
 
     return (
-      <Card sx={{ mb: 3, width: '100%', maxWidth: '900px', mx: 'auto' }}>
-        <CardContent sx={{ p: 3 }}>
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            {/* Ride Status Header */}
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-              <Typography variant="h6" fontWeight="600">Ride #{ride.id}</Typography>
-              {getStatusChip(ride.status)}
-            </Box>
+      <Box sx={{ mt: 2 }}>
+        <Divider sx={{ mb: 2 }} />
+        
+        {/* Ride Details */}
+        <Box sx={{ mb: 3 }}>
+          <Typography variant="subtitle1" fontWeight="600" gutterBottom>Ride Details</Typography>
+          <Grid container spacing={2}>
+            <Grid item xs={12}>
+              <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, mb: 1.5 }}>
+                <LocationOn color="primary" sx={{ mt: 0.5 }} />
+                <Box>
+                  <Typography variant="body2" color="text.secondary">From:</Typography>
+                  <Typography>{startLocation}</Typography>
+                  {hasOptimalPickup && (
+                    <Typography variant="body2" color="primary" sx={{ mt: 0.5, fontSize: '0.85rem' }}>
+                      <MyLocation fontSize="small" sx={{ verticalAlign: 'text-bottom', mr: 0.5 }} />
+                      Optimal pickup point for your ride
+                    </Typography>
+                  )}
+                </Box>
+              </Box>
+            </Grid>
             
-            <Divider />
+            <Grid item xs={12}>
+              <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, mb: 1.5 }}>
+                <PinDrop color="error" sx={{ mt: 0.5 }} />
+                <Box>
+                  <Typography variant="body2" color="text.secondary">To:</Typography>
+                  <Typography>{endLocation}</Typography>
+                  {hasOptimalDropoff && (
+                    <Typography variant="body2" color="error" sx={{ mt: 0.5, fontSize: '0.85rem' }}>
+                      <MyLocation fontSize="small" sx={{ verticalAlign: 'text-bottom', mr: 0.5 }} />
+                      Optimal dropoff point for your route
+                    </Typography>
+                  )}
+                </Box>
+              </Box>
+            </Grid>
             
-            {/* Ride Details */}
-            <Box sx={{ mt: 2 }}>
-              <Typography variant="subtitle1" fontWeight="600" gutterBottom>Ride Details</Typography>
-              <Grid container spacing={2}>
-                <Grid item xs={12} md={6}>
-                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                    <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
-                      <LocationOn color="primary" sx={{ mt: 0.5 }} />
-                      <Box>
-                        <Typography variant="body2" color="text.secondary">From:</Typography>
-                        <Typography>{startLocation}</Typography>
-                        {hasOptimalPickup && (
-                          <Typography variant="body2" color="primary" sx={{ mt: 0.5, fontSize: '0.85rem' }}>
-                            <MyLocation fontSize="small" sx={{ verticalAlign: 'text-bottom', mr: 0.5 }} />
-                            Optimal pickup point for your ride
-                          </Typography>
-                        )}
-                      </Box>
-                    </Box>
-                    
-                    <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
-                      <PinDrop color="error" sx={{ mt: 0.5 }} />
-                      <Box>
-                        <Typography variant="body2" color="text.secondary">To:</Typography>
-                        <Typography>{endLocation}</Typography>
-                        {hasOptimalDropoff && (
-                          <Typography variant="body2" color="error" sx={{ mt: 0.5, fontSize: '0.85rem' }}>
-                            <MyLocation fontSize="small" sx={{ verticalAlign: 'text-bottom', mr: 0.5 }} />
-                            Optimal dropoff point for your route
-                          </Typography>
-                        )}
-                      </Box>
-                    </Box>
+            <Grid item xs={4}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Event color="primary" sx={{ fontSize: '1.25rem' }} />
+                <Box>
+                  <Typography variant="body2" color="text.secondary">Date:</Typography>
+                  <Typography>{dateTime.date}</Typography>
+                </Box>
+              </Box>
+            </Grid>
+            
+            <Grid item xs={4}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Schedule color="primary" sx={{ fontSize: '1.25rem' }} />
+                <Box>
+                  <Typography variant="body2" color="text.secondary">Time:</Typography>
+                  <Typography>{dateTime.time}</Typography>
+                </Box>
+              </Box>
+            </Grid>
+            
+            <Grid item xs={4}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Person color="primary" sx={{ fontSize: '1.25rem' }} />
+                <Box>
+                  <Typography variant="body2" color="text.secondary">Seats:</Typography>
+                  <Typography>{ride.seats_needed} seat(s)</Typography>
+                </Box>
+              </Box>
+            </Grid>
+          </Grid>
+        </Box>
+        
+        {/* Driver Details */}
+        {!isDriver && (
+          <Box sx={{ mb: 3 }}>
+            <Typography variant="subtitle1" fontWeight="600" gutterBottom>Driver Details</Typography>
+            <Grid container spacing={2}>
+              <Grid item xs={6}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <Person color="primary" sx={{ fontSize: '1.25rem' }} />
+                  <Box>
+                    <Typography variant="body2" color="text.secondary">Name:</Typography>
+                    <Typography>{getFullName(driverInfo)}</Typography>
                   </Box>
-                </Grid>
-                
-                <Grid item xs={12} md={6}>
-                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <Event color="primary" />
-                      <Box>
-                        <Typography variant="body2" color="text.secondary">Date:</Typography>
-                        <Typography>{dateTime.date}</Typography>
-                      </Box>
-                    </Box>
-                    
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <Schedule color="primary" />
-                      <Box>
-                        <Typography variant="body2" color="text.secondary">Time:</Typography>
-                        <Typography>{dateTime.time}</Typography>
-                      </Box>
-                    </Box>
-                    
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <Person color="primary" />
-                      <Box>
-                        <Typography variant="body2" color="text.secondary">Seats:</Typography>
-                        <Typography>{ride.seats_needed} seat(s)</Typography>
-                      </Box>
-                    </Box>
-                  </Box>
-                </Grid>
+                </Box>
               </Grid>
-            </Box>
-            
-            <Divider sx={{ my: 1 }} />
-            
-            {/* Driver Details - Show for riders or in debug mode */}
-            {!isDriver && (
-              <Box sx={{ mt: 2 }}>
-                <Typography variant="subtitle1" fontWeight="600" gutterBottom>Driver Details</Typography>
-                <Grid container spacing={2}>
-                  <Grid item xs={12} md={6}>
-                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <Person color="primary" />
-                        <Box>
-                          <Typography variant="body2" color="text.secondary">Name:</Typography>
-                          <Typography>{getFullName(driverInfo)}</Typography>
-                        </Box>
-                      </Box>
-                      
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <Email color="primary" />
-                        <Box>
-                          <Typography variant="body2" color="text.secondary">Email:</Typography>
-                          <Typography>{driverInfo.email || 'N/A'}</Typography>
-                        </Box>
-                      </Box>
+              
+              <Grid item xs={6}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <Email color="primary" sx={{ fontSize: '1.25rem' }} />
+                  <Box>
+                    <Typography variant="body2" color="text.secondary">Email:</Typography>
+                    <Typography>{driverInfo.email || 'N/A'}</Typography>
+                  </Box>
+                </Box>
+              </Grid>
+              
+              <Grid item xs={6}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <Phone color="primary" sx={{ fontSize: '1.25rem' }} />
+                  <Box>
+                    <Typography variant="body2" color="text.secondary">Phone:</Typography>
+                    <Typography>{driverInfo.phone_number || 'N/A'}</Typography>
+                  </Box>
+                </Box>
+              </Grid>
+              
+              <Grid item xs={6}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <DirectionsCar color="primary" sx={{ fontSize: '1.25rem' }} />
+                  <Box>
+                    <Typography variant="body2" color="text.secondary">Vehicle:</Typography>
+                    <Typography>
+                      {driverInfo.vehicle_make || 'N/A'} {driverInfo.vehicle_model || ''}
+                      {driverInfo.vehicle_color ? ` (${driverInfo.vehicle_color})` : ''}
+                    </Typography>
+                  </Box>
+                </Box>
+              </Grid>
+              
+              {driverInfo.license_plate && (
+                <Grid item xs={12}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <DirectionsCar color="primary" sx={{ fontSize: '1.25rem' }} />
+                    <Box>
+                      <Typography variant="body2" color="text.secondary">License Plate:</Typography>
+                      <Typography>{driverInfo.license_plate}</Typography>
                     </Box>
-                  </Grid>
-                  
-                  <Grid item xs={12} md={6}>
-                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <Phone color="primary" />
-                        <Box>
-                          <Typography variant="body2" color="text.secondary">Phone:</Typography>
-                          <Typography>{driverInfo.phone_number || 'N/A'}</Typography>
-                        </Box>
-                      </Box>
-                      
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <DirectionsCar color="primary" />
-                        <Box>
-                          <Typography variant="body2" color="text.secondary">Vehicle:</Typography>
-                          <Typography>
-                            {driverInfo.vehicle_make || 'N/A'} {driverInfo.vehicle_model || ''}
-                            {driverInfo.vehicle_color ? ` (${driverInfo.vehicle_color})` : ''}
-                            {driverInfo.license_plate ? ` - ${driverInfo.license_plate}` : ''}
-                          </Typography>
-                        </Box>
-                      </Box>
-                    </Box>
-                  </Grid>
+                  </Box>
                 </Grid>
-              </Box>
-            )}
-            
-            {/* Ride Actions */}
-            {ride.status === 'ACCEPTED' && (
-              <Box sx={{ mt: 3, display: 'flex', justifyContent: 'flex-end' }}>
-                <Button 
-                  variant="outlined" 
-                  color="error" 
-                  onClick={() => handleCancelRide(ride.id)}
-                  sx={{ mr: 1 }}
-                >
-                  Cancel Ride
-                </Button>
-                {isDriver && (
-                  <Button 
-                    variant="contained" 
-                    color="success" 
-                    onClick={() => handleCompleteRide(ride.id)}
-                  >
-                    Mark as Completed
-                  </Button>
-                )}
-              </Box>
+              )}
+            </Grid>
+          </Box>
+        )}
+        
+        {/* Ride Actions */}
+        {ride.status === 'ACCEPTED' && (
+          <Box sx={{ mt: 2, display: 'flex', justifyContent: 'flex-end' }}>
+            <Button 
+              variant="outlined" 
+              color="error" 
+              onClick={(e) => handleCancelRide(ride.id, e)}
+              sx={{ mr: 1 }}
+            >
+              Cancel Ride
+            </Button>
+            {isDriver && (
+              <Button 
+                variant="contained" 
+                color="success" 
+                onClick={(e) => handleCompleteRide(ride.id, e)}
+              >
+                Mark as Completed
+              </Button>
             )}
           </Box>
-        </CardContent>
-      </Card>
+        )}
+      </Box>
     );
   };
 
   return (
-    <Container maxWidth="lg" sx={{ py: 4 }}>
-      <Typography variant="h4" gutterBottom sx={{ mb: 3, fontWeight: 600 }}>
+    <Container maxWidth="md" sx={{ py: 3 }}>
+      <Typography variant="h5" gutterBottom sx={{ mb: 2, fontWeight: 600 }}>
         My Trips
       </Typography>
       
@@ -490,7 +559,7 @@ const AcceptedRides = () => {
         </Alert>
       ) : (
         <Box sx={{ mt: 1 }}>
-          {acceptedRides.map(ride => renderRideCard(ride))}
+          {acceptedRides.map(ride => renderRideListItem(ride))}
         </Box>
       )}
     </Container>
