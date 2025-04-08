@@ -1,1 +1,1 @@
-web: gunicorn carpool_project.wsgi --log-file -
+web: ./startup.sh

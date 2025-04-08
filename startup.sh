@@ -39,9 +39,41 @@ echo "=== TESTING ROOT ENDPOINT ==="
 sleep 5
 echo "Root endpoint test completed"
 
-# Apply database migrations but don't fail if they error
-echo "=== APPLYING MIGRATIONS ==="
-python manage.py migrate || echo "Migrations failed but continuing"
+# Retry mechanism for database connection
+MAX_RETRIES=30
+RETRY_INTERVAL=5
+count=0
+
+echo "Checking for database availability..."
+until python -c "import psycopg2; conn = psycopg2.connect(\"${DATABASE_URL}\"); conn.close()" 2>/dev/null
+do
+  count=$((count+1))
+  if [ $count -ge $MAX_RETRIES ]; then
+    echo "Failed to connect to database after $MAX_RETRIES attempts, but starting anyway..."
+    break
+  fi
+  echo "Database not available yet, retrying in ${RETRY_INTERVAL}s... (Attempt $count/$MAX_RETRIES)"
+  sleep $RETRY_INTERVAL
+done
+
+if [ $count -lt $MAX_RETRIES ]; then
+  echo "Database is available!"
+fi
+
+# Prepare for statically served files
+echo "Running collectstatic..."
+python manage.py collectstatic --noinput || echo "Static collection failed but continuing"
+
+# Apply database migrations
+echo "Applying migrations..."
+python manage.py migrate --noinput || echo "Migration failed but continuing"
+
+# Run any needed fixture loading
+# python manage.py loaddata initial_data.json || echo "Loading fixtures failed but continuing"
+
+# Start server with more worker timeout
+echo "Starting Gunicorn server..."
+gunicorn carpool_project.wsgi --preload --timeout 120 --log-file -
 
 # Start the actual application with exec to replace this process
 echo "=== STARTING GUNICORN ==="
