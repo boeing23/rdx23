@@ -586,26 +586,49 @@ function AcceptedRides() {
                       <Typography variant="h6" gutterBottom>
                         Driver Information
                       </Typography>
+                      {console.log('Driver data available:', detailedRide.ride.driver)}
                       <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
                         <Avatar sx={{ mr: 2 }}>
                           <PersonIcon />
                         </Avatar>
                         <Box>
                           <Typography variant="subtitle1">
-                            {detailedRide.ride.driver.username || 'Driver Name'}
+                            {detailedRide.ride.driver.first_name} {detailedRide.ride.driver.last_name}
                           </Typography>
-                          {detailedRide.ride.driver.email && (
-                            <Typography variant="body2" color="text.secondary">
-                              {detailedRide.ride.driver.email}
-                            </Typography>
-                          )}
+                          <Typography variant="body2" color="text.secondary">
+                            {detailedRide.ride.driver.email}
+                          </Typography>
+                          <Typography variant="body2" color="text.secondary">
+                            Phone: {detailedRide.ride.driver.phone_number}
+                          </Typography>
                         </Box>
                       </Box>
                       
-                      {detailedRide.ride.vehicle && (
-                        <Typography variant="body2" paragraph>
-                          <strong>Vehicle:</strong> {detailedRide.ride.vehicle.make} {detailedRide.ride.vehicle.model}
-                        </Typography>
+                      {detailedRide.ride.driver.vehicle_make && detailedRide.ride.driver.vehicle_model && (
+                        <Box sx={{ mt: 2 }}>
+                          <Typography variant="subtitle2" gutterBottom>
+                            Vehicle Information
+                          </Typography>
+                          <Typography variant="body2">
+                            {detailedRide.ride.driver.vehicle_make} {detailedRide.ride.driver.vehicle_model}
+                            {detailedRide.ride.driver.vehicle_year && ` (${detailedRide.ride.driver.vehicle_year})`}
+                          </Typography>
+                          {detailedRide.ride.driver.vehicle_color && (
+                            <Typography variant="body2">
+                              Color: {detailedRide.ride.driver.vehicle_color}
+                            </Typography>
+                          )}
+                          {detailedRide.ride.driver.license_plate && (
+                            <Typography variant="body2">
+                              License Plate: {detailedRide.ride.driver.license_plate}
+                            </Typography>
+                          )}
+                          {detailedRide.ride.driver.max_passengers && (
+                            <Typography variant="body2">
+                              Maximum Passengers: {detailedRide.ride.driver.max_passengers}
+                            </Typography>
+                          )}
+                        </Box>
                       )}
                     </Box>
                   )}
