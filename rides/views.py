@@ -400,7 +400,7 @@ def calculate_route_overlap(
     logger.info(f"{log_prefix}  Rider pickup: {rider_pickup}, Rider dropoff: {rider_dropoff}")
 
     # Generate driver's route
-    driver_route = generate_route(driver_start, driver_end)
+        driver_route = generate_route(driver_start, driver_end)
     if not driver_route or len(driver_route) < 2:
         logger.error(f"{log_prefix}Failed to generate driver route")
         return {
@@ -539,7 +539,7 @@ def calculate_route_overlap(
         # Calculate deviation score (0-100)
         deviation_score = max(0, 100 - min(deviation_percentage, 100))
         logger.info(f"{log_prefix}Deviation score: {deviation_score:.2f} (deviation: {deviation_percentage:.2f}%)")
-    else:
+        else:
         logger.info(f"{log_prefix}Deviation score: {deviation_score:.2f} (no optimal points)")
 
     # Calculate weighted compatibility score
@@ -695,8 +695,8 @@ def generate_route(start_coords, end_coords, max_retries=3, retry_delay=2):
 
     # Construct the API request
     url = f"{OPENROUTE_BASE_URL}/directions/driving-car"
-    headers = {
-        'Authorization': ORS_API_KEY,
+                headers = {
+                    'Authorization': ORS_API_KEY,
         'Accept': 'application/json, application/geo+json, application/gpx+xml, img/png; charset=utf-8'
     }
     params = {
@@ -712,56 +712,48 @@ def generate_route(start_coords, end_coords, max_retries=3, retry_delay=2):
 
             response = requests.get(
                 url, headers=headers, params=params, timeout=15)
-            
-            if response.status_code == 200:
-                data = response.json()
+                
+                if response.status_code == 200:
+                    data = response.json()
                 if 'features' in data and data['features']:
                     # Extract coordinates from the route
                     coordinates = data['features'][0]['geometry']['coordinates']
                     logger.info(f"Successfully generated route with {len(coordinates)} points")
                     return coordinates
                 else:
-                    logger.warning(
-                        "No features found in directions API response")
+                    logger.warning("No features found in directions API response")
                     if attempt < max_retries - 1:
                         time.sleep(retry_delay)
                         continue
             elif response.status_code == 403:
-                logger.error(
-                    "OpenRouteService API key rejected (403 Forbidden)")
+                logger.error("OpenRouteService API key rejected (403 Forbidden)")
                 return generate_fallback_route(start_coords, end_coords)
             elif response.status_code == 429:  # Rate limit
-                retry_after = int(
-                    response.headers.get('Retry-After', retry_delay))
-                logger.warning(
-                    f"Rate limited by OpenRouteService, retrying after {retry_after} seconds")
+                retry_after = int(response.headers.get('Retry-After', retry_delay))
+                logger.warning(f"Rate limited by OpenRouteService, retrying after {retry_after} seconds")
                 time.sleep(retry_after)
                 continue
             else:
-                logger.error(
-                    f"OpenRouteService API error: {response.status_code} - {response.text}")
+                logger.error(f"OpenRouteService API error: {response.status_code} - {response.text}")
                 if attempt < max_retries - 1:
                     time.sleep(retry_delay)
                     continue
-        
+            
         except requests.exceptions.RequestException as e:
             logger.error(f"Request error in generate_route: {str(e)}")
             if attempt < max_retries - 1:
                 time.sleep(retry_delay)
                 continue
-    
+        
     # If all retries failed, use fallback method
-    logger.warning(
-        "OpenRouteService APIs failed or not accessible, using straight line fallback method")
+    logger.warning("OpenRouteService APIs failed or not accessible, using straight line fallback method")
     return generate_fallback_route(start_coords, end_coords)
 
 
 def generate_fallback_route(start_coords, end_coords, num_points=10):
     """Generate a fallback route using straight line interpolation"""
-    logger.warning(
-        "IMPORTANT: Using straight line approximation which may not reflect actual roads")
-    logger.info(
-        "Using fallback route generation method (straight line with enhancements)")
+    logger.warning("IMPORTANT: Using straight line approximation which may not reflect actual roads")
+    logger.info("Using fallback route generation method (straight line with enhancements)")
 
     start_lng, start_lat = start_coords
     end_lng, end_lat = end_coords
@@ -799,9 +791,7 @@ class IsRiderOrDriver(permissions.BasePermission):
         logger.info(f"User authenticated: {request.user.is_authenticated}")
         
         if not request.user.is_authenticated:
-            logger.warning(
-    f"User {
-        request.user.username} is not authenticated")
+            logger.warning(f"User {request.user.username} is not authenticated")
             return False
             
         # For POST requests, only allow riders
@@ -825,13 +815,7 @@ class RideViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         """Get rides for the current user"""
         user = self.request.user
-        logger.info(
-    f"Getting rides for user: {
-        user.username}, type: {
-            getattr(
-                user,
-                'user_type',
-                 'unknown')}")
+        logger.info(f"Getting rides for user: {user.username}, type: {getattr(user, 'user_type', 'unknown')}")
         
         # For drivers, show only their rides
         if hasattr(user, 'user_type') and user.user_type == 'DRIVER':
@@ -839,8 +823,7 @@ class RideViewSet(viewsets.ModelViewSet):
             return Ride.objects.filter(driver=user)
         
         # For riders, show all available rides and rides they're part of
-        logger.info(
-            "User is a rider, returning available rides and rides they're part of")
+        logger.info("User is a rider, returning available rides and rides they're part of")
         return Ride.objects.filter(
             Q(status='SCHEDULED') &  # Only show scheduled rides
             Q(departure_time__gte=timezone.now()) &  # Only future rides
@@ -860,16 +843,11 @@ class RideViewSet(viewsets.ModelViewSet):
                 departure_time__gte=timezone.now()
             )
 
-            logger.info(
-    f"Checking {
-        pending_requests.count()} pending requests against available rides")
+            logger.info(f"Checking {pending_requests.count()} pending requests against available rides")
 
             # For each pending request, find the best matching ride
             for pending_request in pending_requests:
-                logger.info(
-    f"Checking pending request ID: {
-        pending_request.id} from {
-            pending_request.rider.username}")
+                logger.info(f"Checking pending request ID: {pending_request.id} from {pending_request.rider.username}")
 
                 # Get all available rides (including the new one)
                 available_rides = Ride.objects.filter(
@@ -879,10 +857,7 @@ class RideViewSet(viewsets.ModelViewSet):
                 # Rider can't match with their own ride
                 ).exclude(driver=pending_request.rider)
 
-                logger.info(
-    f"Found {
-        available_rides.count()} available rides to check for pending request {
-            pending_request.id}")
+                logger.info(f"Found {available_rides.count()} available rides to check for pending request {pending_request.id}")
 
                 # Variables to track the best match
                 best_match = None
@@ -900,9 +875,7 @@ class RideViewSet(viewsets.ModelViewSet):
                         (pending_request.dropoff_longitude,
                          pending_request.dropoff_latitude),
                         get_optimal_points=True,
-                        log_prefix=f"[Pending Request {
-    pending_request.id} - Ride {
-        ride.id}] "
+                        log_prefix=f"[Pending Request {pending_request.id} - Ride {ride.id}] "
                     )
 
                     compatibility_score = overlap_result.get(
@@ -917,17 +890,11 @@ class RideViewSet(viewsets.ModelViewSet):
                         best_match = ride
                         best_score = compatibility_score
                         best_compatibility = overlap_result
-                        logger.info(
-    f"Found better match: Ride {
-        ride.id} with score {
-            compatibility_score:.2f}")
+                        logger.info(f"Found better match: Ride {ride.id} with score {compatibility_score:.2f}")
 
                 # If we found a good match
                 if best_match and best_score >= 60:
-                    logger.info(
-    f"Found best match: Ride {
-        best_match.id} with score {
-            best_score:.2f}")
+                    logger.info(f"Found best match: Ride {best_match.id} with score {best_score:.2f}")
 
                     # Update the pending request
                     pending_request.status = 'MATCH_PROPOSED'
@@ -942,11 +909,8 @@ class RideViewSet(viewsets.ModelViewSet):
 
                     # Create notification for the rider
                     notification_message = (
-                        f"We found a potential ride match from {
-    pending_request.pickup_location} to "
-                        f"{
-    pending_request.dropoff_location} with driver {
-        best_match.driver.get_full_name()}"
+                        f"We found a potential ride match from {pending_request.pickup_location} to "
+                        f"{pending_request.dropoff_location} with driver {best_match.driver.get_full_name()}"
                     )
 
                     notification = Notification.objects.create(
@@ -956,14 +920,9 @@ class RideViewSet(viewsets.ModelViewSet):
                         pending_request=pending_request,
                         ride=best_match
                     )
-                    logger.info(
-    f"Created notification {
-        notification.id} for pending request {
-            pending_request.id}")
+                    logger.info(f"Created notification {notification.id} for pending request {pending_request.id}")
                 else:
-                    logger.info(
-    f"No suitable match found for pending request {
-        pending_request.id}")
+                    logger.info(f"No suitable match found for pending request {pending_request.id}")
 
         except Exception as e:
             logger.error(f"Error checking pending requests: {str(e)}")
@@ -1122,13 +1081,13 @@ class RideRequestViewSet(viewsets.ModelViewSet):
                 {"error": f"Error fetching accepted rides: {str(e)}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-
+            
     def create(self, request):
         serializer = self.get_serializer(data=request.data)
 
         try:
             serializer.is_valid(raise_exception=True)
-
+    
             # Debug logging
             logger.info(f"Creating ride request for user: {request.user.id} - {request.user.username}")
 
@@ -1254,7 +1213,7 @@ class RideRequestViewSet(viewsets.ModelViewSet):
                 message=f"{request.user.username} has requested to join your ride.",
                 ride_request=ride_request
             )
-
+    
             # Create map URL
             def format_coord(coord):
                 return f"{coord[1]},{coord[0]}" if isinstance(coord, tuple) else f"{coord['latitude']},{coord['longitude']}"
@@ -1302,7 +1261,7 @@ class RideRequestViewSet(viewsets.ModelViewSet):
                     'map_url': map_url
                 }
             }, status=status.HTTP_201_CREATED)
-
+    
         except Exception as e:
             logger.error(f"Failed to create ride request: {str(e)}")
             return Response({"error": f"Failed to create ride request: {str(e)}"},
@@ -1326,12 +1285,12 @@ class RideRequestViewSet(viewsets.ModelViewSet):
                 proposed_ride = pending_request.proposed_ride
                 if not proposed_ride:
                     return Response({"error": "No proposed ride found"}, status=400)
-
+                
                 # Calculate optimal points
                 optimal_pickup_point = None
                 optimal_dropoff_point = None
                 compatibility_score = 0
-                
+            
                 try:
                     driver_start = (proposed_ride.start_longitude, proposed_ride.start_latitude)
                     driver_end = (proposed_ride.end_longitude, proposed_ride.end_latitude)
