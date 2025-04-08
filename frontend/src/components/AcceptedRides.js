@@ -212,21 +212,23 @@ const AcceptedRides = () => {
   }
 
   const renderRideCard = (ride) => {
-    // Get driver details directly from the API response
-    const driverInfo = ride.driver_details || {};
+    console.log('Processing ride data in renderRideCard:', ride);
     
-    // Get ride data from either the ride object or the ride.ride object
-    const rideData = ride.ride || ride;
+    // Try to get driver details from multiple potential sources
+    const driverInfo = ride.driver_details || (ride.ride_details && ride.ride_details.driver) || {};
+    
+    // Get ride data from either the ride object or the ride.ride_details object
+    const rideData = ride.ride_details || ride.ride || {};
     
     const isDriver = userType === 'DRIVER';
-    console.log('Rendering ride card with data:', { ride, driverInfo, isDriver });
+    console.log('Rendering ride with driver info:', driverInfo);
 
     // Helper function to get full name
     const getFullName = (user) => {
       if (!user) return 'N/A';
       const firstName = user.first_name || '';
       const lastName = user.last_name || '';
-      return `${firstName} ${lastName}`.trim() || 'N/A';
+      return `${firstName} ${lastName}`.trim() || user.username || 'N/A';
     };
 
     // Format date for better display
@@ -245,9 +247,20 @@ const AcceptedRides = () => {
     // Get formatted date/time
     const dateTime = formatDateTime(rideData.departure_time || ride.departure_time);
     
-    // Determine locations
-    const startLocation = rideData.start_location || ride.pickup_location || 'N/A';
-    const endLocation = rideData.end_location || ride.dropoff_location || 'N/A';
+    // Determine locations - prioritize optimal pickup/dropoff points when available
+    const startLocation = ride.optimal_pickup_info?.address || 
+                         (ride.optimal_pickup_point && typeof ride.optimal_pickup_point === 'object' ? 
+                          ride.optimal_pickup_point.address : null) ||
+                         rideData.start_location || 
+                         ride.pickup_location || 
+                         'N/A';
+                         
+    const endLocation = ride.nearest_dropoff_info?.address || 
+                       (ride.nearest_dropoff_point && typeof ride.nearest_dropoff_point === 'object' ? 
+                        ride.nearest_dropoff_point.address : null) ||
+                       rideData.end_location || 
+                       ride.dropoff_location || 
+                       'N/A';
 
     return (
       <Card sx={{ mb: 3 }}>
