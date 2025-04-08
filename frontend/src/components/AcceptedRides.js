@@ -213,15 +213,33 @@ const AcceptedRides = () => {
 
   const renderRideCard = (ride) => {
     console.log('Processing ride data in renderRideCard:', ride);
+    console.log('Has optimal_pickup_point?', Boolean(ride.optimal_pickup_point));
+    if (ride.optimal_pickup_point) {
+      console.log('Optimal pickup value:', ride.optimal_pickup_point);
+      console.log('Type of optimal pickup:', typeof ride.optimal_pickup_point);
+    }
+    console.log('Has nearest_dropoff_point?', Boolean(ride.nearest_dropoff_point));
+    if (ride.nearest_dropoff_point) {
+      console.log('Nearest dropoff value:', ride.nearest_dropoff_point);
+      console.log('Type of nearest dropoff:', typeof ride.nearest_dropoff_point);
+    }
+    console.log('Has driver_details?', Boolean(ride.driver_details));
+    if (ride.driver_details) {
+      console.log('Driver details value:', ride.driver_details);
+    }
     
     // Try to get driver details from multiple potential sources
     const driverInfo = ride.driver_details || (ride.ride_details && ride.ride_details.driver) || {};
+    console.log('Selected driver info:', driverInfo);
     
     // Get ride data from either the ride object or the ride.ride_details object
     const rideData = ride.ride_details || ride.ride || {};
     
     const isDriver = userType === 'DRIVER';
     console.log('Rendering ride with driver info:', driverInfo);
+    
+    // Force development mode for debugging
+    const isDevelopment = true; // this would normally be process.env.NODE_ENV === 'development'
 
     // Helper function to get full name
     const getFullName = (user) => {
@@ -247,6 +265,21 @@ const AcceptedRides = () => {
     // Get formatted date/time
     const dateTime = formatDateTime(rideData.departure_time || ride.departure_time);
     
+    // Extract and debug locations
+    console.log('Building pickup location from:', {
+      optimal_pickup_info: ride.optimal_pickup_info,
+      optimal_pickup_point: ride.optimal_pickup_point,
+      ride_start: rideData.start_location,
+      pickup: ride.pickup_location
+    });
+    
+    console.log('Building dropoff location from:', {
+      nearest_dropoff_info: ride.nearest_dropoff_info,
+      nearest_dropoff_point: ride.nearest_dropoff_point,
+      ride_end: rideData.end_location,
+      dropoff: ride.dropoff_location
+    });
+    
     // Determine locations - prioritize optimal pickup/dropoff points when available
     const startLocation = ride.optimal_pickup_info?.address || 
                          (ride.optimal_pickup_point && typeof ride.optimal_pickup_point === 'object' ? 
@@ -254,13 +287,28 @@ const AcceptedRides = () => {
                          rideData.start_location || 
                          ride.pickup_location || 
                          'N/A';
+    
+    // Handle different formats of nearest_dropoff_point
+    let dropoffAddress = null;
+    if (ride.nearest_dropoff_info?.address) {
+      dropoffAddress = ride.nearest_dropoff_info.address;
+    } else if (ride.nearest_dropoff_point) {
+      if (typeof ride.nearest_dropoff_point === 'object') {
+        if (ride.nearest_dropoff_point.address) {
+          dropoffAddress = ride.nearest_dropoff_point.address;
+        } else if (ride.nearest_dropoff_point.coordinates && Array.isArray(ride.nearest_dropoff_point.coordinates)) {
+          // Format with coordinates array and possibly an address field
+          dropoffAddress = ride.nearest_dropoff_point.address || `Coordinates: ${ride.nearest_dropoff_point.coordinates.join(', ')}`;
+        }
+      }
+    }
                          
-    const endLocation = ride.nearest_dropoff_info?.address || 
-                       (ride.nearest_dropoff_point && typeof ride.nearest_dropoff_point === 'object' ? 
-                        ride.nearest_dropoff_point.address : null) ||
+    const endLocation = dropoffAddress || 
                        rideData.end_location || 
                        ride.dropoff_location || 
                        'N/A';
+    
+    console.log('Final locations:', { startLocation, endLocation });
 
     return (
       <Card sx={{ mb: 3 }}>
@@ -291,7 +339,8 @@ const AcceptedRides = () => {
               </Box>
             </Box>
 
-            {!isDriver && (
+            {/* Always show driver details during development, or when user is not a driver */}
+            {(!isDriver || isDevelopment) && (
               <Box>
                 <Typography variant="subtitle1" gutterBottom>Driver Details</Typography>
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
@@ -318,6 +367,21 @@ const AcceptedRides = () => {
                     </Typography>
                   </Box>
                 </Box>
+              </Box>
+            )}
+            
+            {/* Debug information - only visible during development */}
+            {isDevelopment && (
+              <Box sx={{ mt: 2, p: 2, bgcolor: '#f5f5f5', borderRadius: 1 }}>
+                <Typography variant="subtitle2" gutterBottom>Debug Info:</Typography>
+                <Typography variant="body2">
+                  isDriver: {String(isDriver)}<br />
+                  User Type: {userType}<br />
+                  Has driver_details: {String(Boolean(ride.driver_details))}<br />
+                  Has ride_details: {String(Boolean(ride.ride_details))}<br />
+                  Has optimal pickup: {String(Boolean(ride.optimal_pickup_point))}<br />
+                  Has nearest dropoff: {String(Boolean(ride.nearest_dropoff_point))}
+                </Typography>
               </Box>
             )}
             
