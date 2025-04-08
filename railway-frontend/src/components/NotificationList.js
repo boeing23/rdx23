@@ -19,6 +19,7 @@ import NotificationsIcon from '@mui/icons-material/Notifications';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import DirectionsCarIcon from '@mui/icons-material/DirectionsCar';
 import RefreshIcon from '@mui/icons-material/Refresh';
+import Email from '@mui/icons-material/Email';
 import { API_BASE_URL, FALLBACK_API_URL, checkApiConnection } from '../config';
 import axios from 'axios';
 
@@ -31,6 +32,8 @@ function NotificationList() {
   const [serverAvailable, setServerAvailable] = useState(true);
   const buttonRef = useRef(null);
   const open = Boolean(anchorEl);
+  const userType = localStorage.getItem('userType');
+  const isRider = userType === 'RIDER';
 
   // Get the Navbar's setUnreadCount function if available
   const syncUnreadCount = (count) => {
@@ -349,6 +352,7 @@ function NotificationList() {
       }
 
       console.log(`Accepting ride request ${rideRequestId}`);
+      setLoading(true);
       
       // Use the correct URL based on the server configuration
       const response = await fetch(`${API_BASE_URL}/api/rides/requests/${rideRequestId}/accept_match/`, {
@@ -362,7 +366,12 @@ function NotificationList() {
       if (response.ok) {
         // Refresh notifications after accepting
         fetchNotifications();
-        alert('Ride match accepted successfully!');
+        alert('Ride match accepted successfully! You can view your ride details in the "My Trips" section.');
+        
+        // Redirect to the accepted rides page
+        setTimeout(() => {
+          window.location.href = '/accepted-rides';
+        }, 1500);
       } else {
         console.error('Error response status:', response.status);
         console.error('Error response URL:', response.url);
@@ -371,15 +380,24 @@ function NotificationList() {
         try {
           const errorText = await response.text();
           console.error('Error response body:', errorText);
+          
+          if (response.status === 400 && errorText.includes('already accepted')) {
+            alert('This ride match has already been accepted.');
+          } else if (response.status === 404) {
+            alert('This ride request was not found or has been cancelled.');
+          } else {
+            alert('Failed to accept ride match. Please try again later.');
+          }
         } catch (e) {
           console.error('Could not parse error response:', e);
+          alert('Failed to accept ride match. Please try again later.');
         }
-        
-        alert('Failed to accept ride match. Please check the console for details.');
       }
     } catch (error) {
       console.error('Error accepting ride match:', error);
-      alert('Network error while accepting ride match');
+      alert('Network error while accepting ride match. Please check your connection and try again.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -437,9 +455,14 @@ function NotificationList() {
 
       console.log('Checking notification for Accept button:', notification.id, notification.notification_type);
       
+      // Only show accept buttons for riders, not drivers
+      if (!isRider) {
+        console.log('User is not a rider - not showing accept button');
+        return null;
+      }
+      
       // Check if notification is a ride match notification and has ride_request data
-      if (notification.notification_type === 'RIDE_MATCH' || 
-          notification.notification_type === 'REQUEST_ACCEPTED') {
+      if (notification.notification_type === 'RIDE_MATCH') {
         console.log(`Found ${notification.notification_type} notification:`, notification.id);
         
         // Use direct ID access - if ride_request is a number/string ID rather than an object
@@ -450,16 +473,17 @@ function NotificationList() {
         if (rideRequestId) {
           console.log(`Rendering Accept button for ride request ${rideRequestId}`);
           return (
-            <Button
-              variant="contained"
-              color="primary"
-              size="small"
-              startIcon={<DirectionsCarIcon />}
-              onClick={() => handleAcceptRideMatch(rideRequestId)}
-              sx={{ ml: 1, mt: 1 }}
-            >
-              Accept Ride
-            </Button>
+            <Box sx={{ mt: 1, display: 'flex', justifyContent: 'flex-end', width: '100%' }}>
+              <Button
+                variant="contained"
+                color="primary"
+                size="small"
+                startIcon={<DirectionsCarIcon />}
+                onClick={() => handleAcceptRideMatch(rideRequestId)}
+              >
+                Accept Ride Match
+              </Button>
+            </Box>
           );
         } else {
           console.warn(`${notification.notification_type} notification missing ride_request data:`, notification);
@@ -542,6 +566,18 @@ function NotificationList() {
             <span style={{ fontWeight: 'bold', color: '#861F41' }}>Optimal Pickup: {optimalPickupInfo}<br /></span>
             Departure: {ride ? formatDateTime(ride.departure_time) : 'Not specified'}
           </Typography>
+          
+          {/* Email Button */}
+          <Box sx={{ mt: 2, display: 'flex', justifyContent: 'flex-end' }}>
+            <Button
+              variant="outlined"
+              size="small"
+              startIcon={<Email />}
+              onClick={() => requestEmailNotification(notification.id)}
+            >
+              Send to Email
+            </Button>
+          </Box>
         </Box>
       );
     } catch (error) {
@@ -704,6 +740,37 @@ function NotificationList() {
       setUnreadCount(0);
       setLoading(false);
       setError('Notifications are temporarily unavailable. Please try again later.');
+    }
+  };
+
+  // Function to request an email notification for a specific ride match
+  const requestEmailNotification = async (notificationId) => {
+    try {
+      console.log(`Requesting email notification for notification ID: ${notificationId}`);
+      const token = getToken();
+      
+      if (!token) {
+        console.error('No authentication token found');
+        return;
+      }
+      
+      const response = await fetch(`${API_BASE_URL}/api/rides/notifications/${notificationId}/send_email/`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (response.ok) {
+        alert('Email notification has been sent to your registered email address.');
+      } else {
+        console.error('Failed to send email notification:', response.status);
+        alert('Failed to send email notification. Please try again later.');
+      }
+    } catch (err) {
+      console.error('Error requesting email notification:', err);
+      alert('Error sending email notification. Please check your connection and try again.');
     }
   };
 

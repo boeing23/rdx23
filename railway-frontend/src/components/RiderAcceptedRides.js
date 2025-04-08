@@ -31,6 +31,17 @@ import axios from 'axios';
 import { useAuth } from '../contexts/AuthContext';
 import { Link } from 'react-router-dom';
 import './RideTablet.css';
+import { MapContainer, TileLayer, Marker, Popup, Polyline } from 'react-leaflet';
+import 'leaflet/dist/leaflet.css';
+import L from 'leaflet';
+
+// Fix Leaflet marker icon issues
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon-2x.png',
+  iconUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon.png',
+  shadowUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-shadow.png'
+});
 
 // Replace with web components
 import { View, Text, FlatList, StyleSheet, TouchableOpacity } from 'react-native-web';
@@ -1017,6 +1028,49 @@ const RiderAcceptedRides = () => {
                   )}
                 </Box>
               </>
+            )}
+            
+            {/* Route Map */}
+            {(ride.optimal_pickup_point && ride.nearest_dropoff_point) && (
+              <Box sx={{ mt: 2, height: '200px', width: '100%', border: '1px solid #ccc', borderRadius: '4px', overflow: 'hidden' }}>
+                <MapContainer 
+                  center={[
+                    (ride.optimal_pickup_point.latitude + ride.nearest_dropoff_point.latitude) / 2,
+                    (ride.optimal_pickup_point.longitude + ride.nearest_dropoff_point.longitude) / 2
+                  ]} 
+                  zoom={13} 
+                  style={{ height: '100%', width: '100%' }}
+                >
+                  <TileLayer
+                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                  />
+                  {ride.optimal_pickup_point && (
+                    <Marker 
+                      position={[ride.optimal_pickup_point.latitude, ride.optimal_pickup_point.longitude]}
+                    >
+                      <Popup>Pickup: {ride.optimal_pickup_point.address || ride.pickup_location}</Popup>
+                    </Marker>
+                  )}
+                  {ride.nearest_dropoff_point && (
+                    <Marker 
+                      position={[ride.nearest_dropoff_point.latitude, ride.nearest_dropoff_point.longitude]}
+                    >
+                      <Popup>Dropoff: {ride.nearest_dropoff_point.address || ride.dropoff_location}</Popup>
+                    </Marker>
+                  )}
+                  {(ride.optimal_pickup_point && ride.nearest_dropoff_point) && (
+                    <Polyline 
+                      positions={[
+                        [ride.optimal_pickup_point.latitude, ride.optimal_pickup_point.longitude],
+                        [ride.nearest_dropoff_point.latitude, ride.nearest_dropoff_point.longitude]
+                      ]}
+                      color="#861F41"
+                      weight={4}
+                    />
+                  )}
+                </MapContainer>
+              </Box>
             )}
             
             <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 2 }}>

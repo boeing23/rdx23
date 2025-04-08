@@ -25,6 +25,17 @@ import {
 import { Schedule, LocationOn, Person, Phone, Email, Event, AccessTime, Cancel, CheckCircle, DirectionsCar, Refresh } from '@mui/icons-material';
 import { API_BASE_URL } from '../config';
 import { format } from 'date-fns';
+import { MapContainer, TileLayer, Marker, Popup, Polyline } from 'react-leaflet';
+import 'leaflet/dist/leaflet.css';
+import L from 'leaflet';
+
+// Fix Leaflet marker icon issues
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon-2x.png',
+  iconUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon.png',
+  shadowUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-shadow.png'
+});
 
 const DriverAcceptedRides = () => {
   const [acceptedRides, setAcceptedRides] = useState([]);
@@ -492,6 +503,67 @@ const DriverAcceptedRides = () => {
                       <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
                         <Schedule sx={{ mr: 1 }} />
                         <Typography>Seats: {selectedRide.seats_needed}</Typography>
+                      </Box>
+                    </Grid>
+
+                    {/* Add Route Map */}
+                    <Grid item xs={12}>
+                      <Typography variant="subtitle1" gutterBottom>
+                        Route Map
+                      </Typography>
+                      <Box sx={{ height: '250px', width: '100%', border: '1px solid #ccc', borderRadius: '4px', overflow: 'hidden' }}>
+                        {(() => {
+                          // Extract coordinates from addresses or use fallback coordinates
+                          // For demonstration, using Virginia Tech coordinates as fallback
+                          const pickupCoords = [37.2284, -80.4234]; // Fallback to Virginia Tech
+                          const dropoffCoords = [37.2384, -80.4134]; // Slightly offset for demo
+                          
+                          try {
+                            // Try to extract coordinates from pickup_location if it contains lat,lng format
+                            const pickupMatch = selectedRide.pickup_location.match(/\(?\s*(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)\s*\)?/);
+                            if (pickupMatch) {
+                              pickupCoords[0] = parseFloat(pickupMatch[1]);
+                              pickupCoords[1] = parseFloat(pickupMatch[2]);
+                            }
+                            
+                            // Try to extract coordinates from dropoff_location if it contains lat,lng format
+                            const dropoffMatch = selectedRide.dropoff_location.match(/\(?\s*(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)\s*\)?/);
+                            if (dropoffMatch) {
+                              dropoffCoords[0] = parseFloat(dropoffMatch[1]);
+                              dropoffCoords[1] = parseFloat(dropoffMatch[2]);
+                            }
+                          } catch (e) {
+                            console.error("Error parsing coordinates:", e);
+                          }
+                          
+                          // Calculate center position
+                          const centerLat = (pickupCoords[0] + dropoffCoords[0]) / 2;
+                          const centerLng = (pickupCoords[1] + dropoffCoords[1]) / 2;
+                          
+                          return (
+                            <MapContainer 
+                              center={[centerLat, centerLng]} 
+                              zoom={13} 
+                              style={{ height: '100%', width: '100%' }}
+                            >
+                              <TileLayer
+                                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                              />
+                              <Marker position={pickupCoords}>
+                                <Popup>Pickup: {selectedRide.pickup_location}</Popup>
+                              </Marker>
+                              <Marker position={dropoffCoords}>
+                                <Popup>Dropoff: {selectedRide.dropoff_location}</Popup>
+                              </Marker>
+                              <Polyline 
+                                positions={[pickupCoords, dropoffCoords]}
+                                color="#861F41"
+                                weight={4}
+                              />
+                            </MapContainer>
+                          );
+                        })()}
                       </Box>
                     </Grid>
                   </Grid>
