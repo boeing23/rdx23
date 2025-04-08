@@ -181,19 +181,19 @@ const RiderAcceptedRides = () => {
           return {
             id: ride.id || `temp-${Math.random().toString(36).substring(2, 9)}`,
             status: ride.status || 'PENDING',
-            ride_id: ride.ride_id || null,
+            ride_id: ride.ride_id || (ride.ride && ride.ride.id) || null,
             pickup_location: ride.pickup_location || 'Unknown location',
             dropoff_location: ride.dropoff_location || 'Unknown location',
             departure_time: ride.departure_time || new Date().toISOString(),
             seats_needed: ride.seats_needed || 1,
-            ride_details: null, // Not available in this format
+            ride_details: ride.ride || null, // Store the ride details
             // Extract coordinates from the API response
             pickup_latitude: ride.pickup_latitude || null,
             pickup_longitude: ride.pickup_longitude || null,
             dropoff_latitude: ride.dropoff_latitude || null,
             dropoff_longitude: ride.dropoff_longitude || null,
             driver: {
-              id: ride.driver_id || null,
+              id: ride.driver_id || (ride.ride && ride.ride.driver) || null,
               first_name: firstName,
               last_name: lastName,
               full_name: ride.driver_name || 'Unknown Driver',
@@ -229,8 +229,20 @@ const RiderAcceptedRides = () => {
       
       // Get the user IDs of all drivers
       const driverIds = mappedRides
-        .filter(ride => ride.driver && ride.driver.id)
-        .map(ride => ride.driver.id);
+        .filter(ride => {
+          // Log each ride's driver info for debugging
+          console.log(`Ride ${ride.id} driver info:`, {
+            driver_obj: ride.driver,
+            driver_id: ride.driver?.id,
+            ride_obj: ride.ride,
+            ride_driver_id: ride.ride?.driver
+          });
+          
+          // Check both possible locations for driver ID
+          return (ride.driver && ride.driver.id) || (ride.ride && ride.ride.driver);
+        })
+        .map(ride => ride.driver?.id || ride.ride?.driver)
+        .filter(id => id !== null && id !== undefined);
       
       console.log('Driver IDs to fetch:', driverIds);
       

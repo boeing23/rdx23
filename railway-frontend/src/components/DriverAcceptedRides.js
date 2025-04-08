@@ -148,6 +148,14 @@ const DriverAcceptedRides = () => {
         
         // Process rides to ensure coordinate fields are properly mapped
         const processedRides = data.map(ride => {
+          // Log the ride data structure to debug driver info
+          console.log(`Processing ride ${ride.id}:`, {
+            ride_driver: ride.ride?.driver,
+            driver_field: ride.driver,
+            driver_id_field: ride.driver_id,
+            has_rider: !!ride.rider
+          });
+          
           // Return a new object with all existing properties plus any needed mapping
           return {
             ...ride,
@@ -155,7 +163,9 @@ const DriverAcceptedRides = () => {
             pickup_latitude: ride.pickup_latitude || (ride.optimal_pickup_point ? ride.optimal_pickup_point.latitude : null),
             pickup_longitude: ride.pickup_longitude || (ride.optimal_pickup_point ? ride.optimal_pickup_point.longitude : null),
             dropoff_latitude: ride.dropoff_latitude || (ride.nearest_dropoff_point ? ride.nearest_dropoff_point.latitude : null),
-            dropoff_longitude: ride.dropoff_longitude || (ride.nearest_dropoff_point ? ride.nearest_dropoff_point.longitude : null)
+            dropoff_longitude: ride.dropoff_longitude || (ride.nearest_dropoff_point ? ride.nearest_dropoff_point.longitude : null),
+            // Ensure driver data is properly mapped
+            driver_id: ride.driver_id || (ride.ride && ride.ride.driver) || null
           };
         });
         
@@ -211,6 +221,9 @@ const DriverAcceptedRides = () => {
       dropoff_latitude: ride.dropoff_latitude,
       dropoff_longitude: ride.dropoff_longitude,
       rider: ride.rider,
+      ride_object: ride.ride,
+      ride_driver_id: ride.ride?.driver,
+      direct_driver_id: ride.driver_id,
       all_keys: Object.keys(ride)
     });
     setSelectedRide(ride);
