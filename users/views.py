@@ -203,10 +203,18 @@ def login_user(request):
         logger.info(f"User type: {user.user_type}")
         
         refresh = RefreshToken.for_user(user)
+        access_token = str(refresh.access_token)
+        
+        # Return response in the format expected by the frontend
         return Response({
-            'token': str(refresh.access_token),
+            'token': access_token,
             'user_type': user.user_type,
-            'user': UserSerializer(user).data
+            'user': {
+                'id': user.id,
+                'username': user.username,
+                'email': user.email,
+                'user_type': user.user_type
+            }
         })
     else:
         return Response(

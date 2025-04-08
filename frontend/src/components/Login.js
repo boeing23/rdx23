@@ -74,7 +74,7 @@ function Login() {
     setDebugInfo('Login attempt started...');
 
     try {
-      console.log('Login attempt with:', { email: formData.username, password: '***' });
+      console.log('Login attempt with:', { username: formData.username });
       setDebugInfo(prev => prev + `\nLogin attempt with username: ${formData.username}`);
       
       const loginUrl = `${API_BASE_URL}/api/users/login/`;
@@ -97,8 +97,8 @@ function Login() {
       setDebugInfo(prev => prev + `\nLogin response status: ${response.status}`);
       
       const data = await response.json();
-      console.log('Login response data:', Object.keys(data));
-      setDebugInfo(prev => prev + `\nLogin response keys: ${Object.keys(data).join(', ')}`);
+      console.log('Login response data:', data);
+      setDebugInfo(prev => prev + `\nLogin response data: ${JSON.stringify(data)}`);
 
       if (!response.ok) {
         setDebugInfo(prev => prev + `\nError response: ${JSON.stringify(data)}`);
