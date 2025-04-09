@@ -149,10 +149,10 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True)
     vehicle_make = serializers.CharField(required=False, allow_blank=True)
     vehicle_model = serializers.CharField(required=False, allow_blank=True)
-    vehicle_year = serializers.IntegerField(required=False, allow_null=True)
+    vehicle_year = serializers.CharField(required=False, allow_blank=True)
     vehicle_color = serializers.CharField(required=False, allow_blank=True)
     license_plate = serializers.CharField(required=False, allow_blank=True)
-    max_passengers = serializers.IntegerField(required=False, allow_null=True)
+    max_passengers = serializers.CharField(required=False, allow_blank=True)
     
     class Meta:
         model = User
@@ -165,6 +165,13 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
         ]
     
     def validate(self, data):
+        # Convert empty strings for numeric fields to None
+        if 'vehicle_year' in data and data['vehicle_year'] == '':
+            data['vehicle_year'] = None
+        
+        if 'max_passengers' in data and data['max_passengers'] == '':
+            data['max_passengers'] = None
+        
         # Only validate vehicle fields if user is a driver
         if data.get('user_type') == 'DRIVER':
             required_fields = ['vehicle_make', 'vehicle_model', 'vehicle_year', 
@@ -175,25 +182,39 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
                     "driver_fields": f"Missing required fields for driver registration: {', '.join(missing_fields)}"
                 })
             
-            # Validate max_passengers is between 1 and 8
-            if not (1 <= data.get('max_passengers', 0) <= 8):
+            # Convert and validate max_passengers as an integer
+            try:
+                if data.get('max_passengers'):
+                    max_pass = int(data['max_passengers'])
+                    if not (1 <= max_pass <= 8):
+                        raise serializers.ValidationError({
+                            "max_passengers": "Maximum passengers must be between 1 and 8"
+                        })
+                    data['max_passengers'] = max_pass  # Store as int
+            except (ValueError, TypeError):
                 raise serializers.ValidationError({
-                    "max_passengers": "Maximum passengers must be between 1 and 8"
+                    "max_passengers": "Please enter a valid number for maximum passengers"
                 })
             
-            # Validate vehicle_year is reasonable
-            vehicle_year = data.get('vehicle_year')
-            if vehicle_year and (vehicle_year < 1900 or vehicle_year > 2025):
+            # Convert and validate vehicle_year as an integer
+            try:
+                if data.get('vehicle_year'):
+                    year = int(data['vehicle_year'])
+                    if year < 1900 or year > 2025:
+                        raise serializers.ValidationError({
+                            "vehicle_year": "Please enter a valid vehicle year"
+                        })
+                    data['vehicle_year'] = year  # Store as int
+            except (ValueError, TypeError):
                 raise serializers.ValidationError({
-                    "vehicle_year": "Please enter a valid vehicle year"
+                    "vehicle_year": "Please enter a valid year"
                 })
         elif data.get('user_type') == 'RIDER':
-            # For riders, remove any vehicle-related fields
+            # For riders, explicitly set all vehicle-related fields to None
             vehicle_fields = ['vehicle_make', 'vehicle_model', 'vehicle_year', 
                            'vehicle_color', 'license_plate', 'max_passengers']
             for field in vehicle_fields:
-                if field in data:
-                    data[field] = None
+                data[field] = None
         
         return data
     
