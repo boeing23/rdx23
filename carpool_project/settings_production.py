@@ -88,6 +88,15 @@ try:
     if 'HOST' in DATABASES['default']:
         print(f"Database host: {DATABASES['default']['HOST']}", file=sys.stderr)
     
+    # Import and use our enhanced database connection helper
+    try:
+        from .database_helpers import update_database_settings
+        DATABASES = update_database_settings(DATABASES)
+        print("Enhanced database connection parameters applied", file=sys.stderr)
+    except Exception as e:
+        print(f"Failed to apply enhanced database parameters: {e}", file=sys.stderr)
+        print(traceback.format_exc(), file=sys.stderr)
+
 except Exception as e:
     print(f"ERROR configuring database: {e}", file=sys.stderr)
     print(f"Traceback: {traceback.format_exc()}", file=sys.stderr)
