@@ -27,13 +27,16 @@ class UserSerializer(serializers.ModelSerializer):
         # Log what fields are available for debugging
         logger.info(f"Serializing user {instance.id} with fields: {list(data.keys())}")
         
-        # For RIDER users, ensure vehicle fields are null, not empty strings
+        # For RIDER users, ensure vehicle fields are empty strings or zeros, not null
         if instance.user_type == 'RIDER':
-            # Set vehicle fields to null for riders
-            vehicle_fields = ['vehicle_make', 'vehicle_model', 'vehicle_year', 
-                            'vehicle_color', 'license_plate', 'max_passengers']
-            for field in vehicle_fields:
-                data[field] = None
+            # Set string vehicle fields to empty strings
+            vehicle_string_fields = ['vehicle_make', 'vehicle_model', 'vehicle_color', 'license_plate']
+            for field in vehicle_string_fields:
+                data[field] = ''
+            
+            # Set numeric vehicle fields to 0
+            data['vehicle_year'] = 0
+            data['max_passengers'] = 0
         # Log vehicle details specifically for drivers
         elif instance.user_type == 'DRIVER':
             logger.info(f"Driver vehicle details - Make: {instance.vehicle_make}, Model: {instance.vehicle_model}")
@@ -131,12 +134,14 @@ class UserSerializer(serializers.ModelSerializer):
             password = validated_data.pop('password')
             instance.set_password(password)
         
-        # For riders, remove any vehicle-related fields to prevent validation errors
+        # For riders, set vehicle fields to empty strings or zeros instead of removing them
         if instance.user_type == 'RIDER':
-            vehicle_fields = ['vehicle_make', 'vehicle_model', 'vehicle_year', 
-                            'vehicle_color', 'license_plate', 'max_passengers']
-            for field in vehicle_fields:
-                validated_data.pop(field, None)
+            vehicle_string_fields = ['vehicle_make', 'vehicle_model', 'vehicle_color', 'license_plate']
+            for field in vehicle_string_fields:
+                validated_data[field] = ''
+            
+            validated_data['vehicle_year'] = 0
+            validated_data['max_passengers'] = 0
         
         # Update other fields
         for attr, value in validated_data.items():
@@ -165,7 +170,8 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
         ]
     
     def validate(self, data):
-        # Convert empty strings for numeric fields to None
+        # Convert empty strings for numeric fields to None for validation purposes
+        # but we'll convert back to empty strings before saving for RIDER accounts
         if 'vehicle_year' in data and data['vehicle_year'] == '':
             data['vehicle_year'] = None
         
@@ -210,11 +216,15 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
                     "vehicle_year": "Please enter a valid year"
                 })
         elif data.get('user_type') == 'RIDER':
-            # For riders, explicitly set all vehicle-related fields to None
-            vehicle_fields = ['vehicle_make', 'vehicle_model', 'vehicle_year', 
-                           'vehicle_color', 'license_plate', 'max_passengers']
+            # For riders, set vehicle fields to empty strings instead of null
+            # This works around database NOT NULL constraints
+            vehicle_fields = ['vehicle_make', 'vehicle_model', 'vehicle_color', 'license_plate']
             for field in vehicle_fields:
-                data[field] = None
+                data[field] = ''
+            
+            # For numeric fields, use 0 instead of null
+            data['vehicle_year'] = 0  # Use 0 as a placeholder
+            data['max_passengers'] = 0  # Use 0 as a placeholder
         
         return data
     
