@@ -122,6 +122,8 @@ urlpatterns = [
     path('api/rides/', include('rides.urls')),
     # Add the railway status endpoint
     path('railway-status/', status_check, name='railway_status'),
+    # Add health check at root level for Railway
+    path('health/', include('rides.urls')),
     path('api/check_driver_name/', check_driver_name_field),
     path('api/cors-check/', cors_preflight_check, name='cors-check'),
     path('', TemplateView.as_view(template_name='index.html')),

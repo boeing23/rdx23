@@ -1,7 +1,7 @@
 from django.shortcuts import render, get_object_or_404
 from rest_framework import viewsets, permissions, status
 from rest_framework.permissions import IsAuthenticated
-from rest_framework.decorators import action
+from rest_framework.decorators import action, api_view
 from rest_framework.response import Response
 from django.db.models import Q
 from datetime import datetime, timedelta
@@ -47,6 +47,10 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 from django.views.generic import ListView, DetailView, CreateView, UpdateView, DeleteView
 from django.db import connection
+
+# Import additional modules for health check
+import psutil
+import gc
 
 logger = logging.getLogger(__name__)
 
@@ -1698,17 +1702,64 @@ class NotificationViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        return Notification.objects.filter(recipient=self.request.user).order_by('-created_at')
+        """
+        Return notifications for the requesting user, with pagination and optimized query.
+        Limit to most recent 50 notifications by default to prevent memory issues.
+        """
+        # Get the limit parameter, default to 50
+        limit = self.request.query_params.get('limit', 50)
+        try:
+            limit = int(limit)
+            # Cap at reasonable maximum to prevent memory issues
+            if limit > 100:
+                limit = 100
+        except (ValueError, TypeError):
+            limit = 50
+            
+        # Use select_related to optimize queries for related models
+        return Notification.objects.filter(
+            recipient=self.request.user
+        ).select_related(
+            'sender', 'ride', 'ride_request'
+        ).order_by(
+            '-created_at'
+        )[:limit]
+        
+    def list(self, request, *args, **kwargs):
+        """
+        Override list to add memory usage information and count of unread notifications.
+        """
+        queryset = self.filter_queryset(self.get_queryset())
+        
+        # Count unread notifications in a separate optimized query
+        unread_count = Notification.objects.filter(
+            recipient=request.user, is_read=False
+        ).count()
+        
+        # Standard serialization with pagination
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            response = self.get_paginated_response(serializer.data)
+            response.data['unread_count'] = unread_count
+            return response
+            
+        serializer = self.get_serializer(queryset, many=True)
+        return Response({
+            'results': serializer.data,
+            'unread_count': unread_count
+        })
 
     @action(detail=True, methods=['post'])
     def mark_as_read(self, request, pk=None):
         notification = self.get_object()
         notification.is_read = True
-        notification.save()
+        notification.save(update_fields=['is_read'])  # Only update the is_read field
         return Response({"status": "success"})
 
     @action(detail=False, methods=['post'])
     def mark_all_as_read(self, request):
+        # Use update method for efficiency instead of loading all objects
         self.get_queryset().update(is_read=True)
         return Response({"status": "success"})
 
@@ -2012,3 +2063,60 @@ def ensure_driver_name_field():
 
 # Comment out the call to ensure_driver_name_field to prevent it from running
 # ensure_driver_name_field()
+
+@api_view(['GET'])
+def health_check(request):
+    """
+    Health check endpoint to monitor application status.
+    Returns memory usage, database connection status, and other health metrics.
+    """
+    start_time = time.time()
+    
+    # Check memory usage
+    memory_info = psutil.virtual_memory()
+    memory_usage = {
+        "total_memory_mb": memory_info.total / (1024 * 1024),
+        "available_memory_mb": memory_info.available / (1024 * 1024),
+        "memory_percent_used": memory_info.percent,
+    }
+    
+    # Check database connection
+    db_status = "healthy"
+    db_response_time = 0
+    try:
+        db_check_start = time.time()
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT 1")
+            cursor.fetchone()
+        db_response_time = time.time() - db_check_start
+    except Exception as e:
+        db_status = f"error: {str(e)}"
+    
+    # Check garbage collection
+    gc_counts = gc.get_count()
+    
+    # Get process info
+    process = psutil.Process()
+    process_memory = process.memory_info()
+    
+    # Calculate response time
+    response_time = time.time() - start_time
+    
+    return Response({
+        "status": "healthy",
+        "timestamp": time.time(),
+        "memory": memory_usage,
+        "database": {
+            "status": db_status,
+            "response_time_seconds": db_response_time
+        },
+        "process": {
+            "memory_rss_mb": process_memory.rss / (1024 * 1024),
+            "memory_vms_mb": process_memory.vms / (1024 * 1024),
+            "cpu_percent": process.cpu_percent(interval=0.1)
+        },
+        "gc": {
+            "counts": gc_counts,
+        },
+        "response_time_seconds": response_time
+    })

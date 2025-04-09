@@ -1,6 +1,6 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from .views import RideViewSet, RideRequestViewSet, NotificationViewSet
+from .views import RideViewSet, RideRequestViewSet, NotificationViewSet, health_check
 
 router = DefaultRouter()
 router.register(r'rides', RideViewSet, basename='ride')
@@ -9,4 +9,5 @@ router.register(r'notifications', NotificationViewSet, basename='notification')
 
 urlpatterns = [
     path('', include(router.urls)),
+    path('health/', health_check, name='health-check'),
 ] 
