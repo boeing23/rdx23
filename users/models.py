@@ -20,11 +20,11 @@ class User(AbstractUser):
     emergency_phone = models.CharField(max_length=15, blank=True)
 
     # Driver specific fields
-    vehicle_make = models.CharField(max_length=50, blank=True)
-    vehicle_model = models.CharField(max_length=50, blank=True)
+    vehicle_make = models.CharField(max_length=50, null=True, blank=True)
+    vehicle_model = models.CharField(max_length=50, null=True, blank=True)
     vehicle_year = models.IntegerField(null=True, blank=True)
-    vehicle_color = models.CharField(max_length=30, blank=True)
-    license_plate = models.CharField(max_length=15, blank=True)
+    vehicle_color = models.CharField(max_length=30, null=True, blank=True)
+    license_plate = models.CharField(max_length=15, null=True, blank=True)
     max_passengers = models.IntegerField(
         null=True,
         blank=True,
