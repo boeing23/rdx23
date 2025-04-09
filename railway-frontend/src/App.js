@@ -16,14 +16,15 @@ import DriverAcceptedRides from './components/DriverAcceptedRides';
 import RiderAcceptedRides from './components/RiderAcceptedRides';
 import UserProfile from './components/UserProfile';
 import AuthPage from './components/AuthPage';
-import { AuthProvider } from './contexts/AuthContext';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
 import './App.css';
 
 function Home() {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const location = useLocation();
-  const isAuthenticated = localStorage.getItem('token');
+  const { authState } = useAuth();
+  const isAuthenticated = authState.isAuthenticated;
   const isLandingPage = location.pathname === '/';
   const showAsFullPage = isLandingPage && !isAuthenticated;
 
@@ -143,31 +144,12 @@ function AppContent() {
   const location = useLocation();
   const isLandingPage = location.pathname === '/';
   
-  // Check token directly for now, but we'll improve this
-  const isAuthenticated = localStorage.getItem('token');
-  const userTypeString = localStorage.getItem('userType');
-  let userType = null;
+  // Use the Auth context instead of directly accessing localStorage
+  const { authState } = useAuth();
+  const isAuthenticated = authState.isAuthenticated;
   
-  try {
-    if (userTypeString) {
-      // Check if userType is already an object that was stringified incorrectly
-      if (userTypeString === "[object Object]") {
-        console.warn("Found invalid userType format in localStorage");
-        userType = "RIDER"; // Default fallback
-      } else {
-        // Try to parse, but handle errors gracefully
-        try {
-          userType = JSON.parse(userTypeString);
-        } catch (e) {
-          console.warn("Error parsing userType:", e);
-          userType = userTypeString; // Just use the string value
-        }
-      }
-    }
-  } catch (e) {
-    console.error('Error processing user type:', e);
-    userType = userTypeString;
-  }
+  // Get user type from auth context
+  const userType = authState.user?.user_type || '';
   
   // Don't show navbar on landing page for non-authenticated users
   const showNavbar = isAuthenticated || !isLandingPage;
