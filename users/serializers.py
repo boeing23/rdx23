@@ -144,6 +144,32 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
             'max_passengers'
         ]
     
+    def validate(self, data):
+        # Only validate vehicle fields if user is a driver
+        if data.get('user_type') == 'DRIVER':
+            required_fields = ['vehicle_make', 'vehicle_model', 'vehicle_year', 
+                             'vehicle_color', 'license_plate', 'max_passengers']
+            missing_fields = [field for field in required_fields if not data.get(field)]
+            if missing_fields:
+                raise serializers.ValidationError({
+                    "driver_fields": f"Missing required fields for driver registration: {', '.join(missing_fields)}"
+                })
+            
+            # Validate max_passengers is between 1 and 8
+            if not (1 <= data.get('max_passengers', 0) <= 8):
+                raise serializers.ValidationError({
+                    "max_passengers": "Maximum passengers must be between 1 and 8"
+                })
+            
+            # Validate vehicle_year is reasonable
+            vehicle_year = data.get('vehicle_year')
+            if vehicle_year and (vehicle_year < 1900 or vehicle_year > 2025):
+                raise serializers.ValidationError({
+                    "vehicle_year": "Please enter a valid vehicle year"
+                })
+        
+        return data
+    
     def create(self, validated_data):
         password = validated_data.pop('password')
         user = User.objects.create(**validated_data)
