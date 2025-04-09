@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Ride, RideRequest, Notification, RideReview
+from .models import Ride, RideRequest, Notification
 from django.contrib.auth import get_user_model
 import logging
 from django.utils import timezone
