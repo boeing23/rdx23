@@ -187,6 +187,13 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError({
                     "vehicle_year": "Please enter a valid vehicle year"
                 })
+        elif data.get('user_type') == 'RIDER':
+            # For riders, remove any vehicle-related fields
+            vehicle_fields = ['vehicle_make', 'vehicle_model', 'vehicle_year', 
+                           'vehicle_color', 'license_plate', 'max_passengers']
+            for field in vehicle_fields:
+                if field in data:
+                    data[field] = None
         
         return data
     

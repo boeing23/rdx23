@@ -211,7 +211,8 @@ def register_user(request):
         logger.info("Registration request received with data type: %s", type(request.data))
         logger.info("Registration request data: %s", request.data)
         
-        serializer = UserSerializer(data=request.data)
+        # Use UserRegistrationSerializer which handles vehicle fields correctly
+        serializer = UserRegistrationSerializer(data=request.data)
         if serializer.is_valid():
             logger.info("Registration data is valid")
             user = serializer.save()
