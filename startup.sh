@@ -24,6 +24,56 @@ if [ -z "$DATABASE_URL" ]; then
   echo "WARNING: DATABASE_URL is not set - this will cause connection issues"
 else
   echo "DATABASE_URL is set (contents not shown for security)"
+  
+  # Parse DATABASE_URL to get host and port
+  DB_HOST=$(echo $DATABASE_URL | sed -n 's/.*@\([^:]*\).*/\1/p')
+  echo "Database host: $DB_HOST"
+  
+  # Try to resolve the hostname
+  echo "Trying to resolve database hostname..."
+  if host $DB_HOST 2>/dev/null; then
+    echo "✅ Database hostname resolution successful"
+  else
+    echo "⚠️ Failed to resolve database hostname: $DB_HOST"
+    echo "This might cause connection issues. Adding entry to /etc/hosts..."
+    
+    # If this is postgres.railway.internal, add it to hosts file
+    if [[ "$DB_HOST" == "postgres.railway.internal" ]]; then
+      echo "Adding postgres.railway.internal to /etc/hosts..."
+      echo "127.0.0.1 postgres.railway.internal" >> /etc/hosts
+      echo "Added postgres.railway.internal to /etc/hosts"
+    fi
+  fi
+  
+  # Check if we can connect to the database
+  echo "Testing database connection..."
+  python -c "
+import os, sys, time, django
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'carpool_project.settings_production')
+
+# Try multiple times to connect
+max_retries = 5
+retry_delay = 3
+
+for attempt in range(max_retries):
+    try:
+        print(f'Database connection attempt {attempt+1}/{max_retries}')
+        django.setup()
+        from django.db import connections
+        connections['default'].ensure_connection()
+        print('✅ Database connection successful')
+        sys.exit(0)
+    except Exception as e:
+        print(f'❌ Database connection failed: {str(e)}')
+        if attempt < max_retries - 1:
+            print(f'Retrying in {retry_delay} seconds...')
+            time.sleep(retry_delay)
+            retry_delay *= 1.5  # Exponential backoff
+        else:
+            print('All connection attempts failed')
+            # Continue anyway
+            sys.exit(0)
+" || echo "Database connection test failed but continuing"
 fi
 
 # Try Django check but don't fail if it errors
@@ -33,53 +83,26 @@ python manage.py check || echo "Django check failed but continuing"
 # Try to get Django version
 python -c "import django; print(f'Django version: {django.__version__}')" || echo "Failed to get Django version"
 
-# Test direct connection to the app
-echo "=== TESTING ROOT ENDPOINT ==="
-(curl -v --max-time 5 http://localhost:${PORT:-8000}/ || echo "Failed to connect to localhost") &
-sleep 5
-echo "Root endpoint test completed"
-
 # Apply database migrations but don't fail if they error
 echo "=== APPLYING MIGRATIONS ==="
-python manage.py migrate || echo "Migrations failed but continuing"
+python manage.py migrate --noinput || echo "Migrations failed but continuing"
 
 # Start the actual application with exec to replace this process
 echo "=== STARTING GUNICORN ==="
 export PORT=${PORT:-8000}
 echo "Using PORT: $PORT"
 
-# Try to check database connection directly
-echo "=== DATABASE CONNECTION TEST ==="
-python -c "
-import os, sys, django
-
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'carpool_project.settings_production')
-django.setup()
-
-from django.db import connections
-try:
-    db = connections['default']
-    db.ensure_connection()
-    print('✅ Database connection successful')
-    from django.conf import settings
-    db_settings = settings.DATABASES['default']
-    engine = db_settings.get('ENGINE', 'unknown')
-    name = db_settings.get('NAME', 'unknown')
-    host = db_settings.get('HOST', 'unknown')
-    print(f'Connected to {engine} database {name} on {host}')
-except Exception as e:
-    print(f'❌ Database connection failed: {str(e)}')
-    print('Continuing despite database error...')
-" || echo "Database check failed to run"
-
 # Use our custom railway_wsgi.py file for better error handling
 echo "=== STARTING GUNICORN with RAILWAY_WSGI ==="
 exec gunicorn railway_wsgi:application \
     --bind 0.0.0.0:$PORT \
-    --timeout 120 \
+    --timeout 180 \
+    --graceful-timeout 60 \
+    --keep-alive 5 \
     --workers 1 \
     --max-requests 1000 \
     --max-requests-jitter 50 \
+    --worker-class sync \
     --log-level debug \
     --capture-output \
     --enable-stdio-inheritance \

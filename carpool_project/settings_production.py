@@ -100,6 +100,30 @@ except Exception as e:
     }
     print("Using fallback SQLite database due to configuration error", file=sys.stderr)
 
+# Add a custom middleware to gracefully handle database connection errors
+# Make sure it's added early in the middleware list
+db_middleware = 'carpool_project.db_middleware.DatabaseConnectionMiddleware'
+if db_middleware not in MIDDLEWARE:
+    MIDDLEWARE.insert(0, db_middleware)
+
+# Increase database connection timeouts
+for db in DATABASES.values():
+    db.setdefault('CONN_MAX_AGE', 60)
+    db.setdefault('CONN_HEALTH_CHECKS', True)
+    db.setdefault('OPTIONS', {})
+    db.setdefault('ATOMIC_REQUESTS', True)
+    
+    # Add timeout and keepalive settings
+    if db.get('ENGINE') == 'django.db.backends.postgresql':
+        db['OPTIONS'].setdefault('connect_timeout', 10)
+        db['OPTIONS'].setdefault('keepalives', 1)
+        db['OPTIONS'].setdefault('keepalives_idle', 30)
+        db['OPTIONS'].setdefault('keepalives_interval', 10)
+        db['OPTIONS'].setdefault('keepalives_count', 5)
+
+# Print final database configuration for debugging
+print(f"Final database configuration: ENGINE={DATABASES['default']['ENGINE']}, HOST={DATABASES['default'].get('HOST', 'N/A')}", file=sys.stderr)
+
 # Static files
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 STATIC_URL = '/static/'
