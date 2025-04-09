@@ -276,28 +276,33 @@ const RequestRide = () => {
           console.log('Found match details:', data.match_details);
           console.log('Found ride request:', data.ride_request);
           
-          // Add proper structure to matchDetails
+          // Create structured match details with safer property access
+          // Handle cases where ride_request might be undefined
           const structuredMatchDetails = {
             ...data.match_details,
-            ride_request: data.ride_request,
-            // Add proper structure for vehicle_details
-            vehicle_details: {
+            // Only add ride_request if it exists
+            ...(data.ride_request ? { ride_request: data.ride_request } : {}),
+            
+            // Add vehicle details directly from match_details.vehicle or individual properties
+            vehicle_details: data.match_details.vehicle || {
               year: data.match_details.vehicle_year || '',
-              make: data.match_details.vehicle_make || '',
-              model: data.match_details.vehicle_model || '',
-              color: data.match_details.vehicle_color || '',
-              license_plate: data.match_details.license_plate || '',
+              make: data.match_details.vehicle_make || data.match_details.vehicle?.make || '',
+              model: data.match_details.vehicle_model || data.match_details.vehicle?.model || '',
+              color: data.match_details.vehicle_color || data.match_details.vehicle?.color || '',
+              license_plate: data.match_details.license_plate || data.match_details.vehicle?.license_plate || '',
               max_passengers: data.match_details.max_passengers || 1
             },
-            // Set driver contact info if missing
-            driver_email: data.match_details.driver_email || data.ride_request.ride_details?.driver?.email || '',
-            driver_phone: data.match_details.driver_phone || data.ride_request.ride_details?.driver?.phone_number || '',
-            // Add ride_details for consistency
-            ride_details: data.ride_request.ride_details || {
-              start_location: data.match_details.pickup || '',
-              end_location: data.match_details.dropoff || '',
+            
+            // Set driver contact info if available
+            driver_email: data.match_details.driver?.email || '',
+            driver_phone: data.match_details.driver?.phone_number || '',
+            
+            // Add ride_details directly to the match without accessing undefined properties
+            ride_details: {
+              start_location: data.match_details.pickup || data.match_details.optimal_pickup_point?.address || '',
+              end_location: data.match_details.dropoff || data.match_details.optimal_dropoff_point?.address || '',
               departure_time: data.match_details.departure_time || new Date().toISOString(),
-              available_seats: 1
+              available_seats: data.match_details.available_seats || 1
             }
           };
           
@@ -428,18 +433,23 @@ const RequestRide = () => {
         return;
       }
 
-      // Extract either the pending_request_id (if available) or use the ride_request.id
+      // Extract request ID using safe property access
       let requestId;
       
+      // Try different ways to get the request ID with fallbacks
       if (currentMatch.pending_request_id) {
         requestId = currentMatch.pending_request_id;
         console.log('Using pending_request_id from match data:', requestId);
-      } else if (currentMatch.ride_request && currentMatch.ride_request.pending_request_id) {
+      } else if (currentMatch.ride_request?.pending_request_id) {
         requestId = currentMatch.ride_request.pending_request_id;
         console.log('Using pending_request_id from ride_request:', requestId);
-      } else if (currentMatch.ride_request && currentMatch.ride_request.id) {
+      } else if (currentMatch.ride_request?.id) {
         requestId = currentMatch.ride_request.id;
         console.log('Using ride_request.id as fallback:', requestId);
+      } else if (currentMatch.ride_id) {
+        // If we have a ride_id but no request_id, create a new fallback ID
+        requestId = `match_${currentMatch.ride_id}`;
+        console.log('Using derived ID from ride_id as last resort:', requestId);
       } else {
         console.error('Could not find a valid request ID in:', currentMatch);
         setError('Could not find a valid request ID. Please try requesting a new ride.');
