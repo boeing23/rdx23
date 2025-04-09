@@ -35,70 +35,26 @@ SECRET_KEY = os.environ.get('SECRET_KEY', 'temporary-key-for-build-only')
 
 ALLOWED_HOSTS = ['localhost', '127.0.0.1', '.railway.app', '*']
 
-# Database - use DATABASE_URL from environment
-try:
-    # Check if we're running on Railway
-    is_on_railway = 'RAILWAY_ENVIRONMENT' in os.environ or 'RAILWAY_SERVICE_ID' in os.environ
-    
-    # Print debug info
-    if 'DATABASE_URL' in os.environ:
-        db_url = os.environ['DATABASE_URL']
-        db_url_masked = '***' if '@' not in db_url else db_url.split('@')[0].split(':')[0] + ':***@' + db_url.split('@')[1]
-        print(f"Found DATABASE_URL: {db_url_masked}", file=sys.stderr)
-        print(f"Database URL starts with: {db_url[:10]}...", file=sys.stderr)
-    else:
-        print("No DATABASE_URL found in environment", file=sys.stderr)
-    
-    # Configure database - on Railway, we should use the provided DATABASE_URL
-    if is_on_railway:
-        # Railway provides its own DATABASE_URL
-        print("Running on Railway, using provided DATABASE_URL", file=sys.stderr)
-        
-        # Parse the DATABASE_URL to check its format
-        if 'DATABASE_URL' in os.environ:
-            raw_db_url = os.environ['DATABASE_URL']
-            
-            # Log connection attempt details
-            print(f"Attempting to connect to database using URL: {raw_db_url[:10]}...", file=sys.stderr)
-            
-            # Configure database with Railway settings
-            DATABASES = {
-                'default': dj_database_url.config(
-                    conn_max_age=600,
-                    conn_health_checks=True,
-                    ssl_require=True
-                )
-            }
-        else:
-            raise Exception("No DATABASE_URL found in Railway environment")
-    else:
-        # For local development, use SQLite
-        print("Running locally, using SQLite database", file=sys.stderr)
-        DATABASES = {
-            'default': {
-                'ENGINE': 'django.db.backends.sqlite3',
-                'NAME': os.path.join(BASE_DIR, 'db.sqlite3'),
-            }
-        }
-    
-    # Log database details (safely)
-    print(f"Database engine: {DATABASES['default']['ENGINE']}", file=sys.stderr)
-    if 'NAME' in DATABASES['default']:
-        print(f"Database name: {DATABASES['default']['NAME']}", file=sys.stderr)
-    if 'HOST' in DATABASES['default']:
-        print(f"Database host: {DATABASES['default']['HOST']}", file=sys.stderr)
-    
-except Exception as e:
-    print(f"ERROR configuring database: {e}", file=sys.stderr)
-    print(f"Traceback: {traceback.format_exc()}", file=sys.stderr)
-    # Provide a fallback SQLite configuration instead of failing
+# Database configuration - simplified for stability
+if 'DATABASE_URL' in os.environ:
+    # Use Railway's provided DATABASE_URL
+    DATABASES = {
+        'default': dj_database_url.config(
+            default=os.environ.get('DATABASE_URL'),
+            conn_max_age=600,
+            conn_health_checks=True
+        )
+    }
+    print("Using DATABASE_URL from environment", file=sys.stderr)
+else:
+    # Fall back to SQLite for local development
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.sqlite3',
             'NAME': os.path.join(BASE_DIR, 'db.sqlite3'),
         }
     }
-    print("Using fallback SQLite database due to configuration error", file=sys.stderr)
+    print("No DATABASE_URL found, using SQLite fallback", file=sys.stderr)
 
 # Static files
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')

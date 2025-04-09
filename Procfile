@@ -1,1 +1,1 @@
-web: gunicorn carpool_project.wsgi --log-file -
+web: gunicorn railway_wsgi:application --log-file -

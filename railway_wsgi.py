@@ -28,18 +28,8 @@ if 'DATABASE_URL' in os.environ:
     else:
         masked_url = '***'
     print(f"Found DATABASE_URL: {masked_url}", file=sys.stderr)
-    
-    # Ensure Railway's DATABASE_URL takes precedence
-    if 'RAILWAY_ENVIRONMENT' in os.environ and not db_url.startswith('postgres://'):
-        # Some Railway deployments provide DATABASE_URL without the postgres:// prefix
-        if db_url.startswith('//'):
-            os.environ['DATABASE_URL'] = 'postgres:' + db_url
-            print(f"Fixed DATABASE_URL format for Railway", file=sys.stderr)
 else:
     print("CRITICAL ERROR: No DATABASE_URL found in environment. This is required for Railway deployment.", file=sys.stderr)
-    print("Using fallback SQLite configuration for emergency functionality only", file=sys.stderr)
-    # Set a placeholder SQLite URL to prevent immediate crashes
-    os.environ['DATABASE_URL'] = 'sqlite:///db.sqlite3'
 
 # Define a fallback application to use when the main application fails to load
 def fallback_application(environ, start_response, error=None):
@@ -57,14 +47,18 @@ def fallback_application(environ, start_response, error=None):
     if environ.get('REQUEST_METHOD') == 'OPTIONS':
         return [b'']
     
+    # If it's a health check, return a simple response
+    if environ.get('PATH_INFO', '') == '/':
+        return [b'OK']
+    
     # Create a friendly error message
     error_message = f"""
     <html>
-    <head><title>Application Starting</title></head>
+    <head><title>Application Error</title></head>
     <body>
-        <h1>Service is starting up</h1>
-        <p>The Django application is currently starting up. Please try again in a moment.</p>
-        <p>Startup time: {datetime.now().isoformat()}</p>
+        <h1>Service Error</h1>
+        <p>The Django application encountered an error.</p>
+        <p>Time: {datetime.now().isoformat()}</p>
         {f"<p>Error details: {str(error)}</p>" if error else ""}
     </body>
     </html>
@@ -72,57 +66,41 @@ def fallback_application(environ, start_response, error=None):
     
     return [error_message.encode('utf-8')]
 
-# Initialize django_application to None
-django_application = None
-
 # Try loading the Django application
 try:
-    # Attempt to load the Django application
+    # Attempt to load the Django application once
     print("Importing Django WSGI application...", file=sys.stderr)
     from django.core.wsgi import get_wsgi_application
     
-    # Try to initialize Django application at module level
-    try:
-        print("Pre-initializing Django application", file=sys.stderr)
-        django_application = get_wsgi_application()
-        print("Django application pre-initialized successfully", file=sys.stderr)
-    except Exception as pre_init_error:
-        print(f"WARNING: Django pre-initialization failed: {pre_init_error}", file=sys.stderr)
-        # Keep django_application as None, will try again on first request
+    # Initialize the Django application
+    print("Initializing Django application...", file=sys.stderr)
+    django_application = get_wsgi_application()
+    print("Django application initialized successfully", file=sys.stderr)
     
-    # Wrap the application in a try/except to handle any startup errors
+    # Create the WSGI application function
     def application(environ, start_response):
-        try:
-            # Initialize Django application on first request if not already initialized
-            global django_application
-            if django_application is None:
-                try:
-                    print("Initializing Django application on first request", file=sys.stderr)
-                    django_application = get_wsgi_application()
-                    print("Django application loaded on first request", file=sys.stderr)
-                except Exception as init_error:
-                    print(f"ERROR initializing Django application: {init_error}", file=sys.stderr)
-                    traceback.print_exc(file=sys.stderr)
-                    return fallback_application(environ, start_response, init_error)
-            
-            # Handle health checks directly to ensure they always succeed
-            if environ.get('PATH_INFO', '') == '/':
-                print("Health check detected, ensuring 200 response", file=sys.stderr)
-                return fallback_application(environ, start_response)
-            
-            # Handle OPTIONS requests directly
-            if environ.get('REQUEST_METHOD') == 'OPTIONS':
-                return fallback_application(environ, start_response)
-            
-            # For other paths, use the Django application
-            return django_application(environ, start_response)
-            
-        except Exception as request_error:
-            print(f"ERROR handling request: {request_error}", file=sys.stderr)
-            traceback.print_exc(file=sys.stderr)
-            return fallback_application(environ, start_response, request_error)
-    
-    print("Django application wrapper created successfully", file=sys.stderr)
+        # Handle health checks directly to ensure they always succeed
+        if environ.get('PATH_INFO', '') == '/':
+            print("Health check detected, ensuring 200 response", file=sys.stderr)
+            status = '200 OK'
+            headers = [('Content-type', 'text/plain')]
+            start_response(status, headers)
+            return [b'OK']
+        
+        # Handle OPTIONS requests directly
+        if environ.get('REQUEST_METHOD') == 'OPTIONS':
+            status = '200 OK'
+            headers = [
+                ('Content-type', 'text/plain'),
+                ('Access-Control-Allow-Origin', '*'),
+                ('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS'),
+                ('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Origin'),
+            ]
+            start_response(status, headers)
+            return [b'']
+        
+        # For all other paths, use the Django application
+        return django_application(environ, start_response)
     
 except Exception as e:
     # Log the error
