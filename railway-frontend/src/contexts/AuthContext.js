@@ -75,8 +75,13 @@ export const AuthProvider = ({ children }) => {
   // Login function
   const login = async (username, password) => {
     try {
+      console.log('Attempting login with credentials:', { username });
+      
       // Use the proxied login endpoint
-      const response = await axios.post(LOGIN_URL, {
+      const proxiedLoginUrl = getProxiedUrl(LOGIN_URL);
+      console.log('Using proxied login URL:', proxiedLoginUrl);
+      
+      const response = await axios.post(proxiedLoginUrl, {
         username,
         password
       });
@@ -101,30 +106,27 @@ export const AuthProvider = ({ children }) => {
       
       // Save user type if available
       if (response.data.user_type) {
-        // Ensure userType is stored as a string, not an object
-        if (typeof response.data.user_type === 'string') {
-          localStorage.setItem('userType', JSON.stringify(response.data.user_type));
-        } else {
-          // If it's already an object or something else, stringify the value directly
-          localStorage.setItem('userType', JSON.stringify(String(response.data.user_type)));
-        }
+        // Save user type as a plain string, not stringified JSON
+        localStorage.setItem('userType', response.data.user_type);
       }
       
       try {
         // Get user info with the new token
-        const userResponse = await axios.get(getProxiedUrl(`${API_BASE_URL}/api/users/me/`), {
+        const userUrl = `${API_BASE_URL}/api/users/me/`;
+        const proxiedUserUrl = getProxiedUrl(userUrl);
+        console.log('Fetching user data from:', proxiedUserUrl);
+        
+        const userResponse = await axios.get(proxiedUserUrl, {
           headers: {
             Authorization: `Bearer ${token}`
           }
         });
         
+        console.log('User data fetched successfully:', userResponse.data);
+        
         // Also save user type from the user info if available
         if (userResponse.data && userResponse.data.user_type) {
-          if (typeof userResponse.data.user_type === 'string') {
-            localStorage.setItem('userType', JSON.stringify(userResponse.data.user_type));
-          } else {
-            localStorage.setItem('userType', JSON.stringify(String(userResponse.data.user_type)));
-          }
+          localStorage.setItem('userType', userResponse.data.user_type);
         }
         
         // Update auth state with user data
@@ -135,9 +137,17 @@ export const AuthProvider = ({ children }) => {
           isLoading: false
         });
         
+        // Store user ID for other components
+        if (userResponse.data && userResponse.data.id) {
+          localStorage.setItem('userId', userResponse.data.id);
+        }
+        
         // Store userType for routing purposes
         const effectiveUserType = userResponse.data?.user_type || response.data?.user_type || 'RIDER';
         console.log('Login successful, user type:', effectiveUserType);
+        
+        // Dispatch auth change event for components that listen to localStorage
+        window.dispatchEvent(new Event('auth-change'));
         
         return { 
           success: true, 
@@ -148,14 +158,20 @@ export const AuthProvider = ({ children }) => {
         console.error('Error fetching user data after login:', userError);
         
         // Still consider login successful even if we couldn't fetch user data
+        // Just use the data we got from the login response
+        const userData = response.data.user || { user_type: response.data.user_type };
+        
         setAuthState({
           token,
-          user: null,
+          user: userData,
           isAuthenticated: true,
           isLoading: false
         });
         
-        return { success: true };
+        // Dispatch auth change event
+        window.dispatchEvent(new Event('auth-change'));
+        
+        return { success: true, user: userData };
       }
     } catch (error) {
       console.error('Login error:', error);
