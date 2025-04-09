@@ -24,6 +24,7 @@ from railway_status import status_check
 from django.conf import settings
 from django.conf.urls.static import static
 from django.views.generic import TemplateView
+from django.views.decorators.csrf import csrf_exempt
 
 # Add these imports for model patching
 from django.db import connection
@@ -88,9 +89,35 @@ def check_driver_name_field(request):
     except Exception as e:
         return JsonResponse({'success': False, 'error': str(e)})
 
+@csrf_exempt
+def handle_registration_preflight(request):
+    """
+    Special handler for registration endpoint to specifically address CORS preflight issues.
+    This is a direct solution for Railway-specific CORS issues.
+    """
+    logger.info(f"Direct preflight handler for registration: {request.method} from {request.META.get('HTTP_ORIGIN', 'unknown')}")
+    
+    # For OPTIONS requests, return CORS headers immediately
+    if request.method == 'OPTIONS':
+        logger.info("Handling OPTIONS directly for registration endpoint")
+        response = HttpResponse()
+        response.status_code = 200
+        response['Access-Control-Allow-Origin'] = '*'
+        response['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
+        response['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With, Accept, Origin'
+        response['Access-Control-Allow-Credentials'] = 'true'
+        response['Access-Control-Max-Age'] = '86400'  # 24 hours
+        return response
+    
+    # For other methods, import and call the register_user view directly
+    from users.views import register_user
+    return register_user(request)
+
 urlpatterns = [
     path('', api_root, name='api-root'),
     path('admin/', admin.site.urls),
+    # Direct handler for registration endpoint
+    path('api/users/register/', handle_registration_preflight, name='register_preflight'),
     path('api/users/', include('users.urls')),
     path('api/rides/', include('rides.urls')),
     # Add the railway status endpoint

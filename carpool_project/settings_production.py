@@ -165,6 +165,10 @@ if 'carpool_project.api_cors_middleware.DRFCorsMiddleware' not in MIDDLEWARE:
 if 'carpool_project.cors_middleware.CORSMiddleware' not in MIDDLEWARE:
     MIDDLEWARE.insert(2, 'carpool_project.cors_middleware.CORSMiddleware')
 
+# Add the highest priority global CORS middleware
+if 'carpool_project.global_cors_middleware.GlobalCorsMiddleware' not in MIDDLEWARE:
+    MIDDLEWARE.insert(0, 'carpool_project.global_cors_middleware.GlobalCorsMiddleware')
+
 # Remove CorsPostCsrfMiddleware if it's causing errors
 if 'corsheaders.middleware.CorsPostCsrfMiddleware' in MIDDLEWARE:
     MIDDLEWARE.remove('corsheaders.middleware.CorsPostCsrfMiddleware')

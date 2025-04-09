@@ -100,11 +100,26 @@ function Register() {
         password2: '[HIDDEN]'
       });
 
+      // First make an explicit OPTIONS request to ensure CORS is working
+      try {
+        await fetch(`${API_BASE_URL}/api/users/register/`, {
+          method: 'OPTIONS',
+          mode: 'cors'
+        });
+        console.log('OPTIONS preflight request succeeded');
+      } catch (preflightErr) {
+        console.warn('OPTIONS preflight request failed, but continuing with POST:', preflightErr);
+      }
+
       const response = await fetch(`${API_BASE_URL}/api/users/register/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Origin': window.location.origin
         },
+        mode: 'cors',  // Explicitly set CORS mode
+        credentials: 'omit',  // Don't send credentials for this request
         body: JSON.stringify({
           username: formData.username,
           email: formData.email,
