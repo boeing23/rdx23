@@ -12,8 +12,24 @@ const getApiBaseUrl = () => {
   return 'https://rdx23-production.up.railway.app';
 };
 
+// CORS Proxy configuration
+export const USE_CORS_PROXY = true; // Set to false to disable proxy if needed
+export const CORS_PROXY_URL = "https://corsproxy.io/?"; // Alternative: "https://cors-anywhere.herokuapp.com/"
+
 export const API_BASE_URL = getApiBaseUrl();
 export const FALLBACK_API_URL = 'https://rdx23-production.up.railway.app';
+
+// Function to get proxied URL if needed
+export const getProxiedUrl = (url) => {
+  if (USE_CORS_PROXY) {
+    return `${CORS_PROXY_URL}${encodeURIComponent(url)}`;
+  }
+  return url;
+};
+
+// URLs for specific endpoints that need CORS proxy
+export const REGISTER_URL = getProxiedUrl(`${API_BASE_URL}/api/users/register/`);
+export const LOGIN_URL = getProxiedUrl(`${API_BASE_URL}/api/users/login/`);
 
 // Add constants for health check endpoints
 export const API_HEALTH_CHECK_URL = `${API_BASE_URL}/api/rides/`;

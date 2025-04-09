@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import axios from 'axios';
-import { API_BASE_URL } from '../config';
+import { API_BASE_URL, REGISTER_URL, LOGIN_URL, getProxiedUrl } from '../config';
 
 // Create auth context
 const AuthContext = createContext(null);
@@ -28,7 +28,7 @@ export const AuthProvider = ({ children }) => {
         if (token) {
           // Validate token by making a request to the backend
           try {
-            const response = await axios.get(`${API_BASE_URL}/api/users/me/`, {
+            const response = await axios.get(getProxiedUrl(`${API_BASE_URL}/api/users/me/`), {
               headers: {
                 Authorization: `Bearer ${token}`
               }
@@ -75,8 +75,8 @@ export const AuthProvider = ({ children }) => {
   // Login function
   const login = async (username, password) => {
     try {
-      // Use the correct login endpoint that your backend supports
-      const response = await axios.post(`${API_BASE_URL}/api/users/login/`, {
+      // Use the proxied login endpoint
+      const response = await axios.post(LOGIN_URL, {
         username,
         password
       });
@@ -112,7 +112,7 @@ export const AuthProvider = ({ children }) => {
       
       try {
         // Get user info with the new token
-        const userResponse = await axios.get(`${API_BASE_URL}/api/users/me/`, {
+        const userResponse = await axios.get(getProxiedUrl(`${API_BASE_URL}/api/users/me/`), {
           headers: {
             Authorization: `Bearer ${token}`
           }
@@ -206,7 +206,7 @@ export const AuthProvider = ({ children }) => {
   // Register function
   const register = async (userData) => {
     try {
-      const response = await axios.post(`${API_BASE_URL}/api/users/register/`, userData);
+      const response = await axios.post(REGISTER_URL, userData);
       
       return { success: true, user: response.data };
     } catch (error) {

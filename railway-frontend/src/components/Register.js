@@ -6,7 +6,7 @@ import TextField from '@mui/material/TextField';
 import Alert from '@mui/material/Alert';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import Switch from '@mui/material/Switch';
-import { API_BASE_URL } from '../config';
+import { API_BASE_URL, REGISTER_URL } from '../config';
 
 function Register() {
   const theme = useTheme();
@@ -93,7 +93,7 @@ function Register() {
     }
 
     try {
-      console.log('Sending registration data to:', `${API_BASE_URL}/api/users/register/`);
+      console.log('Sending registration data to:', REGISTER_URL);
       console.log('Registration data:', {
         ...formData,
         password: '[HIDDEN]',
@@ -102,7 +102,7 @@ function Register() {
 
       // First make an explicit OPTIONS request to ensure CORS is working
       try {
-        await fetch(`${API_BASE_URL}/api/users/register/`, {
+        await fetch(REGISTER_URL, {
           method: 'OPTIONS',
           mode: 'cors'
         });
@@ -111,7 +111,7 @@ function Register() {
         console.warn('OPTIONS preflight request failed, but continuing with POST:', preflightErr);
       }
 
-      const response = await fetch(`${API_BASE_URL}/api/users/register/`, {
+      const response = await fetch(REGISTER_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
