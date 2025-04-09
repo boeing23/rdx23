@@ -76,6 +76,14 @@ for attempt in range(max_retries):
 " || echo "Database connection test failed but continuing"
 fi
 
+# Check if tables exist first using a specific script
+echo "=== CHECKING DATABASE SCHEMA AND MIGRATIONS ==="
+python check_migrations_status.py || echo "Migration check failed but continuing"
+
+# If tables don't exist, use our fix migrations script
+echo "=== RUNNING MIGRATION FIXES IF NEEDED ==="
+python fix_migrations.py || echo "Migration fixes failed but continuing"
+
 # Try Django check but don't fail if it errors
 echo "=== DJANGO CHECK ==="
 python manage.py check || echo "Django check failed but continuing"
@@ -85,7 +93,12 @@ python -c "import django; print(f'Django version: {django.__version__}')" || ech
 
 # Apply database migrations but don't fail if they error
 echo "=== APPLYING MIGRATIONS ==="
-python manage.py migrate --noinput || echo "Migrations failed but continuing"
+python manage.py migrate --fake-initial || echo "Initial migrations failed but continuing"
+python manage.py migrate || echo "Migrations failed but continuing"
+
+# Run a post-deployment check
+echo "=== VERIFYING DATABASE SETUP ==="
+python check_migrations_status.py || echo "Final migration check failed but continuing"
 
 # Start the actual application with exec to replace this process
 echo "=== STARTING GUNICORN ==="
