@@ -22,7 +22,7 @@ import {
   DialogActions,
   CircularProgress
 } from '@mui/material';
-import { Schedule, LocationOn, Person, Phone, Email, Event, AccessTime, Cancel, CheckCircle, DirectionsCar, Refresh } from '@mui/icons-material';
+import { Schedule, LocationOn, Person, Phone, Email, Event, AccessTime, Cancel, CheckCircle, DirectionsCar, Refresh, EventSeat } from '@mui/icons-material';
 import { API_BASE_URL } from '../config';
 import { format } from 'date-fns';
 import { MapContainer, TileLayer, Marker, Popup, Polyline } from 'react-leaflet';
@@ -663,124 +663,185 @@ const DriverAcceptedRides = () => {
 
                   <Grid container spacing={2}>
                     <Grid item xs={12}>
-                      <Typography variant="subtitle1" gutterBottom>
+                      <Typography variant="subtitle1" gutterBottom fontWeight="bold" color="primary">
                         Passenger Information
                       </Typography>
-                      <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                        <Person sx={{ mr: 1 }} />
-                        <Typography>{getFullName(selectedRide.rider)}</Typography>
-                      </Box>
-                      <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                        <Phone sx={{ mr: 1 }} />
-                        <Typography>{getPhoneNumber(selectedRide.rider)}</Typography>
-                      </Box>
-                      <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                        <Email sx={{ mr: 1 }} />
-                        <Typography>{getEmail(selectedRide.rider)}</Typography>
-                      </Box>
+                      <Paper elevation={1} sx={{ p: 2, mb: 2 }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                          <Person sx={{ mr: 1, color: 'primary.main' }} />
+                          <Typography variant="body1" fontWeight="medium">{getFullName(selectedRide.rider)}</Typography>
+                        </Box>
+                        <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                          <Phone sx={{ mr: 1, color: 'primary.main' }} />
+                          <Typography variant="body1">
+                            {getPhoneNumber(selectedRide.rider) !== 'Not provided' ? (
+                              <Button 
+                                size="small" 
+                                startIcon={<Phone fontSize="small" />}
+                                variant="outlined"
+                                onClick={() => window.open(`tel:${getPhoneNumber(selectedRide.rider)}`, '_blank')}
+                              >
+                                {getPhoneNumber(selectedRide.rider)}
+                              </Button>
+                            ) : (
+                              'Phone number not provided'
+                            )}
+                          </Typography>
+                        </Box>
+                        <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                          <Email sx={{ mr: 1, color: 'primary.main' }} />
+                          <Typography variant="body1">
+                            {getEmail(selectedRide.rider) !== 'Not provided' ? (
+                              <Button 
+                                size="small" 
+                                startIcon={<Email fontSize="small" />}
+                                variant="outlined"
+                                onClick={() => window.open(`mailto:${getEmail(selectedRide.rider)}`, '_blank')}
+                              >
+                                {getEmail(selectedRide.rider)}
+                              </Button>
+                            ) : (
+                              'Email not provided'
+                            )}
+                          </Typography>
+                        </Box>
+                        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                          <EventSeat sx={{ mr: 1, color: 'primary.main' }} />
+                          <Typography variant="body1">
+                            <Chip 
+                              label={`${selectedRide.seats_needed} seat${selectedRide.seats_needed !== 1 ? 's' : ''} requested`}
+                              size="small"
+                              color="primary"
+                              variant="outlined"
+                            />
+                          </Typography>
+                        </Box>
+                      </Paper>
                     </Grid>
 
                     <Grid item xs={12}>
-                      <Typography variant="subtitle1" gutterBottom>
+                      <Typography variant="subtitle1" gutterBottom fontWeight="bold" color="primary">
                         Trip Details
                       </Typography>
-                      <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                        <LocationOn sx={{ mr: 1 }} />
-                        <Typography>Pickup: {selectedRide.pickup_location}</Typography>
-                      </Box>
-                      <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                        <LocationOn sx={{ mr: 1 }} />
-                        <Typography>Dropoff: {selectedRide.dropoff_location}</Typography>
-                      </Box>
-                      <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                        <Event sx={{ mr: 1 }} />
-                        <Typography>Date: {formatDate(selectedRide.departure_time)}</Typography>
-                      </Box>
-                      <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                        <Schedule sx={{ mr: 1 }} />
-                        <Typography>Seats: {selectedRide.seats_needed}</Typography>
-                      </Box>
+                      <Paper elevation={1} sx={{ p: 2, mb: 2 }}>
+                        <Grid container spacing={2}>
+                          <Grid item xs={12} md={6}>
+                            <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 1 }}>
+                              <LocationOn sx={{ mr: 1, mt: 0.5, color: 'green' }} />
+                              <Box>
+                                <Typography variant="body2" color="text.secondary">Pickup Location:</Typography>
+                                <Typography variant="body1" fontWeight="medium">{selectedRide.pickup_location}</Typography>
+                                <Button 
+                                  size="small" 
+                                  sx={{ mt: 0.5 }}
+                                  startIcon={<LocationOn fontSize="small" />}
+                                  variant="outlined"
+                                  color="success"
+                                  onClick={() => window.open(`https://maps.google.com/?q=${selectedRide.pickup_latitude},${selectedRide.pickup_longitude}`, '_blank')}
+                                >
+                                  Open in Maps
+                                </Button>
+                              </Box>
+                            </Box>
+                          </Grid>
+                          <Grid item xs={12} md={6}>
+                            <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 1 }}>
+                              <LocationOn sx={{ mr: 1, mt: 0.5, color: 'error.main' }} />
+                              <Box>
+                                <Typography variant="body2" color="text.secondary">Dropoff Location:</Typography>
+                                <Typography variant="body1" fontWeight="medium">{selectedRide.dropoff_location}</Typography>
+                                <Button 
+                                  size="small" 
+                                  sx={{ mt: 0.5 }}
+                                  startIcon={<LocationOn fontSize="small" />}
+                                  variant="outlined"
+                                  color="error"
+                                  onClick={() => window.open(`https://maps.google.com/?q=${selectedRide.dropoff_latitude},${selectedRide.dropoff_longitude}`, '_blank')}
+                                >
+                                  Open in Maps
+                                </Button>
+                              </Box>
+                            </Box>
+                          </Grid>
+                        </Grid>
+                        <Box sx={{ display: 'flex', alignItems: 'center', mb: 1, mt: 2 }}>
+                          <Event sx={{ mr: 1, color: 'primary.main' }} />
+                          <Typography variant="body1">Date: {formatDate(selectedRide.departure_time)}</Typography>
+                        </Box>
+                        <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>
+                          <Button 
+                            fullWidth
+                            variant="contained" 
+                            color="primary"
+                            startIcon={<DirectionsCar />}
+                            onClick={() => window.open(`https://www.google.com/maps/dir/?api=1&origin=${selectedRide.pickup_latitude},${selectedRide.pickup_longitude}&destination=${selectedRide.dropoff_latitude},${selectedRide.dropoff_longitude}&travelmode=driving`, '_blank')}
+                          >
+                            Get Driving Directions
+                          </Button>
+                        </Box>
+                      </Paper>
                     </Grid>
 
                     {/* Add Route Map */}
                     <Grid item xs={12}>
-                      <Typography variant="subtitle1" gutterBottom>
+                      <Typography variant="subtitle1" gutterBottom fontWeight="bold" color="primary">
                         Route Map
                       </Typography>
-                      <Box sx={{ height: '250px', width: '100%', border: '1px solid #ccc', borderRadius: '4px', overflow: 'hidden' }}>
-                        {(() => {
-                          // Log available coordinates for debugging
-                          console.log("Ride coordinates:", {
-                            pickup_lat: selectedRide.pickup_latitude,
-                            pickup_lng: selectedRide.pickup_longitude,
-                            dropoff_lat: selectedRide.dropoff_latitude,
-                            dropoff_lng: selectedRide.dropoff_longitude
-                          });
-                          
-                          // Use direct coordinate fields if available, otherwise fallback to extraction or defaults
-                          const pickupCoords = [
-                            selectedRide.pickup_latitude || 37.2284, 
-                            selectedRide.pickup_longitude || -80.4234
-                          ];
-                          const dropoffCoords = [
-                            selectedRide.dropoff_latitude || 37.2384, 
-                            selectedRide.dropoff_longitude || -80.4134
-                          ];
-                          
-                          // If direct coordinates aren't available, try to extract from location text
-                          if (!selectedRide.pickup_latitude || !selectedRide.pickup_longitude) {
-                            try {
-                              const pickupMatch = selectedRide.pickup_location.match(/\(?\s*(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)\s*\)?/);
-                              if (pickupMatch) {
-                                pickupCoords[0] = parseFloat(pickupMatch[1]);
-                                pickupCoords[1] = parseFloat(pickupMatch[2]);
-                              }
-                            } catch (e) {
-                              console.error("Error parsing pickup coordinates:", e);
-                            }
-                          }
-                          
-                          if (!selectedRide.dropoff_latitude || !selectedRide.dropoff_longitude) {
-                            try {
-                              const dropoffMatch = selectedRide.dropoff_location.match(/\(?\s*(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)\s*\)?/);
-                              if (dropoffMatch) {
-                                dropoffCoords[0] = parseFloat(dropoffMatch[1]);
-                                dropoffCoords[1] = parseFloat(dropoffMatch[2]);
-                              }
-                            } catch (e) {
-                              console.error("Error parsing dropoff coordinates:", e);
-                            }
-                          }
-                          
-                          // Calculate center position
-                          const centerLat = (pickupCoords[0] + dropoffCoords[0]) / 2;
-                          const centerLng = (pickupCoords[1] + dropoffCoords[1]) / 2;
-                          
-                          return (
-                            <MapContainer 
-                              center={[centerLat, centerLng]} 
-                              zoom={13} 
-                              style={{ height: '100%', width: '100%' }}
-                            >
-                              <TileLayer
-                                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                              />
-                              <Marker position={pickupCoords}>
-                                <Popup>Pickup: {selectedRide.pickup_location}</Popup>
-                              </Marker>
-                              <Marker position={dropoffCoords}>
-                                <Popup>Dropoff: {selectedRide.dropoff_location}</Popup>
-                              </Marker>
-                              <Polyline 
-                                positions={[pickupCoords, dropoffCoords]}
-                                color="#861F41"
-                                weight={4}
-                              />
-                            </MapContainer>
-                          );
-                        })()}
-                      </Box>
+                      <Paper elevation={1} sx={{ p: 0, overflow: 'hidden' }}>
+                        <Box sx={{ height: '300px', width: '100%', overflow: 'hidden' }}>
+                          {(() => {
+                            // Log available coordinates for debugging
+                            console.log("Ride coordinates:", {
+                              pickup_lat: selectedRide.pickup_latitude,
+                              pickup_lng: selectedRide.pickup_longitude,
+                              dropoff_lat: selectedRide.dropoff_latitude,
+                              dropoff_lng: selectedRide.dropoff_longitude
+                            });
+                            
+                            // Use direct coordinate fields if available, otherwise fallback to extraction or defaults
+                            const pickupCoords = [
+                              selectedRide.pickup_latitude || 37.2284, 
+                              selectedRide.pickup_longitude || -80.4234
+                            ];
+                            const dropoffCoords = [
+                              selectedRide.dropoff_latitude || 37.2384, 
+                              selectedRide.dropoff_longitude || -80.4134
+                            ];
+                            
+                            // Calculate center and bounds
+                            const centerLat = (pickupCoords[0] + dropoffCoords[0]) / 2;
+                            const centerLng = (pickupCoords[1] + dropoffCoords[1]) / 2;
+                            
+                            return (
+                              <MapContainer 
+                                center={[centerLat, centerLng]} 
+                                zoom={13} 
+                                style={{ height: '100%', width: '100%' }}
+                              >
+                                <TileLayer
+                                  attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                                />
+                                <Marker position={pickupCoords}>
+                                  <Popup>
+                                    <strong>Pickup:</strong> {selectedRide.pickup_location}
+                                  </Popup>
+                                </Marker>
+                                <Marker position={dropoffCoords}>
+                                  <Popup>
+                                    <strong>Dropoff:</strong> {selectedRide.dropoff_location}
+                                  </Popup>
+                                </Marker>
+                                <Polyline 
+                                  positions={[pickupCoords, dropoffCoords]}
+                                  color="#861F41"
+                                  weight={4}
+                                />
+                              </MapContainer>
+                            );
+                          })()}
+                        </Box>
+                      </Paper>
                     </Grid>
                   </Grid>
                 </CardContent>

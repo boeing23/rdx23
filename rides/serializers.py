@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Ride, RideRequest, Notification
+from .models import Ride, RideRequest, Notification, RideReview
 from django.contrib.auth import get_user_model
 import logging
 from django.utils import timezone
@@ -7,6 +7,25 @@ import json
 
 User = get_user_model()
 logger = logging.getLogger(__name__)
+
+def get_display_name_from_coordinates(lat, lng):
+    """
+    Returns a display name for a location based on coordinates.
+    If coordinates are not valid, returns a placeholder.
+    
+    In a production environment, this could be integrated with a 
+    geocoding service like Google Maps, Mapbox, or OpenStreetMap.
+    """
+    if lat is None or lng is None:
+        return "Location not specified"
+    
+    try:
+        # In a real implementation, you would make an API call to a geocoding service
+        # For now, we'll return the coordinates formatted nicely
+        return f"({lat:.6f}, {lng:.6f})"
+    except Exception as e:
+        print(f"Error getting display name from coordinates: {e}")
+        return f"({lat}, {lng})"
 
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
@@ -201,65 +220,140 @@ class RideRequestSerializer(serializers.ModelSerializer):
     rider = UserSerializer(read_only=True)
     
     # Add these fields to ensure they're included in the serialized data
-    pickup_latitude = serializers.FloatField()
-    pickup_longitude = serializers.FloatField()
-    dropoff_latitude = serializers.FloatField()
-    dropoff_longitude = serializers.FloatField()
+    pickup_latitude = serializers.SerializerMethodField()
+    pickup_longitude = serializers.SerializerMethodField()
+    dropoff_latitude = serializers.SerializerMethodField()
+    dropoff_longitude = serializers.SerializerMethodField()
+    rider_details = serializers.SerializerMethodField()
     
     class Meta:
         model = RideRequest
-        fields = '__all__'
-        depth = 1
+        fields = [
+            'id', 'ride', 'rider', 'pickup_location', 'dropoff_location', 
+            'seats_needed', 'status', 'created_at', 'updated_at',
+            'pickup_latitude', 'pickup_longitude', 'dropoff_latitude', 
+            'dropoff_longitude', 'rider_details'
+        ]
+    
+    def get_pickup_latitude(self, obj):
+        try:
+            return float(obj.pickup_location.split(',')[0])
+        except (AttributeError, IndexError, ValueError):
+            return None
+    
+    def get_pickup_longitude(self, obj):
+        try:
+            return float(obj.pickup_location.split(',')[1])
+        except (AttributeError, IndexError, ValueError):
+            return None
+    
+    def get_dropoff_latitude(self, obj):
+        try:
+            return float(obj.dropoff_location.split(',')[0])
+        except (AttributeError, IndexError, ValueError):
+            return None
+    
+    def get_dropoff_longitude(self, obj):
+        try:
+            return float(obj.dropoff_location.split(',')[1])
+        except (AttributeError, IndexError, ValueError):
+            return None
+    
+    def get_rider_details(self, obj):
+        if not obj.rider:
+            return None
+        
+        user = obj.rider
+        rider_data = {
+            'id': user.id,
+            'full_name': f"{user.first_name} {user.last_name}".strip() or "Anonymous User",
+            'email': user.email or "Not provided",
+            'phone_number': getattr(user, 'phone_number', None) or "Not provided"
+        }
+        
+        # Get the rider profile if available
+        try:
+            if hasattr(user, 'riderprofile'):
+                profile = user.riderprofile
+                rider_data['profile_id'] = profile.id
+                rider_data['preferred_contact'] = getattr(profile, 'preferred_contact', None)
+                rider_data['profile_picture'] = profile.profile_picture.url if hasattr(profile, 'profile_picture') and profile.profile_picture else None
+        except Exception as e:
+            print(f"Error getting rider profile: {e}")
+        
+        return rider_data
         
     def to_representation(self, instance):
-        """
-        Add additional fields to help with displaying the ride request.
-        """
-        data = super().to_representation(instance)
+        representation = super().to_representation(instance)
         
-        # Ensure coordinate fields are included
-        data['pickup_latitude'] = instance.pickup_latitude
-        data['pickup_longitude'] = instance.pickup_longitude
-        data['dropoff_latitude'] = instance.dropoff_latitude
-        data['dropoff_longitude'] = instance.dropoff_longitude
+        # Add display names for locations if available
+        representation['pickup_display_name'] = get_display_name_from_coordinates(representation.get('pickup_latitude'), representation.get('pickup_longitude'))
+        representation['dropoff_display_name'] = get_display_name_from_coordinates(representation.get('dropoff_latitude'), representation.get('dropoff_longitude'))
         
-        # Add display names for origin and destination
-        try:
-            data['origin_display_name'] = instance.pickup_location
-        except:
-            data['origin_display_name'] = "Unknown Origin"
-            
-        try:
-            data['destination_display_name'] = instance.dropoff_location
-        except:
-            data['destination_display_name'] = "Unknown Destination"
-        
-        # Add driver information if available
-        if instance.ride and instance.ride.driver:
-            driver = instance.ride.driver
-            data['driver_name'] = f"{driver.first_name} {driver.last_name}".strip()
-            data['driver_id'] = driver.id
-            data['driver_email'] = driver.email
-            data['driver_phone'] = getattr(driver, 'phone_number', None)
-            data['vehicle_make'] = getattr(driver, 'vehicle_make', None)
-            data['vehicle_model'] = getattr(driver, 'vehicle_model', None)
-            data['vehicle_color'] = getattr(driver, 'vehicle_color', None)
-            data['vehicle_year'] = getattr(driver, 'vehicle_year', None)
-            data['license_plate'] = getattr(driver, 'license_plate', None)
-            
-        return data
+        # If ride is included, add driver information
+        if instance.ride:
+            try:
+                driver = instance.ride.driver
+                if driver:
+                    representation['driver'] = {
+                        'id': driver.id,
+                        'full_name': f"{driver.first_name} {driver.last_name}".strip() or "Anonymous Driver",
+                        'email': driver.email or "Not provided",
+                        'phone_number': getattr(driver, 'phone_number', None) or "Not provided"
+                    }
+                    
+                    # Add vehicle information if available
+                    if hasattr(driver, 'driverprofile') and driver.driverprofile:
+                        vehicle = driver.driverprofile.vehicle
+                        if vehicle:
+                            representation['vehicle'] = {
+                                'make': vehicle.make,
+                                'model': vehicle.model,
+                                'color': vehicle.color,
+                                'license_plate': vehicle.license_plate
+                            }
+            except Exception as e:
+                print(f"Error adding driver information: {e}")
+                
+        return representation
 
 class RideDetailSerializer(RideSerializer):
-    driver = serializers.SerializerMethodField()
-    requests = RideRequestSerializer(many=True, read_only=True)
-
-    class Meta(RideSerializer.Meta):
-        fields = RideSerializer.Meta.fields + ('requests',)
-
-    def get_driver(self, obj):
-        from users.serializers import UserSerializer
-        driver_data = UserSerializer(obj.driver).data
-        # Add a full_name field to the driver data
-        if obj.driver:
-            driver_data['full_name'] = f"{obj.driver.first_name} {obj.driver.last_name}".strip()
+    driver_info = serializers.SerializerMethodField()
+    ride_requests = RideRequestSerializer(many=True, read_only=True, source='riderequest_set')
+    
+    class Meta:
+        model = Ride
+        fields = RideSerializer.Meta.fields + ['driver_info', 'ride_requests']
+    
+    def get_driver_info(self, obj):
+        driver = obj.driver
+        if not driver:
+            return None
+        
+        driver_data = {
+            'id': driver.id,
+            'full_name': f"{driver.first_name} {driver.last_name}".strip() or "Anonymous Driver",
+            'email': driver.email or "Not provided",
+            'phone_number': getattr(driver, 'phone_number', None) or "Not provided"
+        }
+        
+        # Get the driver profile if available
+        try:
+            if hasattr(driver, 'driverprofile'):
+                profile = driver.driverprofile
+                driver_data['profile_id'] = profile.id
+                driver_data['preferred_contact'] = getattr(profile, 'preferred_contact', None)
+                
+                # Add vehicle information if available
+                if profile.vehicle:
+                    vehicle = profile.vehicle
+                    driver_data['vehicle'] = {
+                        'make': vehicle.make,
+                        'model': vehicle.model,
+                        'color': vehicle.color,
+                        'license_plate': vehicle.license_plate
+                    }
+        except Exception as e:
+            print(f"Error getting driver profile: {e}")
+        
         return driver_data 
