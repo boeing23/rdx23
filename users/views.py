@@ -97,7 +97,15 @@ class UserViewSet(viewsets.ModelViewSet):
     
     @action(detail=False, methods=['get'])
     def me(self, request):
-        serializer = self.get_serializer(request.user)
+        user = request.user
+        logger.info(f"Fetching profile data for user: {user.username}, type: {user.user_type}")
+        
+        # Handle special case for RIDER users
+        if user.user_type == 'RIDER':
+            logger.info("Handling RIDER user profile, ensuring vehicle fields are null")
+        
+        serializer = self.get_serializer(user)
+        logger.info(f"Serialized user profile with fields: {list(serializer.data.keys())}")
         return Response(serializer.data)
 
     @action(detail=False, methods=['post', 'options'])
@@ -257,16 +265,31 @@ def login_user(request):
         refresh = RefreshToken.for_user(user)
         access_token = str(refresh.access_token)
         
-        # Return response in the format expected by the frontend
-        return Response({
-            'token': access_token,
-            'user_type': user.user_type,
-            'user': {
+        # Serialize user data with UserSerializer to ensure proper field handling
+        user_data = UserSerializer(user).data
+        
+        # For RIDER users, explicitly set vehicle fields to null to prevent validation errors
+        if user.user_type == 'RIDER':
+            logger.info(f"Setting vehicle fields to null for RIDER user: {username}")
+            user_data_for_response = {
                 'id': user.id,
                 'username': user.username,
                 'email': user.email,
                 'user_type': user.user_type
             }
+        else:
+            user_data_for_response = {
+                'id': user.id,
+                'username': user.username,
+                'email': user.email,
+                'user_type': user.user_type
+            }
+        
+        # Return response in the format expected by the frontend
+        return Response({
+            'token': access_token,
+            'user_type': user.user_type,
+            'user': user_data_for_response
         })
     else:
         return Response(

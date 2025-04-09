@@ -27,8 +27,15 @@ class UserSerializer(serializers.ModelSerializer):
         # Log what fields are available for debugging
         logger.info(f"Serializing user {instance.id} with fields: {list(data.keys())}")
         
-        # Log vehicle details specifically
-        if instance.user_type == 'DRIVER':
+        # For RIDER users, ensure vehicle fields are null, not empty strings
+        if instance.user_type == 'RIDER':
+            # Set vehicle fields to null for riders
+            vehicle_fields = ['vehicle_make', 'vehicle_model', 'vehicle_year', 
+                            'vehicle_color', 'license_plate', 'max_passengers']
+            for field in vehicle_fields:
+                data[field] = None
+        # Log vehicle details specifically for drivers
+        elif instance.user_type == 'DRIVER':
             logger.info(f"Driver vehicle details - Make: {instance.vehicle_make}, Model: {instance.vehicle_model}")
         
         return data
@@ -123,6 +130,13 @@ class UserSerializer(serializers.ModelSerializer):
         if 'password' in validated_data:
             password = validated_data.pop('password')
             instance.set_password(password)
+        
+        # For riders, remove any vehicle-related fields to prevent validation errors
+        if instance.user_type == 'RIDER':
+            vehicle_fields = ['vehicle_make', 'vehicle_model', 'vehicle_year', 
+                            'vehicle_color', 'license_plate', 'max_passengers']
+            for field in vehicle_fields:
+                validated_data.pop(field, None)
         
         # Update other fields
         for attr, value in validated_data.items():
