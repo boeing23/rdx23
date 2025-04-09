@@ -99,8 +99,25 @@ class UserViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(request.user)
         return Response(serializer.data)
 
-    @action(detail=False, methods=['post'])
+    @action(detail=False, methods=['post', 'options'])
     def register(self, request):
+        """
+        Register a new user via the ViewSet
+        
+        Handles both POST requests for registration and OPTIONS requests for CORS preflight.
+        """
+        # Handle OPTIONS preflight requests for CORS
+        if request.method == 'OPTIONS':
+            logger.info("Handling OPTIONS preflight for ViewSet registration endpoint")
+            response = Response()
+            response["Access-Control-Allow-Origin"] = "*"
+            response["Access-Control-Allow-Methods"] = "POST, OPTIONS"
+            response["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With, Accept, Origin"
+            response["Access-Control-Allow-Credentials"] = "true"
+            response["Access-Control-Max-Age"] = "86400"  # 24 hours
+            return response
+            
+        # Handle actual registration (POST requests)
         serializer = UserRegistrationSerializer(data=request.data)
         if serializer.is_valid():
             serializer.save()
@@ -159,21 +176,35 @@ class CustomTokenObtainPairView(TokenObtainPairView):
             response.data['user'] = UserSerializer(user).data
         return response
 
-@api_view(['POST'])
+@api_view(['POST', 'OPTIONS'])
 @permission_classes([AllowAny])
 def register_user(request):
     """
     Register a new user
+    
+    Handles both POST requests for registration and OPTIONS requests for CORS preflight.
     """
+    # Handle OPTIONS preflight requests for CORS
+    if request.method == 'OPTIONS':
+        logger.info("Handling OPTIONS preflight for registration endpoint")
+        response = Response()
+        response["Access-Control-Allow-Origin"] = "*"
+        response["Access-Control-Allow-Methods"] = "POST, OPTIONS"
+        response["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With, Accept, Origin"
+        response["Access-Control-Allow-Credentials"] = "true"
+        response["Access-Control-Max-Age"] = "86400"  # 24 hours
+        return response
+    
+    # Handle actual registration (POST requests)
     try:
-        print("Registration request received with data type:", type(request.data))
-        print("Registration request data:", request.data)
+        logger.info("Registration request received with data type: %s", type(request.data))
+        logger.info("Registration request data: %s", request.data)
         
         serializer = UserSerializer(data=request.data)
         if serializer.is_valid():
-            print("Registration data is valid")
+            logger.info("Registration data is valid")
             user = serializer.save()
-            print("User saved successfully:", user.id, user.username, user.user_type)
+            logger.info("User saved successfully: %s, %s, %s", user.id, user.username, user.user_type)
             refresh = RefreshToken.for_user(user)
             return Response({
                 'user': UserSerializer(user).data,
@@ -181,19 +212,36 @@ def register_user(request):
                 'user_type': user.user_type
             }, status=status.HTTP_201_CREATED)
         else:
-            print("Registration data validation failed:", serializer.errors)
+            logger.warning("Registration data validation failed: %s", serializer.errors)
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     except Exception as e:
-        print(f"Unexpected error in registration: {str(e)}")
+        logger.error("Unexpected error in registration: %s", str(e))
         import traceback
-        print(traceback.format_exc())
+        logger.error(traceback.format_exc())
         return Response({
             'detail': f'Server error: {str(e)}' 
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-@api_view(['POST'])
+@api_view(['POST', 'OPTIONS'])
 @permission_classes([AllowAny])
 def login_user(request):
+    """
+    Login a user
+    
+    Handles both POST requests for login and OPTIONS requests for CORS preflight.
+    """
+    # Handle OPTIONS preflight requests for CORS
+    if request.method == 'OPTIONS':
+        logger.info("Handling OPTIONS preflight for login endpoint")
+        response = Response()
+        response["Access-Control-Allow-Origin"] = "*"
+        response["Access-Control-Allow-Methods"] = "POST, OPTIONS"
+        response["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With, Accept, Origin"
+        response["Access-Control-Allow-Credentials"] = "true"
+        response["Access-Control-Max-Age"] = "86400"  # 24 hours
+        return response
+        
+    # Handle actual login (POST requests)
     username = request.data.get('username')
     password = request.data.get('password')
     
