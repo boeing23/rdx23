@@ -1,13 +1,9 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import axios from 'axios';
 import { 
-  API_BASE_URL, 
-  REGISTER_URL, 
-  LOGIN_URL, 
-  getProxiedUrl, 
-  switchToNextProxy, 
-  makeProxiedRequest,
-  getProxyHeaders,
+  API_BASE_URL,
+  loginUser,
+  registerUser, 
+  getUserProfile,
   getAuthHeadersWithContentType
 } from '../config';
 
@@ -37,18 +33,10 @@ export const AuthProvider = ({ children }) => {
         if (token) {
           // Validate token by making a request to the backend
           try {
-            // Reset proxy selection each session
-            localStorage.setItem('corsProxyIndex', '0');
+            // Get the user data with the token
+            const userData = await getUserProfile();
             
-            // Use our new makeProxiedRequest function with the token
-            const userData = await makeProxiedRequest(
-              `${API_BASE_URL}/api/users/me/`,
-              'GET',
-              null,
-              { 'Authorization': `Bearer ${token}` }
-            );
-            
-            // If the request succeeds, set auth state
+            // If we got user data, the token is valid
             setAuthState({
               token,
               user: userData,
@@ -56,8 +44,12 @@ export const AuthProvider = ({ children }) => {
               isLoading: false
             });
           } catch (error) {
-            console.error('Error validating token:', error);
+            console.error('Token validation failed:', error);
+            // Clear invalid token
             localStorage.removeItem('token');
+            localStorage.removeItem('userType');
+            localStorage.removeItem('userId');
+            
             setAuthState({
               token: null,
               user: null,
@@ -87,25 +79,17 @@ export const AuthProvider = ({ children }) => {
     initializeAuth();
   }, []);
 
-  // Login function with proxy retry mechanism
+  // Login function
   const login = async (username, password) => {
-    // Reset proxy index at the start of a new login attempt
-    localStorage.setItem('corsProxyIndex', '0');
-    
     try {
       console.log('Attempting login with username:', username);
       
-      // Use our new makeProxiedRequest function
-      const loginData = await makeProxiedRequest(
-        LOGIN_URL,
-        'POST',
-        { username, password },
-        getProxyHeaders()
-      );
+      // Use our login helper function
+      const loginData = await loginUser(username, password);
       
-      console.log('Login response data:', loginData);
+      console.log('Login successful:', loginData);
       
-      // Extract token from the response
+      // Extract the token from response
       const token = loginData.token || loginData.access;
       
       if (!token) {
@@ -116,31 +100,29 @@ export const AuthProvider = ({ children }) => {
         };
       }
       
-      // Save token and user type to local storage
+      // Save token to local storage
       localStorage.setItem('token', token);
       
+      // Save user type if available
       if (loginData.user_type) {
         localStorage.setItem('userType', loginData.user_type);
       }
       
-      // Fetch user details
+      // Save user ID if available
+      if (loginData.user?.id) {
+        localStorage.setItem('userId', loginData.user.id);
+      }
+      
       try {
-        // Get user data with the token
-        const userData = await makeProxiedRequest(
-          `${API_BASE_URL}/api/users/me/`,
-          'GET',
-          null,
-          { 'Authorization': `Bearer ${token}` }
-        );
+        // Get full user profile with the new token
+        const userData = await getUserProfile();
         
-        console.log('User data fetched successfully:', userData);
-        
-        // Save additional user information
-        if (userData && userData.user_type) {
+        // Also save user type from the user profile if available
+        if (userData.user_type) {
           localStorage.setItem('userType', userData.user_type);
         }
         
-        if (userData && userData.id) {
+        if (userData.id) {
           localStorage.setItem('userId', userData.id);
         }
         
@@ -165,7 +147,7 @@ export const AuthProvider = ({ children }) => {
       } catch (userError) {
         console.error('Error fetching user data after login:', userError);
         
-        // Consider login successful even without complete user data
+        // Still consider login successful even if we couldn't fetch complete user data
         const userData = loginData.user || { user_type: loginData.user_type };
         
         setAuthState({
@@ -185,7 +167,7 @@ export const AuthProvider = ({ children }) => {
       
       return {
         success: false,
-        error: error.message || 'Login failed. Please try again.'
+        error: error.message || 'Login failed. Please check your credentials.'
       };
     }
   };
@@ -211,21 +193,13 @@ export const AuthProvider = ({ children }) => {
     window.location.href = '/login';
   };
 
-  // Register function with proxy retry mechanism
+  // Register function
   const register = async (userData) => {
-    // Reset proxy index at the start
-    localStorage.setItem('corsProxyIndex', '0');
-    
     try {
       console.log('Attempting registration with data:', userData);
       
-      // Use our new makeProxiedRequest function
-      const registrationData = await makeProxiedRequest(
-        REGISTER_URL,
-        'POST',
-        userData,
-        getProxyHeaders()
-      );
+      // Use our register helper function
+      const registrationData = await registerUser(userData);
       
       console.log('Registration successful:', registrationData);
       return { success: true, user: registrationData };

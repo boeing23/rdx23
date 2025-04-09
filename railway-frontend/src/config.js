@@ -12,161 +12,13 @@ const getApiBaseUrl = () => {
   return 'https://rdx23-production.up.railway.app';
 };
 
-// CORS Proxy configuration
-export const USE_CORS_PROXY = true;
-// The proxies we're using have different issues, let's switch to a different approach
-export const CORS_PROXY_URL = "https://proxy.cors.sh/";
-// Backup proxies in case the main one fails
-export const BACKUP_CORS_PROXIES = [
-  "https://thingproxy.freeboard.io/fetch/",
-  "https://cors-proxy.fringe.zone/",
-  "https://cors-anywhere.herokuapp.com/"
-];
-
+// Server that handles CORS properly - Railway app with CORS setup
 export const API_BASE_URL = getApiBaseUrl();
 export const FALLBACK_API_URL = 'https://rdx23-production.up.railway.app';
 
-// Request headers to ensure we get JSON responses, not HTML
-export const getProxyHeaders = () => {
-  return {
-    'Accept': 'application/json',
-    'Content-Type': 'application/json',
-    'X-Requested-With': 'XMLHttpRequest',
-    'X-Cors-Proxy-Request': 'true',
-  };
-};
-
-// Function to get proxied URL if needed
-export const getProxiedUrl = (url) => {
-  if (!USE_CORS_PROXY) {
-    return url;
-  }
-  
-  // Get proxy setting from localStorage or use default
-  const proxyIndex = parseInt(localStorage.getItem('corsProxyIndex') || '0');
-  
-  // First try the main proxy
-  if (proxyIndex === 0) {
-    return `${CORS_PROXY_URL}${url}`;
-  }
-  
-  // If a backup proxy is selected (after a failure), use it
-  if (proxyIndex > 0 && proxyIndex <= BACKUP_CORS_PROXIES.length) {
-    const backupProxy = BACKUP_CORS_PROXIES[proxyIndex - 1];
-    return `${backupProxy}${url}`;
-  }
-  
-  // If all proxies have been tried, try direct connection
-  if (proxyIndex > BACKUP_CORS_PROXIES.length) {
-    console.log('All proxies failed, trying direct connection');
-    return url;
-  }
-  
-  // Default to main proxy
-  return `${CORS_PROXY_URL}${url}`;
-};
-
-// Alternative approach - setup a function to make proxied requests directly
-export const makeProxiedRequest = async (url, method = 'GET', data = null, headers = {}) => {
-  // Get proxy setting from localStorage or use default
-  const proxyIndex = parseInt(localStorage.getItem('corsProxyIndex') || '0');
-  
-  // Base headers that ensure we get JSON
-  const baseHeaders = {
-    'Accept': 'application/json',
-    'Content-Type': 'application/json',
-    'X-Requested-With': 'XMLHttpRequest'
-  };
-  
-  // Create a complete headers object
-  const completeHeaders = {
-    ...baseHeaders,
-    ...headers
-  };
-  
-  // Try direct connection first if we've tried all proxies
-  if (proxyIndex > BACKUP_CORS_PROXIES.length) {
-    console.log('Trying direct API connection...');
-    
-    try {
-      const response = await fetch(url, {
-        method,
-        headers: completeHeaders,
-        body: data ? JSON.stringify(data) : undefined,
-        credentials: 'include'
-      });
-      
-      if (!response.ok) {
-        throw new Error(`Error ${response.status}: ${response.statusText}`);
-      }
-      
-      return await response.json();
-    } catch (error) {
-      console.error('Direct API connection failed:', error);
-      throw error;
-    }
-  }
-  
-  // Get appropriate proxy URL
-  let proxyUrl;
-  if (proxyIndex === 0) {
-    proxyUrl = CORS_PROXY_URL;
-  } else if (proxyIndex <= BACKUP_CORS_PROXIES.length) {
-    proxyUrl = BACKUP_CORS_PROXIES[proxyIndex - 1];
-  } else {
-    proxyUrl = CORS_PROXY_URL; // Fallback to main proxy as last resort
-  }
-  
-  // Add proxy-specific headers
-  const proxyHeaders = { 
-    ...completeHeaders,
-    'X-Cors-Proxy-Request': 'true'
-  };
-  
-  // Make the proxied request
-  try {
-    console.log(`Making ${method} request via proxy: ${proxyUrl}${url}`);
-    
-    const response = await fetch(`${proxyUrl}${url}`, {
-      method,
-      headers: proxyHeaders,
-      body: data ? JSON.stringify(data) : undefined
-    });
-    
-    if (!response.ok) {
-      throw new Error(`Error ${response.status}: ${response.statusText}`);
-    }
-    
-    // Try to parse JSON
-    try {
-      return await response.json();
-    } catch (parseError) {
-      console.error('Error parsing JSON response', parseError);
-      const text = await response.text();
-      console.error('Raw response:', text);
-      throw new Error('Invalid JSON response from server');
-    }
-  } catch (error) {
-    console.error(`Proxy request failed (index: ${proxyIndex}):`, error);
-    
-    // Try the next proxy
-    switchToNextProxy();
-    
-    // If we have more proxies to try, retry the request recursively
-    if (proxyIndex < BACKUP_CORS_PROXIES.length + 1) {
-      console.log('Retrying with next proxy...');
-      return makeProxiedRequest(url, method, data, headers);
-    }
-    
-    throw error;
-  }
-};
-
-// URLs for specific endpoints that don't use automatic proxying
+// URLs for API endpoints
 export const REGISTER_URL = `${API_BASE_URL}/api/users/register/`;
 export const LOGIN_URL = `${API_BASE_URL}/api/users/login/`;
-
-// Add constants for health check endpoints
 export const API_HEALTH_CHECK_URL = `${API_BASE_URL}/railway-status/`;
 
 // Token handling functions
@@ -183,8 +35,7 @@ export const getAuthHeader = () => {
 export const getAuthHeadersWithContentType = () => {
   return {
     ...getAuthHeader(),
-    'Content-Type': 'application/json',
-    'Accept': 'application/json'
+    'Content-Type': 'application/json'
   };
 };
 
@@ -200,15 +51,75 @@ export const checkApiConnection = async () => {
   }
 };
 
-// Function to try next proxy if current one fails
-export const switchToNextProxy = () => {
-  // Get current proxy index
-  const currentIndex = parseInt(localStorage.getItem('corsProxyIndex') || '0');
-  // Switch to next proxy
-  const nextIndex = currentIndex + 1;
-  localStorage.setItem('corsProxyIndex', nextIndex.toString());
-  console.log(`Switching to proxy #${nextIndex}`);
-  return nextIndex <= BACKUP_CORS_PROXIES.length + 1; // +1 for direct connection
+// Custom API caller with built-in error handling
+export const callApi = async (url, method = 'GET', data = null, additionalHeaders = {}) => {
+  // Basic headers for all requests
+  const headers = {
+    'Content-Type': 'application/json',
+    'Accept': 'application/json',
+    ...additionalHeaders
+  };
+
+  // For authenticated endpoints, add the auth token if available
+  const token = localStorage.getItem('token');
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  try {
+    console.log(`Making ${method} request to: ${url}`);
+    
+    // Setup request options
+    const options = {
+      method,
+      headers,
+      mode: 'cors', // Standard CORS mode
+      credentials: 'omit' // Don't send cookies - avoids the wildcard + credentials issue
+    };
+    
+    // Add body data for non-GET requests
+    if (data && method !== 'GET') {
+      options.body = JSON.stringify(data);
+    }
+    
+    // Make the fetch request
+    const response = await fetch(url, options);
+    
+    // Check if the response is ok (status 200-299)
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({
+        detail: `Error ${response.status}: ${response.statusText}`
+      }));
+      
+      throw new Error(errorData.detail || errorData.non_field_errors?.[0] || 
+        `HTTP error ${response.status}: ${response.statusText}`);
+    }
+    
+    // Parse and return the JSON response
+    return await response.json();
+  } catch (error) {
+    console.error('API call failed:', error);
+    
+    // Use a more generic error message for network issues
+    if (error.message === 'Failed to fetch') {
+      throw new Error('Cannot connect to the server. Please check your internet connection and try again.');
+    }
+    
+    throw error;
+  }
+};
+
+// Specialized methods for common API operations
+export const loginUser = async (username, password) => {
+  return callApi(LOGIN_URL, 'POST', { username, password });
+};
+
+export const registerUser = async (userData) => {
+  return callApi(REGISTER_URL, 'POST', userData);
+};
+
+export const getUserProfile = async () => {
+  return callApi(`${API_BASE_URL}/api/users/me/`, 'GET');
 };
 
 // Other configuration constants can be added here 
