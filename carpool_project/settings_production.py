@@ -149,9 +149,9 @@ DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
 SERVER_EMAIL = EMAIL_HOST_USER
 
 # CORS settings - very permissive for troubleshooting
-CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOW_ALL_ORIGINS = False
+CORS_ORIGIN_ALLOW_ALL = False
 CORS_ALLOW_CREDENTIALS = True
-CORS_ORIGIN_ALLOW_ALL = True
 
 # Make sure CORS middleware is at the beginning of the middleware list
 if 'corsheaders.middleware.CorsMiddleware' in MIDDLEWARE:

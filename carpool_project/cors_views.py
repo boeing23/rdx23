@@ -3,6 +3,7 @@ CORS diagnostic views and helpers.
 """
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
+from django.conf import settings
 import logging
 
 logger = logging.getLogger(__name__)
@@ -13,7 +14,8 @@ def cors_preflight_check(request):
     Handle OPTIONS preflight requests for CORS.
     This endpoint can be used for testing CORS configurations.
     """
-    logger.info(f"CORS preflight check: {request.method} from {request.META.get('HTTP_ORIGIN', 'unknown')}")
+    origin = request.META.get('HTTP_ORIGIN', 'unknown')
+    logger.info(f"CORS preflight check: {request.method} from {origin}")
     
     if request.method == 'OPTIONS':
         logger.info("Handling OPTIONS preflight request")
@@ -24,13 +26,18 @@ def cors_preflight_check(request):
             "status": "ok",
             "message": "CORS is properly configured",
             "method": request.method,
-            "origin": request.META.get('HTTP_ORIGIN', 'unknown'),
+            "origin": origin,
             "headers": dict(request.headers),
             "cors_middleware_enabled": True
         })
     
-    # Add CORS headers - explicit for this view
-    response["Access-Control-Allow-Origin"] = "*"
+    # Add CORS headers - respecting the origin
+    if origin and origin in getattr(settings, 'CORS_ALLOWED_ORIGINS', []):
+        response["Access-Control-Allow-Origin"] = origin
+    else:
+        # Default to frontend if origin not in allowed list
+        response["Access-Control-Allow-Origin"] = "https://compassionate-nurturing-production.up.railway.app"
+        
     response["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, PATCH, OPTIONS"
     response["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With, Accept, Origin"
     response["Access-Control-Allow-Credentials"] = "true"
@@ -38,5 +45,5 @@ def cors_preflight_check(request):
     if request.method == 'OPTIONS':
         response["Access-Control-Max-Age"] = "86400"  # 24 hours
     
-    logger.info(f"CORS headers set: {response.headers}")
+    logger.info(f"CORS headers set: Origin={response.get('Access-Control-Allow-Origin')}")
     return response 
