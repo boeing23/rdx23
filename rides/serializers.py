@@ -323,7 +323,7 @@ class RideDetailSerializer(RideSerializer):
     
     class Meta:
         model = Ride
-        fields = RideSerializer.Meta.fields + ['driver_info', 'ride_requests']
+        fields = RideSerializer.Meta.fields + ('driver_info', 'ride_requests')
     
     def get_driver_info(self, obj):
         driver = obj.driver
