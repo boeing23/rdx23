@@ -9,6 +9,7 @@ from rest_framework_simplejwt.views import TokenObtainPairView
 from django.db.models import Avg
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.permissions import AllowAny, IsAuthenticated
+from django.views.decorators.csrf import csrf_exempt
 import logging
 
 User = get_user_model()
@@ -100,6 +101,7 @@ class UserViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
 
     @action(detail=False, methods=['post', 'options'])
+    @csrf_exempt
     def register(self, request):
         """
         Register a new user via the ViewSet
@@ -176,6 +178,7 @@ class CustomTokenObtainPairView(TokenObtainPairView):
             response.data['user'] = UserSerializer(user).data
         return response
 
+@csrf_exempt
 @api_view(['POST', 'OPTIONS'])
 @permission_classes([AllowAny])
 def register_user(request):
@@ -222,6 +225,7 @@ def register_user(request):
             'detail': f'Server error: {str(e)}' 
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+@csrf_exempt
 @api_view(['POST', 'OPTIONS'])
 @permission_classes([AllowAny])
 def login_user(request):

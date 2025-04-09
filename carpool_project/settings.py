@@ -218,6 +218,20 @@ CORS_ALLOW_HEADERS = [
     "x-requested-with",
 ]
 
+# CSRF settings for cross-origin requests
+CSRF_COOKIE_SAMESITE = 'None'  # Allow cross-site cookies
+CSRF_COOKIE_DOMAIN = None  # Allow all domains
+CSRF_COOKIE_SECURE = False  # Set to True in production with HTTPS
+CSRF_COOKIE_HTTPONLY = False
+CSRF_TRUSTED_ORIGINS = [
+    "https://ridex-frontend.up.railway.app",
+    "https://rdx23-production-frontend.up.railway.app",
+    "https://compassionate-nurturing-production.up.railway.app",
+    "https://rdx23-production.up.railway.app",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000"
+]
+
 # Geocoding API settings
 GEOCODING_API_KEY = config('GEOCODING_API_KEY', default='5b3ce3597851110001cf62482c1ae097a0b848ef81a1e5085aa27c1f')
 MAPBOX_ACCESS_TOKEN = config('MAPBOX_ACCESS_TOKEN', default='')

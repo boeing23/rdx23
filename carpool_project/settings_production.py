@@ -153,14 +153,17 @@ CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOW_CREDENTIALS = True
 CORS_ORIGIN_ALLOW_ALL = True
 
-# Make sure corsheaders middleware is at the beginning of the middleware list
+# Make sure CORS middleware is at the beginning of the middleware list
 if 'corsheaders.middleware.CorsMiddleware' in MIDDLEWARE:
     MIDDLEWARE.remove('corsheaders.middleware.CorsMiddleware')
 MIDDLEWARE.insert(0, 'corsheaders.middleware.CorsMiddleware')
 
-# Add our custom CORS middleware as a fallback
+# Add our custom CORS middlewares as fallbacks
+if 'carpool_project.api_cors_middleware.DRFCorsMiddleware' not in MIDDLEWARE:
+    MIDDLEWARE.insert(0, 'carpool_project.api_cors_middleware.DRFCorsMiddleware')
+    
 if 'carpool_project.cors_middleware.CORSMiddleware' not in MIDDLEWARE:
-    MIDDLEWARE.insert(1, 'carpool_project.cors_middleware.CORSMiddleware')
+    MIDDLEWARE.insert(2, 'carpool_project.cors_middleware.CORSMiddleware')
 
 # Remove CorsPostCsrfMiddleware if it's causing errors
 if 'corsheaders.middleware.CorsPostCsrfMiddleware' in MIDDLEWARE:
@@ -251,4 +254,16 @@ print("Django settings loaded successfully", file=sys.stderr)
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 SECURE_SSL_REDIRECT = False  # Railway handles SSL
 SESSION_COOKIE_SECURE = False  # Temporarily disabled for troubleshooting
-CSRF_COOKIE_SECURE = False  # Temporarily disabled for troubleshooting 
+CSRF_COOKIE_SECURE = False  # Temporarily disabled for troubleshooting
+
+# CSRF settings for cross-origin requests
+CSRF_COOKIE_SAMESITE = 'None'  # Allow cross-site cookies
+CSRF_COOKIE_DOMAIN = None  # Allow all domains
+CSRF_TRUSTED_ORIGINS = [
+    "https://ridex-frontend.up.railway.app",
+    "https://rdx23-production-frontend.up.railway.app",
+    "https://compassionate-nurturing-production.up.railway.app",
+    "https://rdx23-production.up.railway.app"
+]
+# Disable CSRF for API endpoints to fix preflight issues
+CSRF_COOKIE_HTTPONLY = False 

@@ -34,17 +34,15 @@ class DRFCorsMiddleware:
     
     def _add_cors_headers(self, response, request):
         """Add required CORS headers to the response"""
-        origin = request.META.get('HTTP_ORIGIN', '*')
-        
-        # For better security in production, we could check against allowed origins
-        # But for now, we'll allow all origins (matching our settings)
-        response["Access-Control-Allow-Origin"] = origin
+        # Always use wildcard for development/troubleshooting
+        response["Access-Control-Allow-Origin"] = "*"
         response["Access-Control-Allow-Methods"] = "GET, POST, PUT, PATCH, DELETE, OPTIONS"
         response["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With, Accept, Origin"
         response["Access-Control-Allow-Credentials"] = "true"
         
         if request.method == 'OPTIONS':
             response["Access-Control-Max-Age"] = "86400"  # 24 hours cache preflight results
+            response.status_code = 200
             
         # Log the headers we've added for debugging
         logger.debug(f"Added CORS headers: {response.get('Access-Control-Allow-Origin')}") 
