@@ -11,7 +11,9 @@ logger = logging.getLogger(__name__)
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ('id', 'username', 'email', 'user_type')
+        fields = ('id', 'username', 'email', 'user_type', 'first_name', 'last_name', 
+                 'phone_number', 'vehicle_make', 'vehicle_model', 'vehicle_color', 
+                 'vehicle_year', 'license_plate')
 
 class NotificationSerializer(serializers.ModelSerializer):
     sender = serializers.SerializerMethodField()
@@ -231,6 +233,19 @@ class RideRequestSerializer(serializers.ModelSerializer):
             data['destination_display_name'] = instance.dropoff_location
         except:
             data['destination_display_name'] = "Unknown Destination"
+        
+        # Add driver information if available
+        if instance.ride and instance.ride.driver:
+            driver = instance.ride.driver
+            data['driver_name'] = f"{driver.first_name} {driver.last_name}".strip()
+            data['driver_id'] = driver.id
+            data['driver_email'] = driver.email
+            data['driver_phone'] = getattr(driver, 'phone_number', None)
+            data['vehicle_make'] = getattr(driver, 'vehicle_make', None)
+            data['vehicle_model'] = getattr(driver, 'vehicle_model', None)
+            data['vehicle_color'] = getattr(driver, 'vehicle_color', None)
+            data['vehicle_year'] = getattr(driver, 'vehicle_year', None)
+            data['license_plate'] = getattr(driver, 'license_plate', None)
             
         return data
 
@@ -243,4 +258,8 @@ class RideDetailSerializer(RideSerializer):
 
     def get_driver(self, obj):
         from users.serializers import UserSerializer
-        return UserSerializer(obj.driver).data 
+        driver_data = UserSerializer(obj.driver).data
+        # Add a full_name field to the driver data
+        if obj.driver:
+            driver_data['full_name'] = f"{obj.driver.first_name} {obj.driver.last_name}".strip()
+        return driver_data 
