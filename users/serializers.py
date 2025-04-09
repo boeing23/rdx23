@@ -133,6 +133,12 @@ class UserSerializer(serializers.ModelSerializer):
 
 class UserRegistrationSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True)
+    vehicle_make = serializers.CharField(required=False, allow_blank=True)
+    vehicle_model = serializers.CharField(required=False, allow_blank=True)
+    vehicle_year = serializers.IntegerField(required=False, allow_null=True)
+    vehicle_color = serializers.CharField(required=False, allow_blank=True)
+    license_plate = serializers.CharField(required=False, allow_blank=True)
+    max_passengers = serializers.IntegerField(required=False, allow_null=True)
     
     class Meta:
         model = User
