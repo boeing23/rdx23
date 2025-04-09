@@ -31,6 +31,7 @@ import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
 import SearchIcon from '@mui/icons-material/Search';
 import { getUserCurrentLocation, DEFAULT_LOCATION, geocodeWithPriority } from '../utils/locationUtils';
 import { format } from 'date-fns';
+import { Person, DirectionsCar, Schedule, LocationOn } from '@mui/icons-material';
 
 const formatCoordinates = (point) => {
   if (!point) return 'Not available';
@@ -385,6 +386,7 @@ const RequestRide = () => {
 
   const handleAcceptMatch = async () => {
     try {
+      setLoading(true);
       const token = localStorage.getItem('token');
       
       // Safely parse the JSON from localStorage with improved error handling
@@ -421,6 +423,7 @@ const RequestRide = () => {
         
         if (!currentMatch) {
           setError('Invalid ride data. Please try requesting a new ride.');
+          setLoading(false);
           return;
         }
       }
@@ -430,6 +433,7 @@ const RequestRide = () => {
       if (!currentMatch) {
         console.error('No match data found');
         setError('No match data found. Please try again.');
+        setLoading(false);
         return;
       }
 
@@ -440,19 +444,57 @@ const RequestRide = () => {
       if (currentMatch.pending_request_id) {
         requestId = currentMatch.pending_request_id;
         console.log('Using pending_request_id from match data:', requestId);
-      } else if (currentMatch.ride_request?.pending_request_id) {
-        requestId = currentMatch.ride_request.pending_request_id;
-        console.log('Using pending_request_id from ride_request:', requestId);
       } else if (currentMatch.ride_request?.id) {
         requestId = currentMatch.ride_request.id;
-        console.log('Using ride_request.id as fallback:', requestId);
+        console.log('Using ride_request.id:', requestId);
+      } else if (currentMatch.ride_match_id) {
+        requestId = currentMatch.ride_match_id;
+        console.log('Using ride_match_id:', requestId);
       } else if (currentMatch.ride_id) {
-        // If we have a ride_id but no request_id, create a new fallback ID
-        requestId = `match_${currentMatch.ride_id}`;
-        console.log('Using derived ID from ride_id as last resort:', requestId);
+        // If we have a ride_id but no request_id, create a new fallback request
+        // This is a last resort
+        console.log('No request ID found, using ride_id instead:', currentMatch.ride_id);
+        
+        // Make a direct request to create a ride request first
+        try {
+          const createResponse = await fetch(`${API_BASE_URL}/api/rides/requests/`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({
+              ride: currentMatch.ride_id,
+              pickup_location: currentMatch.pickup || currentMatch.start_location || "Requested Pickup",
+              dropoff_location: currentMatch.dropoff || currentMatch.end_location || "Requested Dropoff",
+              pickup_latitude: currentMatch.pickup_latitude || currentMatch.pickup_coordinates?.[0] || 0,
+              pickup_longitude: currentMatch.pickup_longitude || currentMatch.pickup_coordinates?.[1] || 0,
+              dropoff_latitude: currentMatch.dropoff_latitude || currentMatch.dropoff_coordinates?.[0] || 0,
+              dropoff_longitude: currentMatch.dropoff_longitude || currentMatch.dropoff_coordinates?.[1] || 0,
+              departure_time: currentMatch.departure_time || new Date().toISOString(),
+              seats_needed: currentMatch.seats_needed || 1
+            })
+          });
+          
+          const createData = await createResponse.json();
+          console.log('Create ride request response:', createData);
+          
+          if (createResponse.ok && createData.id) {
+            requestId = createData.id;
+            console.log('Successfully created ride request with ID:', requestId);
+          } else {
+            throw new Error(createData.error || 'Failed to create ride request');
+          }
+        } catch (e) {
+          console.error('Failed to create ride request:', e);
+          setError('Failed to create ride request. Please try again.');
+          setLoading(false);
+          return;
+        }
       } else {
         console.error('Could not find a valid request ID in:', currentMatch);
         setError('Could not find a valid request ID. Please try requesting a new ride.');
+        setLoading(false);
         return;
       }
 
@@ -481,6 +523,7 @@ const RequestRide = () => {
         console.error('Error parsing response:', parseError);
         console.error('Response text:', responseText);
         setError('Server returned invalid response. Please try again.');
+        setLoading(false);
         return;
       }
 
@@ -496,7 +539,7 @@ const RequestRide = () => {
         }
         
         setShowMatchDialog(false);
-        setSuccess('Ride accepted successfully!');
+        setSuccess('Ride accepted successfully! You can see details in My Trips.');
         
         // Add a timestamp to force a refresh of the AcceptedRides component
         const timestamp = new Date().getTime();
@@ -507,6 +550,8 @@ const RequestRide = () => {
     } catch (err) {
       console.error('Error accepting match:', err);
       setError('Failed to accept ride. Please try again.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -821,131 +866,149 @@ const RequestRide = () => {
         maxWidth="md"
       >
         <DialogTitle>
-          <Typography variant="h5" component="div">
+          <Typography variant="h5" component="div" sx={{ color: 'primary.main', fontWeight: 'bold' }}>
             Ride Match Found!
+          </Typography>
+          <Typography variant="subtitle1" color="text.secondary">
+            Review the details below and confirm your ride
           </Typography>
         </DialogTitle>
         <DialogContent>
-          {matchDetails ? (
-            <>
-              <Typography variant="h6" gutterBottom>
-                Driver & Vehicle
-              </Typography>
-              <Grid container spacing={2}>
-                <Grid item xs={12} sm={6}>
-                  <Typography variant="body1">
-                    <strong>Driver:</strong> {matchDetails.driver_name || 'Unknown'}
-                  </Typography>
-                  <Typography variant="body1">
-                    <strong>Vehicle:</strong> {matchDetails.vehicle_make || ''} {matchDetails.vehicle_model || ''}{matchDetails.vehicle_color ? `, ${matchDetails.vehicle_color}` : ''}
-                  </Typography>
-                </Grid>
-                <Grid item xs={12} sm={6}>
-                  <Typography variant="body1">
-                    <strong>License Plate:</strong> {matchDetails.license_plate || 'Not provided'}
-                  </Typography>
-                  <Typography variant="body1">
-                    <strong>Departure Time:</strong> {matchDetails.departure_time ? formatDate(matchDetails.departure_time) : 'Not provided'}
-                  </Typography>
-                </Grid>
-              </Grid>
-
-              <Typography variant="h6" sx={{ mt: 2 }} gutterBottom>
-                Route Information
-              </Typography>
-              <Grid container spacing={2}>
-                <Grid item xs={12}>
-                  <Alert severity="info" sx={{ mb: 2 }}>
-                    <AlertTitle>How Ride Matching Works</AlertTitle>
-                    You've been matched with a driver whose route overlaps with your requested journey. The app has calculated optimal pickup and dropoff points along the driver's route.
-                  </Alert>
-                </Grid>
-                <Grid item xs={12}>
-                  <Box sx={{ mb: 2, p: 1, backgroundColor: '#f5f5f5', borderRadius: 1 }}>
-                    <Typography variant="subtitle2" gutterBottom>
-                      Your Requested Route:
+          {loading ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', my: 4 }}>
+              <CircularProgress />
+            </Box>
+          ) : matchDetails ? (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              {/* Driver Details */}
+              <Paper elevation={1} sx={{ p: 2 }}>
+                <Typography variant="h6" gutterBottom sx={{ color: 'primary.main', display: 'flex', alignItems: 'center' }}>
+                  <Person sx={{ mr: 1 }} /> Driver Details
+                </Typography>
+                <Grid container spacing={2}>
+                  <Grid item xs={12} sm={6}>
+                    <Typography variant="body1" sx={{ fontWeight: 'bold' }}>Name:</Typography>
+                    <Typography variant="body2">{matchDetails.driver_name}</Typography>
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <Typography variant="body1" sx={{ fontWeight: 'bold' }}>Contact:</Typography>
+                    <Typography variant="body2">
+                      {matchDetails.driver_email || 'Email not available'}
                     </Typography>
                     <Typography variant="body2">
-                      <strong>From:</strong> {matchDetails.ride_request?.pickup_location || 'Not available'}
+                      {matchDetails.driver_phone || 'Phone not available'}
+                    </Typography>
+                  </Grid>
+                </Grid>
+              </Paper>
+              
+              {/* Vehicle Details */}
+              <Paper elevation={1} sx={{ p: 2 }}>
+                <Typography variant="h6" gutterBottom sx={{ color: 'primary.main', display: 'flex', alignItems: 'center' }}>
+                  <DirectionsCar sx={{ mr: 1 }} /> Vehicle Details
+                </Typography>
+                <Grid container spacing={2}>
+                  <Grid item xs={12} sm={6}>
+                    <Typography variant="body1" sx={{ fontWeight: 'bold' }}>Vehicle:</Typography>
+                    <Typography variant="body2">
+                      {matchDetails.vehicle_details?.year || matchDetails.vehicle_year || ''} {' '}
+                      {matchDetails.vehicle_details?.make || matchDetails.vehicle_make || ''} {' '}
+                      {matchDetails.vehicle_details?.model || matchDetails.vehicle_model || ''}
                     </Typography>
                     <Typography variant="body2">
-                      <strong>To:</strong> {matchDetails.ride_request?.dropoff_location || 'Not available'}
+                      Color: {matchDetails.vehicle_details?.color || matchDetails.vehicle_color || 'Not specified'}
                     </Typography>
-                  </Box>
-                </Grid>
-                <Grid item xs={12}>
-                  <Box sx={{ mb: 2, p: 1, backgroundColor: '#e3f2fd', borderRadius: 1 }}>
-                    <Typography variant="subtitle2" gutterBottom>
-                      Driver's Route:
-                    </Typography>
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <Typography variant="body1" sx={{ fontWeight: 'bold' }}>License Plate:</Typography>
                     <Typography variant="body2">
-                      <strong>From:</strong> {matchDetails.pickup || 'Not available'}
+                      {matchDetails.vehicle_details?.license_plate || matchDetails.license_plate || 'Not available'}
                     </Typography>
+                  </Grid>
+                </Grid>
+              </Paper>
+              
+              {/* Trip Details */}
+              <Paper elevation={1} sx={{ p: 2 }}>
+                <Typography variant="h6" gutterBottom sx={{ color: 'primary.main', display: 'flex', alignItems: 'center' }}>
+                  <Schedule sx={{ mr: 1 }} /> Trip Details
+                </Typography>
+                <Grid container spacing={2}>
+                  <Grid item xs={12} sm={6}>
+                    <Typography variant="body1" sx={{ fontWeight: 'bold' }}>From:</Typography>
                     <Typography variant="body2">
-                      <strong>To:</strong> {matchDetails.dropoff || 'Not available'}
+                      {matchDetails.pickup || matchDetails.ride_details?.start_location || 'Starting location'}
                     </Typography>
-                  </Box>
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <Typography variant="body1" sx={{ fontWeight: 'bold' }}>To:</Typography>
+                    <Typography variant="body2">
+                      {matchDetails.dropoff || matchDetails.ride_details?.end_location || 'Destination'}
+                    </Typography>
+                  </Grid>
+                  <Grid item xs={12}>
+                    <Typography variant="body1" sx={{ fontWeight: 'bold' }}>Departure Time:</Typography>
+                    <Typography variant="body2">
+                      {matchDetails.departure_time ? 
+                        new Date(matchDetails.departure_time).toLocaleString() : 
+                        'Not specified'}
+                    </Typography>
+                  </Grid>
                 </Grid>
-                <Grid item xs={12}>
-                  <Paper sx={{ p: 1, mb: 2, bgcolor: '#fcf8e3', borderLeft: '4px solid #f0ad4e', borderRadius: 1 }}>
-                    <Typography variant="subtitle2" gutterBottom>
-                      Match Compatibility Score
+              </Paper>
+              
+              {/* Pickup and Dropoff Locations */}
+              <Paper elevation={1} sx={{ p: 2 }}>
+                <Typography variant="h6" gutterBottom sx={{ color: 'primary.main', display: 'flex', alignItems: 'center' }}>
+                  <LocationOn sx={{ mr: 1 }} /> Pickup & Dropoff Points
+                </Typography>
+                <Grid container spacing={2}>
+                  <Grid item xs={12} sm={6}>
+                    <Typography variant="body1" sx={{ fontWeight: 'bold', mb: 1 }}>
+                      Optimal Pickup Point:
                     </Typography>
-                    <Box display="flex" alignItems="center">
-                      <LinearProgress 
-                        variant="determinate" 
-                        value={matchDetails.compatibility_score || 60} 
-                        sx={{ 
-                          height: 10, 
-                          borderRadius: 5, 
-                          width: '100%',
-                          backgroundColor: '#eeeeee',
-                          '& .MuiLinearProgress-bar': {
-                            backgroundColor: matchDetails.compatibility_score >= 80 ? '#4caf50' : 
-                                             matchDetails.compatibility_score >= 60 ? '#ff9800' : '#f44336'
-                          }
-                        }}
-                      />
-                      <Typography variant="body2" color="text.secondary" ml={1}>
-                        {matchDetails.compatibility_score || 60}%
-                      </Typography>
-                    </Box>
-                    <Typography variant="caption" color="text.secondary" mt={1} display="block">
-                      This score represents how well this ride matches your needs, based on direction, route overlap, and minimal detour for the driver.
-                    </Typography>
-                  </Paper>
-                </Grid>
-                <Grid item xs={12} sm={6}>
-                  <Typography variant="body1" gutterBottom>
-                    <strong>Optimal Pickup Point:</strong>
-                  </Typography>
-                  
-                  {/* Enhanced Optimal Pickup Display */}
-                  <Box sx={{ mt: 1, mb: 2, pl: 1, borderLeft: '2px solid #1976d2' }}>
                     {getOptimalPickupDetails()}
-                  </Box>
-                </Grid>
-                <Grid item xs={12} sm={6}>
-                  <Typography variant="body1" gutterBottom>
-                    <strong>Optimal Dropoff Point:</strong>
-                  </Typography>
-                  
-                  {/* Enhanced Optimal Dropoff Display */}
-                  <Box sx={{ mt: 1, mb: 2, pl: 1, borderLeft: '2px solid #1976d2' }}>
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <Typography variant="body1" sx={{ fontWeight: 'bold', mb: 1 }}>
+                      Optimal Dropoff Point:
+                    </Typography>
                     {getOptimalDropoffDetails()}
-                  </Box>
+                  </Grid>
                 </Grid>
-              </Grid>
-            </>
+              </Paper>
+            </Box>
           ) : (
             <Typography variant="body1" color="error">
               No match details available. Please try requesting a new ride.
             </Typography>
           )}
         </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setShowMatchDialog(false)}>Close</Button>
-          <Button onClick={handleAcceptMatch} variant="contained" color="primary">
+        <DialogActions sx={{ p: 2 }}>
+          <Button 
+            onClick={() => setShowMatchDialog(false)} 
+            color="secondary" 
+            disabled={loading}
+          >
+            Close
+          </Button>
+          <Button 
+            onClick={handleRejectMatch} 
+            color="error" 
+            variant="outlined" 
+            sx={{ ml: 1 }}
+            disabled={loading}
+          >
+            Decline Ride
+          </Button>
+          <Button 
+            onClick={handleAcceptMatch} 
+            variant="contained" 
+            color="primary" 
+            sx={{ ml: 1 }}
+            startIcon={<DirectionsCar />}
+            disabled={loading}
+          >
             Accept Ride
           </Button>
         </DialogActions>
