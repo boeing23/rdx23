@@ -221,19 +221,13 @@ application = WSGIHandler()
 application.load_middleware()
 
 # Add a dummy application for health checks
-def health_check_wrapper(environ, start_response):
-    path = environ.get('PATH_INFO', '')
-    if path == '/' and environ.get('HTTP_USER_AGENT', '').startswith('RailwayHealthCheck'):
-        print("Health check detected, ensuring 200 response", file=sys.stderr)
-        start_response('200 OK', [('Content-Type', 'text/html')])
-        return [b'Service is starting up. Health check passed.']
-    
-    try:
-        return application(environ, start_response)
-    except Exception as e:
-        logger.error(f"Unhandled error in application: {e}", file=sys.stderr)
-        traceback.print_exc(file=sys.stderr)
-        start_response('503 Service Unavailable', [('Content-Type', 'text/html')])
-        return [b'Service encountered an error. Please try again later.']
+def health_check_wrapper(application):
+    def wrapped(environ, start_response):
+        try:
+            return application(environ, start_response)
+        except Exception as e:
+            logger.error(f"Unhandled error in application: {e}")
+            raise
+    return wrapped
 
-application = health_check_wrapper 
+application = health_check_wrapper(application) 
