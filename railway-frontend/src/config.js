@@ -14,18 +14,46 @@ const getApiBaseUrl = () => {
 
 // CORS Proxy configuration
 export const USE_CORS_PROXY = true;
-export const CORS_PROXY_URL = "https://corsproxy.io";
+// Try a different CORS proxy service
+export const CORS_PROXY_URL = "https://api.allorigins.win/raw?url=";
+// Backup proxies in case the main one fails
+export const BACKUP_CORS_PROXIES = [
+  "https://corsproxy.io/?",
+  "https://cors-anywhere.herokuapp.com/",
+  "https://api.codetabs.com/v1/proxy?quest="
+];
 
 export const API_BASE_URL = getApiBaseUrl();
 export const FALLBACK_API_URL = 'https://rdx23-production.up.railway.app';
 
 // Function to get proxied URL if needed
 export const getProxiedUrl = (url) => {
-  if (USE_CORS_PROXY) {
-    // Use the format expected by corsproxy.io
-    return `${CORS_PROXY_URL}/?${encodeURIComponent(url)}`;
+  if (!USE_CORS_PROXY) {
+    return url;
   }
-  return url;
+  
+  // Get proxy setting from localStorage or use default
+  const proxyIndex = parseInt(localStorage.getItem('corsProxyIndex') || '0');
+  
+  // First try the main proxy
+  if (proxyIndex === 0) {
+    return `${CORS_PROXY_URL}${encodeURIComponent(url)}`;
+  }
+  
+  // If a backup proxy is selected (after a failure), use it
+  if (proxyIndex > 0 && proxyIndex <= BACKUP_CORS_PROXIES.length) {
+    const backupProxy = BACKUP_CORS_PROXIES[proxyIndex - 1];
+    return `${backupProxy}${encodeURIComponent(url)}`;
+  }
+  
+  // If all proxies have been tried, try direct connection
+  if (proxyIndex > BACKUP_CORS_PROXIES.length) {
+    console.log('All proxies failed, trying direct connection');
+    return url;
+  }
+  
+  // Default to main proxy
+  return `${CORS_PROXY_URL}${encodeURIComponent(url)}`;
 };
 
 // URLs for specific endpoints that don't use automatic proxying
@@ -63,6 +91,17 @@ export const checkApiConnection = async () => {
     console.error('API connection check failed:', error);
     return false;
   }
+};
+
+// Function to try next proxy if current one fails
+export const switchToNextProxy = () => {
+  // Get current proxy index
+  const currentIndex = parseInt(localStorage.getItem('corsProxyIndex') || '0');
+  // Switch to next proxy
+  const nextIndex = currentIndex + 1;
+  localStorage.setItem('corsProxyIndex', nextIndex.toString());
+  console.log(`Switching to proxy #${nextIndex}`);
+  return nextIndex <= BACKUP_CORS_PROXIES.length + 1; // +1 for direct connection
 };
 
 // Other configuration constants can be added here 
