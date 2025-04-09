@@ -26,7 +26,6 @@ class Ride(models.Model):
         on_delete=models.CASCADE,
         related_name='driver_rides'
     )
-    driver_name = models.CharField(max_length=255, null=True, blank=True, help_text="Cached name of the driver")
     start_location = models.CharField(max_length=255)
     end_location = models.CharField(max_length=255)
     start_latitude = models.FloatField()
@@ -134,27 +133,28 @@ class Notification(models.Model):
         ('REQUEST_ACCEPTED', 'Request Accepted'),
         ('REQUEST_REJECTED', 'Request Rejected'),
         ('RIDE_MATCH', 'Ride Match'),
+        ('MATCH_PROPOSED', 'Match Proposed'),
+        ('RIDE_ACCEPTED', 'Ride Accepted'),
+        ('RIDE_REJECTED', 'Ride Rejected'),
         ('RIDE_CANCELLED', 'Ride Cancelled'),
         ('RIDE_COMPLETED', 'Ride Completed'),
-        ('PAYMENT_RECEIVED', 'Payment Received'),
-        ('PAYMENT_CONFIRMED', 'Payment Confirmed'),
-        ('SYSTEM_MESSAGE', 'System Message')
+        ('RIDE_PENDING', 'Ride Pending'),
     ]
-    
+
     recipient = models.ForeignKey(User, on_delete=models.CASCADE, related_name='notifications')
-    sender = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='sent_notifications')
-    message = models.TextField()
+    sender = models.ForeignKey(User, on_delete=models.CASCADE, related_name='sent_notifications', null=True, blank=True)
     notification_type = models.CharField(max_length=20, choices=NOTIFICATION_TYPES)
-    ride = models.ForeignKey(Ride, on_delete=models.SET_NULL, null=True, blank=True, related_name='notifications')
-    ride_request = models.ForeignKey(RideRequest, on_delete=models.SET_NULL, null=True, blank=True, related_name='notifications')
-    created_at = models.DateTimeField(auto_now_add=True)
+    ride = models.ForeignKey('Ride', on_delete=models.CASCADE, null=True, blank=True)
+    ride_request = models.ForeignKey('RideRequest', on_delete=models.CASCADE, null=True, blank=True)
+    message = models.TextField()
     is_read = models.BooleanField(default=False)
-    
+    created_at = models.DateTimeField(auto_now_add=True)
+
     class Meta:
         ordering = ['-created_at']
-    
+
     def __str__(self):
-        return f"{self.notification_type} for {self.recipient.username} on {self.created_at.strftime('%Y-%m-%d %H:%M')}"
+        return f"{self.notification_type} - {self.recipient.username}"
 
 class PendingRideRequest(models.Model):
     """

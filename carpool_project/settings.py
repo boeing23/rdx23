@@ -98,30 +98,20 @@ WSGI_APPLICATION = "carpool_project.wsgi.application"
 # Database
 # https://docs.djangoproject.com/en/5.0/ref/settings/#databases
 
-# Railway database setting
 DATABASES = {
-    'default': dj_database_url.config(
-        default=config('DATABASE_URL', default='sqlite:///db.sqlite3'),
-        conn_max_age=600,
-        conn_health_checks=True
-    )
+    'default': {
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': BASE_DIR / 'db.sqlite3',
+    }
 }
 
-# # Original dj_database_url configuration
+# # Using dj_database_url
 # DATABASES = {
 #     'default': dj_database_url.config(
 #         default=config('DATABASE_URL', default='sqlite:///db.sqlite3'),
 #         conn_max_age=600,
 #         conn_health_checks=True
 #     )
-# }
-
-# # Temporary SQLite database for local development
-# DATABASES = {
-#     'default': {
-#         'ENGINE': 'django.db.backends.sqlite3',
-#         'NAME': BASE_DIR / 'db.sqlite3',
-#     }
 # }
 
 

@@ -1,91 +1,70 @@
 #!/usr/bin/env python
 """
-A script to test database connectivity on Railway.
-This can be run directly to troubleshoot database connection issues.
+Script to test direct database connection using settings.py values
 """
-
 import os
 import sys
 import time
 import psycopg2
-import logging
+from decouple import config
 
-# Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
-
-def test_database_connection(db_url=None):
-    """Test connection to the PostgreSQL database."""
-    if not db_url:
-        db_url = os.environ.get('DATABASE_URL')
-        if not db_url:
-            logger.error("No DATABASE_URL environment variable found")
-            return False
+def test_direct_connection():
+    """Test connection using settings.py values"""
+    print("Testing direct PostgreSQL connection...")
     
-    logger.info(f"Testing connection to database (URL starts with: {db_url[:15]}...)")
+    # Get DB parameters from config
+    db_name = config('PGDATABASE', default='railway')
+    db_user = config('PGUSER', default='postgres')
+    db_password = config('PGPASSWORD', default='tosfOdhOAUDKeqqoSnLSQijNtjBlVkJu')
+    db_host = config('PGHOST', default='centerbeam.proxy.rlwy.net')
+    db_port = config('PGPORT', default='58612')
+    
+    print(f"Connection parameters:")
+    print(f"Host: {db_host}")
+    print(f"Port: {db_port}")
+    print(f"Database: {db_name}")
+    print(f"User: {db_user}")
     
     try:
-        conn = psycopg2.connect(db_url)
+        start_time = time.time()
+        conn = psycopg2.connect(
+            dbname=db_name,
+            user=db_user,
+            password=db_password,
+            host=db_host,
+            port=db_port
+        )
         cursor = conn.cursor()
         
-        # Test query
-        cursor.execute("SELECT 1")
-        result = cursor.fetchone()
-        
-        # Get PostgreSQL version
         cursor.execute("SELECT version()")
         version = cursor.fetchone()[0]
         
-        # Get connection info
         cursor.execute("SELECT current_database(), current_user")
         db_info = cursor.fetchone()
         
+        elapsed = time.time() - start_time
+        
+        print(f"✅ Connection successful ({elapsed:.2f}s)")
+        print(f"Database: {db_info[0]}, User: {db_info[1]}")
+        print(f"PostgreSQL version: {version}")
+        
+        # Test a sample query
+        cursor.execute("SELECT COUNT(*) FROM pg_catalog.pg_tables WHERE schemaname != 'pg_catalog' AND schemaname != 'information_schema'")
+        table_count = cursor.fetchone()[0]
+        print(f"Number of tables: {table_count}")
+        
         cursor.close()
         conn.close()
-        
-        logger.info(f"Database connection successful!")
-        logger.info(f"PostgreSQL version: {version}")
-        logger.info(f"Database: {db_info[0]}, User: {db_info[1]}")
-        
         return True
     except Exception as e:
-        logger.error(f"Database connection error: {str(e)}")
+        print(f"❌ Connection failed: {e}")
         return False
 
-def retry_connection(max_retries=30, delay=5):
-    """Retry the database connection with exponential backoff."""
-    for attempt in range(1, max_retries + 1):
-        logger.info(f"Connection attempt {attempt}/{max_retries}")
-        
-        if test_database_connection():
-            logger.info("Successfully connected to the database")
-            return True
-        
-        if attempt < max_retries:
-            wait_time = delay
-            logger.info(f"Retrying in {wait_time} seconds...")
-            time.sleep(wait_time)
-    
-    logger.error(f"Failed to connect after {max_retries} attempts")
-    return False
-
 if __name__ == "__main__":
-    print("==== DATABASE CONNECTION TEST ====")
-    print(f"Python version: {sys.version}")
-    print(f"Current directory: {os.getcwd()}")
-    
-    # Test both PUBLIC and INTERNAL URLs if available
-    public_url = os.environ.get('DATABASE_PUBLIC_URL')
-    internal_url = os.environ.get('DATABASE_URL')
-    
-    success = False
-    
-    if public_url:
-        print("\nTesting PUBLIC database URL...")
-        success = test_database_connection(public_url)
-        
-    if internal_url and not success:
-        print("\nTesting INTERNAL database URL...")
-        success = retry_connection()
-    
-    sys.exit(0 if success else 1) 
+    print("\n=== TESTING DATABASE CONNECTION ===")
+    if test_direct_connection():
+        print("\n✅ Direct connection successful!")
+        sys.exit(0)
+    else:
+        print("\n❌ Connection failed. Check your configuration.")
+        sys.exit(1) 

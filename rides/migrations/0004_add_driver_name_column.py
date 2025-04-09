@@ -1,19 +1,17 @@
-# Generated manually
-
 from django.db import migrations
 
 def forward_func(apps, schema_editor):
-    # Do nothing - this operation was problematic so we're skipping it
+    # Do nothing - we've reverted to a previous design without this field
     pass
 
 def reverse_func(apps, schema_editor):
-    # Do nothing on reverse
+    # Do nothing - we've reverted to a previous design without this field
     pass
 
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('rides', '0002_initial'),
+        ('rides', '0003_add_proposed_ride_field'),
     ]
 
     operations = [

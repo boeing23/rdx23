@@ -1,0 +1,1 @@
+            logger.warning(f"Failed to get driving distance, using great_circle: {str(e)}")

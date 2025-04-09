@@ -143,7 +143,7 @@ class RideSerializer(serializers.ModelSerializer):
     class Meta:
         model = Ride
         fields = (
-            'id', 'driver', 'driver_name', 'start_location', 'end_location',
+            'id', 'driver', 'start_location', 'end_location',
             'start_latitude', 'start_longitude', 'end_latitude',
             'end_longitude', 'departure_time', 'available_seats',
             'price_per_seat', 'status', 'created_at', 'updated_at',
@@ -231,7 +231,7 @@ class RideRequestSerializer(serializers.ModelSerializer):
             data['destination_display_name'] = instance.dropoff_location
         except:
             data['destination_display_name'] = "Unknown Destination"
-
+            
         return data
 
 class RideDetailSerializer(RideSerializer):
@@ -243,10 +243,4 @@ class RideDetailSerializer(RideSerializer):
 
     def get_driver(self, obj):
         from users.serializers import UserSerializer
-        driver_data = UserSerializer(obj.driver).data
-        
-        # Ensure driver_name is included in the response
-        if obj.driver_name:
-            driver_data['name'] = obj.driver_name
-            
-        return driver_data 
+        return UserSerializer(obj.driver).data 

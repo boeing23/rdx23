@@ -66,64 +66,6 @@ def reverse_geocode(coordinates):
     return "Location address unavailable"
 
 
-def format_coord(coord):
-    """Format coordinate pair for OpenStreetMap URL (lat,lon format)"""
-    try:
-        # OpenStreetMap expects coordinates in lat,lon format (reverse of our lon,lat format)
-        if coord and len(coord) >= 2:
-            result = f"{coord[1]},{coord[0]}"  # Convert from (longitude, latitude) to (latitude, longitude)
-            logger.info(f"Formatted coordinates: {coord} -> {result}")
-            return result
-        else:
-            logger.warning(f"Invalid coordinate format: {coord}")
-            return ""
-    except Exception as e:
-        logger.error(f"Error formatting coordinates {coord}: {str(e)}")
-        return ""
-
-
-def generate_osm_directions_url(start_coords, pickup_coords, dropoff_coords, end_coords=None):
-    """Generate an OpenStreetMap directions URL showing the complete route"""
-    try:
-        logger.info(f"Generating directions URL with: start={start_coords}, pickup={pickup_coords}, dropoff={dropoff_coords}, end={end_coords}")
-        
-        if not all([start_coords, pickup_coords, dropoff_coords]):
-            logger.warning("Missing required coordinates for directions URL")
-            return None
-            
-        route_points = []
-        
-        # Format each coordinate and add to route points if valid
-        start_point = format_coord(start_coords)
-        if start_point:
-            route_points.append(start_point)
-            
-        pickup_point = format_coord(pickup_coords)
-        if pickup_point:
-            route_points.append(pickup_point)
-            
-        dropoff_point = format_coord(dropoff_coords)
-        if dropoff_point:
-            route_points.append(dropoff_point)
-        
-        # Add end coordinates if provided and different from dropoff
-        if end_coords and end_coords != start_coords:
-            end_point = format_coord(end_coords)
-            if end_point:
-                route_points.append(end_point)
-                
-        if len(route_points) < 2:
-            logger.warning(f"Not enough valid points for route: {route_points}")
-            return None
-            
-        url = f"https://www.openstreetmap.org/directions?route={';'.join(route_points)}"
-        logger.info(f"Generated URL: {url}")
-        return url
-    except Exception as e:
-        logger.error(f"Error generating OSM directions URL: {str(e)}")
-        return None
-
-
 # OpenRouteService API constants
 ORS_API_KEY = getattr(settings, 'OPENROUTE_API_KEY', None)
 if not ORS_API_KEY:
@@ -437,7 +379,7 @@ def calculate_segment_overlap(route1, route2, threshold=200):
                     break
             except Exception as e:
                 logger.error(
-                    f"Error in calculating distance for overlap: {str(e)}")
+    f"Error in calculating distance for overlap: {str(e)}")
                 continue
 
     return (proximity_count / len(route1)) * 100 if route1 else 0
@@ -458,7 +400,7 @@ def calculate_route_overlap(
     logger.info(f"{log_prefix}  Rider pickup: {rider_pickup}, Rider dropoff: {rider_dropoff}")
 
     # Generate driver's route
-    driver_route = generate_route(driver_start, driver_end)
+        driver_route = generate_route(driver_start, driver_end)
     if not driver_route or len(driver_route) < 2:
         logger.error(f"{log_prefix}Failed to generate driver route")
         return {
@@ -597,10 +539,8 @@ def calculate_route_overlap(
         # Calculate deviation score (0-100)
         deviation_score = max(0, 100 - min(deviation_percentage, 100))
         logger.info(f"{log_prefix}Deviation score: {deviation_score:.2f} (deviation: {deviation_percentage:.2f}%)")
-    else:
-        # Set deviation score to 0 when no optimal points are available
-        deviation_score = 0
-        logger.info(f"{log_prefix}Deviation score: {deviation_score} (no optimal points)")
+        else:
+        logger.info(f"{log_prefix}Deviation score: {deviation_score:.2f} (no optimal points)")
 
     # Calculate weighted compatibility score
     weights = {'direction': 0.4, 'coverage': 0.3, 'deviation': 0.3}
@@ -738,7 +678,8 @@ def generate_route(start_coords, end_coords, max_retries=3, retry_delay=2):
 
     # Check if API key is available
     if not ORS_API_KEY:
-        logger.error("OpenRouteService API key not configured, using fallback method")
+        logger.error(
+            "OpenRouteService API key not configured, using fallback method")
         return generate_fallback_route(start_coords, end_coords)
 
     # Ensure coordinates are in the correct format (lng, lat)
@@ -746,14 +687,16 @@ def generate_route(start_coords, end_coords, max_retries=3, retry_delay=2):
     end_lng, end_lat = end_coords
 
     # Validate coordinates
-    if not all(isinstance(x, (int, float)) for x in [start_lng, start_lat, end_lng, end_lat]):
-        logger.error(f"Invalid coordinate values: start={start_coords}, end={end_coords}")
+    if not all(isinstance(x, (int, float))
+               for x in [start_lng, start_lat, end_lng, end_lat]):
+        logger.error(
+            f"Invalid coordinate values: start={start_coords}, end={end_coords}")
         return None
 
     # Construct the API request
     url = f"{OPENROUTE_BASE_URL}/directions/driving-car"
-    headers = {
-        'Authorization': ORS_API_KEY,
+                headers = {
+                    'Authorization': ORS_API_KEY,
         'Accept': 'application/json, application/geo+json, application/gpx+xml, img/png; charset=utf-8'
     }
     params = {
@@ -764,12 +707,14 @@ def generate_route(start_coords, end_coords, max_retries=3, retry_delay=2):
     # Try the API request with retries
     for attempt in range(max_retries):
         try:
-            logger.info(f"Calling OpenRouteService directions API (attempt {attempt + 1}/{max_retries}) for route from ({start_lng}, {start_lat}) to ({end_lng}, {end_lat})")
+            logger.info(
+                f"Calling OpenRouteService directions API (attempt {attempt + 1}/{max_retries}) for route from ({start_lng}, {start_lat}) to ({end_lng}, {end_lat})")
 
-            response = requests.get(url, headers=headers, params=params, timeout=15)
-            
-            if response.status_code == 200:
-                data = response.json()
+            response = requests.get(
+                url, headers=headers, params=params, timeout=15)
+                
+                if response.status_code == 200:
+                    data = response.json()
                 if 'features' in data and data['features']:
                     # Extract coordinates from the route
                     coordinates = data['features'][0]['geometry']['coordinates']
@@ -869,9 +814,6 @@ class RideViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         """Get rides for the current user"""
-        # Mark past rides as complete before returning the queryset
-        mark_past_rides_complete()
-        
         user = self.request.user
         logger.info(f"Getting rides for user: {user.username}, type: {getattr(user, 'user_type', 'unknown')}")
         
@@ -924,12 +866,14 @@ class RideViewSet(viewsets.ModelViewSet):
 
                 # Check each ride for compatibility
                 for ride in available_rides:
-                    # Calculate route overlap
+                # Calculate route overlap
                     overlap_result = calculate_route_overlap(
-                        (ride.start_longitude, ride.start_latitude),
-                        (ride.end_longitude, ride.end_latitude),
-                        (pending_request.pickup_longitude, pending_request.pickup_latitude),
-                        (pending_request.dropoff_longitude, pending_request.dropoff_latitude),
+                    (ride.start_longitude, ride.start_latitude),
+                    (ride.end_longitude, ride.end_latitude),
+                    (pending_request.pickup_longitude,
+                     pending_request.pickup_latitude),
+                        (pending_request.dropoff_longitude,
+                         pending_request.dropoff_latitude),
                         get_optimal_points=True,
                         log_prefix=f"[Pending Request {pending_request.id} - Ride {ride.id}] "
                     )
@@ -1021,7 +965,8 @@ class RideViewSet(viewsets.ModelViewSet):
             
             # Verify the user is the rider
             if pending_request.rider != request.user:
-                raise PermissionDenied("You can only check status of your own ride requests")
+                raise PermissionDenied(
+                    "You can only check status of your own ride requests")
 
             # Get any new notifications for this request
             notifications = Notification.objects.filter(
@@ -1038,18 +983,29 @@ class RideViewSet(viewsets.ModelViewSet):
             if pending_request.status == 'MATCH_PROPOSED' and pending_request.proposed_ride:
                 try:
                     # Get coordinates for rider and driver
-                    driver_start = (pending_request.proposed_ride.start_longitude, pending_request.proposed_ride.start_latitude)
-                    driver_end = (pending_request.proposed_ride.end_longitude, pending_request.proposed_ride.end_latitude)
-                    rider_pickup = (pending_request.pickup_longitude, pending_request.pickup_latitude)
-                    rider_dropoff = (pending_request.dropoff_longitude, pending_request.dropoff_latitude)
+                    driver_start = (
+    pending_request.proposed_ride.start_longitude,
+     pending_request.proposed_ride.start_latitude)
+                    driver_end = (
+    pending_request.proposed_ride.end_longitude,
+     pending_request.proposed_ride.end_latitude)
+                    rider_pickup = (
+    pending_request.pickup_longitude,
+     pending_request.pickup_latitude)
+                    rider_dropoff = (
+    pending_request.dropoff_longitude,
+     pending_request.dropoff_latitude)
                     
                     # Calculate route overlap which returns optimal points
                     overlap_result = calculate_route_overlap(
                         driver_start, driver_end, rider_pickup, rider_dropoff
                     )
-                    compatibility_score = overlap_result.get("compatibility_score", 0)
-                    optimal_pickup_point = overlap_result.get("optimal_pickup_point")
-                    optimal_dropoff_point = overlap_result.get("optimal_dropoff_point")
+                    compatibility_score = overlap_result.get(
+                        "compatibility_score", 0)
+                    optimal_pickup_point = overlap_result.get(
+                        "optimal_pickup_point")
+                    optimal_dropoff_point = overlap_result.get(
+                        "optimal_dropoff_point")
 
                 except Exception as e:
                     logger.error(f"Error calculating optimal points: {str(e)}")
@@ -1077,56 +1033,6 @@ class RideViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
-    @action(detail=False, methods=['post'])
-    def complete_past_rides(self, request):
-        """Manually trigger marking past rides as complete"""
-        try:
-            mark_past_rides_complete()
-            count = Ride.objects.filter(status='COMPLETED').count()
-            return Response({
-                "status": "success",
-                "message": "Past rides have been marked as complete",
-                "completed_rides_count": count
-            })
-        except Exception as e:
-            logger.error(f"Error completing past rides: {str(e)}")
-            return Response(
-                {"error": f"Error completing past rides: {str(e)}"},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-
-    @action(detail=False, methods=['post'])
-    def update_driver_names(self, request):
-        """Update the driver_name field for all rides"""
-        try:
-            # Get all rides without driver_name
-            rides_to_update = Ride.objects.filter(
-                Q(driver_name__isnull=True) | Q(driver_name='')
-            )
-            
-            count = 0
-            for ride in rides_to_update:
-                driver = ride.driver
-                driver_name = f"{driver.first_name} {driver.last_name}".strip()
-                if not driver_name:
-                    driver_name = driver.username
-                    
-                ride.driver_name = driver_name
-                ride.save(update_fields=['driver_name'])
-                count += 1
-                
-            return Response({
-                "status": "success", 
-                "message": f"Updated driver names for {count} rides",
-                "updated_count": count
-            })
-        except Exception as e:
-            logger.error(f"Error updating driver names: {str(e)}")
-            return Response(
-                {"error": f"Error updating driver names: {str(e)}"},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-
 
 class RideRequestViewSet(viewsets.ModelViewSet):
     queryset = RideRequest.objects.all()
@@ -1134,74 +1040,14 @@ class RideRequestViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        # Mark past rides as complete
-        mark_past_rides_complete()
-        
         user = self.request.user
         # Return all ride requests for this user
         return RideRequest.objects.filter(rider=user)
 
     def retrieve(self, request, *args, **kwargs):
         instance = self.get_object()
-        logger.info(f"Retrieving detailed data for ride request {instance.id}")
         serializer = self.get_serializer(instance)
-        data = serializer.data
-        
-        # Add map URL if we have all the required coordinates
-        try:
-            logger.info(f"Generating map URL for ride request {instance.id}")
-            
-            # Get pickup and dropoff coordinates
-            pickup_coords = None
-            dropoff_coords = None
-            
-            if instance.pickup_latitude and instance.pickup_longitude:
-                pickup_coords = (instance.pickup_longitude, instance.pickup_latitude)
-                logger.info(f"Pickup coordinates: {pickup_coords}")
-                
-            if instance.dropoff_latitude and instance.dropoff_longitude:
-                dropoff_coords = (instance.dropoff_longitude, instance.dropoff_latitude)
-                logger.info(f"Dropoff coordinates: {dropoff_coords}")
-                
-            # Get driver's start and end coordinates if available
-            driver_start_coords = None
-            driver_end_coords = None
-            
-            if instance.ride and instance.ride.start_latitude and instance.ride.start_longitude:
-                driver_start_coords = (instance.ride.start_longitude, instance.ride.start_latitude)
-                logger.info(f"Driver start coordinates: {driver_start_coords}")
-                
-            if instance.ride and instance.ride.end_latitude and instance.ride.end_longitude:
-                driver_end_coords = (instance.ride.end_longitude, instance.ride.end_latitude)
-                logger.info(f"Driver end coordinates: {driver_end_coords}")
-            
-            # Generate map URL
-            if pickup_coords and dropoff_coords:
-                start_coords = driver_start_coords if driver_start_coords else pickup_coords
-                end_coords = driver_end_coords if driver_end_coords else dropoff_coords
-                
-                map_url = generate_osm_directions_url(
-                    start_coords=start_coords,
-                    pickup_coords=pickup_coords,
-                    dropoff_coords=dropoff_coords,
-                    end_coords=end_coords
-                )
-                logger.info(f"Generated map URL: {map_url}")
-                data['map_url'] = map_url
-            else:
-                logger.warning(f"Cannot generate map URL: missing coordinates - pickup: {pickup_coords}, dropoff: {dropoff_coords}")
-                # Generate a simple direct route if we have pickup and dropoff coordinates
-                if instance.pickup_latitude and instance.pickup_longitude and instance.dropoff_latitude and instance.dropoff_longitude:
-                    simple_url = f"https://www.openstreetmap.org/directions?from={instance.pickup_latitude},{instance.pickup_longitude}&to={instance.dropoff_latitude},{instance.dropoff_longitude}"
-                    logger.info(f"Generated simple map URL: {simple_url}")
-                    data['map_url'] = simple_url
-                else:
-                    data['map_url'] = None
-        except Exception as e:
-            logger.error(f"Error generating map URL: {str(e)}", exc_info=True)
-            data['map_url'] = None
-            
-        return Response(data)
+        return Response(serializer.data)
 
     @action(detail=False, methods=['get'])
     def accepted(self, request):
@@ -1209,9 +1055,6 @@ class RideRequestViewSet(viewsets.ModelViewSet):
         Get all accepted ride requests for the current user (both as rider and driver)
         """
         try:
-            # Mark past rides as complete before retrieving the list
-            mark_past_rides_complete()
-            
             # Log detailed information for debugging
             logger.info(
                 f"Fetching accepted rides for user: {request.user.username} (ID: {request.user.id})")
@@ -1406,10 +1249,10 @@ class RideRequestViewSet(viewsets.ModelViewSet):
                         'profile_image': ride.driver.profile.profile_image.url if hasattr(ride.driver, 'profile') and ride.driver.profile and ride.driver.profile.profile_image else None
                     },
                     'vehicle': {
-                        'make': ride.driver.vehicle_make if hasattr(ride.driver, 'vehicle_make') else 'Not specified',
-                        'model': ride.driver.vehicle_model if hasattr(ride.driver, 'vehicle_model') else 'Not specified',
-                        'color': ride.driver.vehicle_color if hasattr(ride.driver, 'vehicle_color') else 'Not specified',
-                        'license_plate': ride.driver.license_plate if hasattr(ride.driver, 'license_plate') else 'Not specified'
+                        'make': ride.vehicle.make if ride.vehicle else 'Not specified',
+                        'model': ride.vehicle.model if ride.vehicle else 'Not specified',
+                        'color': ride.vehicle.color if ride.vehicle else 'Not specified',
+                        'license_plate': ride.vehicle.license_plate if ride.vehicle else 'Not specified'
                     },
                     'optimal_pickup_point': optimal_pickup_point,
                     'optimal_dropoff_point': optimal_dropoff_point,
@@ -1449,8 +1292,8 @@ class RideRequestViewSet(viewsets.ModelViewSet):
                 compatibility_score = 0
             
                 try:
-                    driver_start = (pending_request.proposed_ride.start_longitude, pending_request.proposed_ride.start_latitude)
-                    driver_end = (pending_request.proposed_ride.end_longitude, pending_request.proposed_ride.end_latitude)
+                    driver_start = (proposed_ride.start_longitude, proposed_ride.start_latitude)
+                    driver_end = (proposed_ride.end_longitude, proposed_ride.end_latitude)
                     rider_pickup = (pending_request.pickup_longitude, pending_request.pickup_latitude)
                     rider_dropoff = (pending_request.dropoff_longitude, pending_request.dropoff_latitude)
                     
@@ -1765,11 +1608,18 @@ Optimal Dropoff Point:
 - Maps Link: https://www.google.com/maps/search/?api=1&query={lat},{lng}
 """
         
-        # Try to get vehicle information directly from driver
+        # Try to get vehicle information
         vehicle_make = getattr(driver, 'vehicle_make', 'Not specified')
         vehicle_model = getattr(driver, 'vehicle_model', 'Not specified')
         vehicle_color = getattr(driver, 'vehicle_color', 'Not specified')
         license_plate = getattr(driver, 'license_plate', 'Not specified')
+        
+        # Try to get it from vehicle relationship if available
+        if hasattr(ride, 'vehicle') and ride.vehicle:
+            vehicle_make = getattr(ride.vehicle, 'make', vehicle_make)
+            vehicle_model = getattr(ride.vehicle, 'model', vehicle_model)
+            vehicle_color = getattr(ride.vehicle, 'color', vehicle_color)
+            license_plate = getattr(ride.vehicle, 'license_plate', license_plate)
         
         # Format the departure time
         departure_time_str = 'Not specified'
