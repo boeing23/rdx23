@@ -28,6 +28,7 @@ from django.views.generic import TemplateView
 # Add these imports for model patching
 from django.db import connection
 from django.apps import apps
+from .cors_views import cors_preflight_check
 
 logger = logging.getLogger(__name__)
 
@@ -95,5 +96,6 @@ urlpatterns = [
     # Add the railway status endpoint
     path('railway-status/', status_check, name='railway_status'),
     path('api/check_driver_name/', check_driver_name_field),
+    path('api/cors-check/', cors_preflight_check, name='cors-check'),
     path('', TemplateView.as_view(template_name='index.html')),
 ] + static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)

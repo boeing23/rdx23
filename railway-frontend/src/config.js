@@ -1,6 +1,19 @@
 // API Configuration
-export const API_BASE_URL = 'https://rdx23-production.up.railway.app';
-export const FALLBACK_API_URL = 'https://rdx23-production.up.railway.app'; // Same for now, can be changed if there's a backup server
+// Get API URL from environment or use fallbacks
+const getApiBaseUrl = () => {
+  // Check if environment variables are available
+  if (typeof process !== 'undefined' && process.env) {
+    if (process.env.REACT_APP_API_URL) {
+      return process.env.REACT_APP_API_URL;
+    }
+  }
+  
+  // Fallback URLs
+  return 'https://rdx23-production.up.railway.app';
+};
+
+export const API_BASE_URL = getApiBaseUrl();
+export const FALLBACK_API_URL = 'https://rdx23-production.up.railway.app';
 
 // Add constants for health check endpoints
 export const API_HEALTH_CHECK_URL = `${API_BASE_URL}/api/rides/`;

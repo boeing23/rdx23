@@ -158,13 +158,13 @@ if 'corsheaders.middleware.CorsMiddleware' in MIDDLEWARE:
     MIDDLEWARE.remove('corsheaders.middleware.CorsMiddleware')
 MIDDLEWARE.insert(0, 'corsheaders.middleware.CorsMiddleware')
 
+# Add our custom CORS middleware as a fallback
+if 'carpool_project.cors_middleware.CORSMiddleware' not in MIDDLEWARE:
+    MIDDLEWARE.insert(1, 'carpool_project.cors_middleware.CORSMiddleware')
+
 # Remove CorsPostCsrfMiddleware if it's causing errors
 if 'corsheaders.middleware.CorsPostCsrfMiddleware' in MIDDLEWARE:
     MIDDLEWARE.remove('corsheaders.middleware.CorsPostCsrfMiddleware')
-
-# Remove custom CORS middleware if it's causing issues
-if 'carpool_project.cors_middleware.CORSMiddleware' in MIDDLEWARE:
-    MIDDLEWARE.remove('carpool_project.cors_middleware.CORSMiddleware')
 
 # Explicit CORS allowed origins
 CORS_ALLOWED_ORIGINS = [
