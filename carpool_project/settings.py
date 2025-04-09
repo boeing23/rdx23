@@ -100,14 +100,11 @@ WSGI_APPLICATION = "carpool_project.wsgi.application"
 
 # Railway database setting
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': config('PGDATABASE', default='railway'),
-        'USER': config('PGUSER', default='postgres'),
-        'PASSWORD': config('PGPASSWORD', default='tosfOdhOAUDKeqqoSnLSQijNtjBlVkJu'),
-        'HOST': config('PGHOST', default='centerbeam.proxy.rlwy.net'),
-        'PORT': config('PGPORT', default='58612'),
-    }
+    'default': dj_database_url.config(
+        default=config('DATABASE_URL', default='sqlite:///db.sqlite3'),
+        conn_max_age=600,
+        conn_health_checks=True
+    )
 }
 
 # # Original dj_database_url configuration
