@@ -56,6 +56,7 @@ const RiderAcceptedRides = () => {
   const [isRetrying, setIsRetrying] = useState(false);
   const [retryable, setRetryable] = useState(false);
   const { authState } = useAuth();
+  const [success, setSuccess] = useState('');
 
   const fetchAcceptedRides = async () => {
     setLoading(true);
@@ -741,6 +742,8 @@ const RiderAcceptedRides = () => {
         return;
       }
 
+      console.log(`Cancelling ride request with ID: ${rideRequestId}`);
+      
       const response = await fetch(`${API_BASE_URL}/api/rides/requests/${rideRequestId}/cancel/`, {
         method: 'POST',
         headers: {
@@ -749,14 +752,31 @@ const RiderAcceptedRides = () => {
         }
       });
 
-      if (!response.ok) {
-        throw new Error('Failed to cancel ride');
+      // Get response data
+      let responseData;
+      try {
+        const responseText = await response.text();
+        responseData = responseText ? JSON.parse(responseText) : {};
+        console.log("Cancel ride response:", responseData);
+      } catch (parseError) {
+        console.error("Error parsing response:", parseError);
+        responseData = { error: "Could not parse server response" };
       }
 
+      if (!response.ok) {
+        const errorMessage = responseData.error || 'Failed to cancel ride';
+        console.error(`Error cancelling ride (${response.status}):`, errorMessage);
+        throw new Error(errorMessage);
+      }
+
+      // Success - show message and refresh ride list
+      setSuccess("Your ride has been cancelled successfully");
       fetchAcceptedRides();
+      return true;
     } catch (err) {
       console.error('Error cancelling ride:', err);
-      setError('Failed to cancel ride. Please try again.');
+      setError(err.message || 'Failed to cancel ride. Please try again.');
+      return false;
     }
   };
 
@@ -1093,17 +1113,24 @@ const RiderAcceptedRides = () => {
   // Define the CancelRideDialog component
   const CancelRideDialog = ({ open, handleClose, ride, onCancelled }) => {
     const [cancelling, setCancelling] = useState(false);
+    const [dialogError, setDialogError] = useState('');
   
     const handleCancelConfirm = async () => {
       if (!ride) return;
       
       setCancelling(true);
+      setDialogError('');
       try {
-        await handleCancelRide(ride.id);
-        handleClose();
-        if (onCancelled) onCancelled();
+        const result = await handleCancelRide(ride.id);
+        if (result) {
+          handleClose();
+          if (onCancelled) onCancelled();
+        } else {
+          setDialogError('Failed to cancel the ride. Please try again.');
+        }
       } catch (err) {
         console.error('Error in cancel confirmation:', err);
+        setDialogError(err.message || 'Something went wrong. Please try again.');
       } finally {
         setCancelling(false);
       }
@@ -1129,6 +1156,12 @@ const RiderAcceptedRides = () => {
               </Typography>
             </Box>
           )}
+          
+          {dialogError && (
+            <Alert severity="error" sx={{ mt: 2 }}>
+              {dialogError}
+            </Alert>
+          )}
         </DialogContent>
         <DialogActions>
           <Button onClick={handleClose} disabled={cancelling}>
@@ -1138,7 +1171,7 @@ const RiderAcceptedRides = () => {
             onClick={handleCancelConfirm} 
             color="secondary" 
             disabled={cancelling}
-            startIcon={cancelling ? <CircularProgress size={20} /> : null}
+            startIcon={cancelling ? <CircularProgress size={20} /> : <Cancel />}
           >
             {cancelling ? 'Cancelling...' : 'Yes, Cancel Ride'}
           </Button>
@@ -1298,34 +1331,72 @@ const RiderAcceptedRides = () => {
   }
 
   return (
-    <Box sx={{ px: 4, py: 3 }}>
-      <Box sx={{ 
-        display: 'flex', 
-        flexDirection: 'column', 
-        alignItems: 'center', 
-        mb: 5,
-        textAlign: 'center'
-      }}>
-        <Typography variant="h4" className="page-title" gutterBottom>
-          My Trips
-        </Typography>
-      </Box>
+    <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
+      {success && (
+        <Alert 
+          severity="success" 
+          sx={{ mb: 3 }}
+          onClose={() => setSuccess('')}
+        >
+          {success}
+        </Alert>
+      )}
       
-      <Grid container spacing={4}>
-        {acceptedRides.map(ride => (
-          <Grid item xs={12} sm={6} md={4} key={ride.id}>
-            {renderRideCard(ride)}
-          </Grid>
-        ))}
-      </Grid>
-
-      <CancelRideDialog
-        open={openCancelDialog}
-        handleClose={() => setOpenCancelDialog(false)}
-        ride={selectedRide}
-        onCancelled={fetchAcceptedRides}
+      {error && (
+        <Alert 
+          severity="error" 
+          sx={{ mb: 3 }}
+          onClose={() => setError('')}
+        >
+          {error}
+        </Alert>
+      )}
+      
+      <Typography variant="h4" component="h1" gutterBottom>
+        My Trips
+      </Typography>
+      
+      {loading ? (
+        <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
+          <CircularProgress />
+        </Box>
+      ) : acceptedRides.length > 0 ? (
+        <Grid container spacing={3}>
+          {acceptedRides.map(ride => (
+            <Grid item xs={12} sm={6} md={4} key={ride.id}>
+              {renderRideCard(ride)}
+            </Grid>
+          ))}
+        </Grid>
+      ) : (
+        <Paper sx={{ p: 3, textAlign: 'center' }}>
+          <Typography variant="h6" gutterBottom>
+            You don't have any trips yet
+          </Typography>
+          <Typography variant="body1" color="textSecondary" paragraph>
+            When you request and get accepted for a ride, it will appear here.
+          </Typography>
+          <Button 
+            variant="contained" 
+            color="primary"
+            component={Link}
+            to="/request-ride"
+          >
+            Find Available Rides
+          </Button>
+        </Paper>
+      )}
+      
+      <CancelRideDialog 
+        open={openCancelDialog} 
+        handleClose={handleCloseCancelDialog} 
+        ride={selectedRide} 
+        onCancelled={() => {
+          setSuccess("Your ride has been cancelled successfully");
+          fetchAcceptedRides();
+        }}
       />
-    </Box>
+    </Container>
   );
 };
 

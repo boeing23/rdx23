@@ -1616,6 +1616,83 @@ class RideRequestViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
+    @action(detail=True, methods=['post'])
+    def cancel(self, request, pk=None):
+        """
+        Cancel a ride request
+        """
+        try:
+            # Get the ride request
+            ride_request = self.get_object()
+            
+            # Log the cancellation attempt
+            logger.info(f"Attempting to cancel ride request {ride_request.id} by user {request.user.username}")
+            
+            # Verify the user is the rider
+            if ride_request.rider != request.user:
+                logger.warning(f"User {request.user.username} attempted to cancel ride request {ride_request.id} belonging to {ride_request.rider.username}")
+                raise PermissionDenied("You can only cancel your own ride requests")
+            
+            # Check if the ride is in a state that can be cancelled
+            if ride_request.status not in ['ACCEPTED', 'PENDING']:
+                logger.warning(f"Cannot cancel ride request {ride_request.id} with status {ride_request.status}")
+                return Response(
+                    {"error": f"This ride request cannot be cancelled. Current status: {ride_request.status}"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Update ride request status
+            ride_request.status = 'CANCELLED'
+            ride_request.save()
+            logger.info(f"Ride request {ride_request.id} cancelled successfully")
+            
+            # If there's an associated ride, update its available seats
+            if ride_request.ride:
+                ride = ride_request.ride
+                # Increase available seats
+                ride.available_seats += ride_request.seats_needed
+                ride.save()
+                logger.info(f"Updated available seats for ride {ride.id} to {ride.available_seats}")
+                
+                # Create notification for the driver
+                if ride.driver:
+                    Notification.objects.create(
+                        recipient=ride.driver,
+                        sender=request.user,
+                        notification_type='RIDE_CANCELLED',
+                        message=f"A rider has cancelled their trip from {ride_request.pickup_location} to {ride_request.dropoff_location}",
+                        ride=ride,
+                        ride_request=ride_request
+                    )
+                    logger.info(f"Created cancellation notification for driver {ride.driver.username}")
+            
+            # Create notification for the rider confirming cancellation
+            Notification.objects.create(
+                recipient=request.user,
+                notification_type='RIDE_CANCELLED',
+                message=f"Your ride request from {ride_request.pickup_location} to {ride_request.dropoff_location} has been cancelled",
+                ride_request=ride_request
+            )
+            logger.info(f"Created cancellation confirmation notification for rider {request.user.username}")
+            
+            return Response({
+                "status": "success",
+                "message": "Ride request cancelled successfully"
+            })
+            
+        except PermissionDenied as e:
+            logger.error(f"Permission denied: {str(e)}")
+            return Response(
+                {"error": str(e)},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        except Exception as e:
+            logger.error(f"Error cancelling ride request: {str(e)}")
+            return Response(
+                {"error": f"Failed to cancel ride request: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
 class NotificationViewSet(viewsets.ModelViewSet):
     serializer_class = NotificationSerializer
     permission_classes = [permissions.IsAuthenticated]
