@@ -1,6 +1,15 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import axios from 'axios';
-import { API_BASE_URL, REGISTER_URL, LOGIN_URL, getProxiedUrl, switchToNextProxy } from '../config';
+import { 
+  API_BASE_URL, 
+  REGISTER_URL, 
+  LOGIN_URL, 
+  getProxiedUrl, 
+  switchToNextProxy, 
+  makeProxiedRequest,
+  getProxyHeaders,
+  getAuthHeadersWithContentType
+} from '../config';
 
 // Create auth context
 const AuthContext = createContext(null);
@@ -31,15 +40,18 @@ export const AuthProvider = ({ children }) => {
             // Reset proxy selection each session
             localStorage.setItem('corsProxyIndex', '0');
             
-            const response = await axios.get(getProxiedUrl(`${API_BASE_URL}/api/users/me/`), {
-              headers: {
-                Authorization: `Bearer ${token}`
-              }
-            });
+            // Use our new makeProxiedRequest function with the token
+            const userData = await makeProxiedRequest(
+              `${API_BASE_URL}/api/users/me/`,
+              'GET',
+              null,
+              { 'Authorization': `Bearer ${token}` }
+            );
             
+            // If the request succeeds, set auth state
             setAuthState({
               token,
-              user: response.data,
+              user: userData,
               isAuthenticated: true,
               isLoading: false
             });
@@ -80,158 +92,102 @@ export const AuthProvider = ({ children }) => {
     // Reset proxy index at the start of a new login attempt
     localStorage.setItem('corsProxyIndex', '0');
     
-    const attemptLogin = async (retryCount = 0) => {
-      if (retryCount > 3) {
-        return {
-          success: false,
-          error: 'Failed to connect after multiple attempts. Please try again later.'
+    try {
+      console.log('Attempting login with username:', username);
+      
+      // Use our new makeProxiedRequest function
+      const loginData = await makeProxiedRequest(
+        LOGIN_URL,
+        'POST',
+        { username, password },
+        getProxyHeaders()
+      );
+      
+      console.log('Login response data:', loginData);
+      
+      // Extract token from the response
+      const token = loginData.token || loginData.access;
+      
+      if (!token) {
+        console.error('No token received in login response');
+        return { 
+          success: false, 
+          error: 'Invalid server response. Please try again.'
         };
       }
       
+      // Save token and user type to local storage
+      localStorage.setItem('token', token);
+      
+      if (loginData.user_type) {
+        localStorage.setItem('userType', loginData.user_type);
+      }
+      
+      // Fetch user details
       try {
-        console.log(`Login attempt #${retryCount + 1} with username:`, username);
+        // Get user data with the token
+        const userData = await makeProxiedRequest(
+          `${API_BASE_URL}/api/users/me/`,
+          'GET',
+          null,
+          { 'Authorization': `Bearer ${token}` }
+        );
         
-        // Get the current proxy URL based on the current index
-        const proxiedLoginUrl = getProxiedUrl(LOGIN_URL);
-        console.log('Using proxied login URL:', proxiedLoginUrl);
+        console.log('User data fetched successfully:', userData);
         
-        const response = await axios.post(proxiedLoginUrl, {
-          username,
-          password
+        // Save additional user information
+        if (userData && userData.user_type) {
+          localStorage.setItem('userType', userData.user_type);
+        }
+        
+        if (userData && userData.id) {
+          localStorage.setItem('userId', userData.id);
+        }
+        
+        // Update auth state
+        setAuthState({
+          token,
+          user: userData,
+          isAuthenticated: true,
+          isLoading: false
         });
         
-        console.log('Login response status:', response.status);
-        console.log('Login response data:', response.data);
-  
-        // Django REST Framework SimpleJWT returns tokens as 'access' and 'refresh'
-        // But our custom login endpoint returns 'token'
-        const token = response.data.token || response.data.access;
+        // Dispatch auth change event
+        window.dispatchEvent(new Event('auth-change'));
         
-        if (!token) {
-          console.error('No token received in login response');
-          return { 
-            success: false, 
-            error: 'Invalid server response. Please try again.'
-          };
-        }
-        
-        // Save token to local storage
-        localStorage.setItem('token', token);
-        
-        // Save user type if available
-        if (response.data.user_type) {
-          // Save user type as a plain string, not stringified JSON
-          localStorage.setItem('userType', response.data.user_type);
-        }
-        
-        try {
-          // Get user info with the new token
-          const userUrl = `${API_BASE_URL}/api/users/me/`;
-          const proxiedUserUrl = getProxiedUrl(userUrl);
-          console.log('Fetching user data from:', proxiedUserUrl);
-          
-          const userResponse = await axios.get(proxiedUserUrl, {
-            headers: {
-              Authorization: `Bearer ${token}`
-            }
-          });
-          
-          console.log('User data fetched successfully:', userResponse.data);
-          
-          // Also save user type from the user info if available
-          if (userResponse.data && userResponse.data.user_type) {
-            localStorage.setItem('userType', userResponse.data.user_type);
-          }
-          
-          // Update auth state with user data
-          setAuthState({
-            token,
-            user: userResponse.data,
-            isAuthenticated: true,
-            isLoading: false
-          });
-          
-          // Store user ID for other components
-          if (userResponse.data && userResponse.data.id) {
-            localStorage.setItem('userId', userResponse.data.id);
-          }
-          
-          // Store userType for routing purposes
-          const effectiveUserType = userResponse.data?.user_type || response.data?.user_type || 'RIDER';
-          console.log('Login successful, user type:', effectiveUserType);
-          
-          // Dispatch auth change event for components that listen to localStorage
-          window.dispatchEvent(new Event('auth-change'));
-          
-          return { 
-            success: true, 
-            user: userResponse.data,
-            userType: effectiveUserType
-          };
-        } catch (userError) {
-          console.error('Error fetching user data after login:', userError);
-          
-          // Still consider login successful even if we couldn't fetch user data
-          // Just use the data we got from the login response
-          const userData = response.data.user || { user_type: response.data.user_type };
-          
-          setAuthState({
-            token,
-            user: userData,
-            isAuthenticated: true,
-            isLoading: false
-          });
-          
-          // Dispatch auth change event
-          window.dispatchEvent(new Event('auth-change'));
-          
-          return { success: true, user: userData };
-        }
-      } catch (error) {
-        console.error('Login error:', error);
-        
-        // Check if it's a CORS or network error
-        if (!error.response || error.message.includes('Network Error')) {
-          console.log('Detected CORS or network error, trying next proxy...');
-          
-          // Try the next proxy
-          const hasMoreProxies = switchToNextProxy();
-          
-          if (hasMoreProxies) {
-            console.log('Switching to next proxy and retrying...');
-            return attemptLogin(retryCount + 1);
-          } else {
-            console.error('All proxies failed');
-            return {
-              success: false,
-              error: 'Unable to connect to the server. Please try again later.'
-            };
-          }
-        }
-        
-        // Handle other types of errors
-        if (error.response) {
-          if (error.response.status === 500) {
-            return {
-              success: false,
-              error: 'Server error. Please try again later.'
-            };
-          }
-          
-          return { 
-            success: false, 
-            error: error.response?.data?.detail || error.response?.data?.non_field_errors?.[0] || 'Login failed. Please check your credentials.'
-          };
-        }
-        
-        return {
-          success: false,
-          error: 'Network error. Please check your connection and try again.'
+        // Return success with user data
+        const effectiveUserType = userData?.user_type || loginData?.user_type || 'RIDER';
+        return { 
+          success: true, 
+          user: userData,
+          userType: effectiveUserType
         };
+      } catch (userError) {
+        console.error('Error fetching user data after login:', userError);
+        
+        // Consider login successful even without complete user data
+        const userData = loginData.user || { user_type: loginData.user_type };
+        
+        setAuthState({
+          token,
+          user: userData,
+          isAuthenticated: true,
+          isLoading: false
+        });
+        
+        // Dispatch auth change event
+        window.dispatchEvent(new Event('auth-change'));
+        
+        return { success: true, user: userData };
       }
-    };
-    
-    return attemptLogin();
+    } catch (error) {
+      console.error('Login error:', error);
+      
+      return {
+        success: false,
+        error: error.message || 'Login failed. Please try again.'
+      };
+    }
   };
 
   // Logout function
@@ -260,50 +216,26 @@ export const AuthProvider = ({ children }) => {
     // Reset proxy index at the start
     localStorage.setItem('corsProxyIndex', '0');
     
-    const attemptRegister = async (retryCount = 0) => {
-      if (retryCount > 3) {
-        return {
-          success: false,
-          error: 'Failed to connect after multiple attempts. Please try again later.'
-        };
-      }
+    try {
+      console.log('Attempting registration with data:', userData);
       
-      try {
-        const proxiedRegisterUrl = getProxiedUrl(REGISTER_URL);
-        console.log(`Registration attempt #${retryCount + 1} using URL:`, proxiedRegisterUrl);
-        
-        const response = await axios.post(proxiedRegisterUrl, userData);
-        return { success: true, user: response.data };
-      } catch (error) {
-        console.error('Registration error:', error);
-        
-        // Check if it's a CORS or network error
-        if (!error.response || error.message.includes('Network Error')) {
-          console.log('Detected CORS or network error during registration, trying next proxy...');
-          
-          // Try the next proxy
-          const hasMoreProxies = switchToNextProxy();
-          
-          if (hasMoreProxies) {
-            console.log('Switching to next proxy and retrying registration...');
-            return attemptRegister(retryCount + 1);
-          } else {
-            console.error('All proxies failed during registration');
-            return {
-              success: false,
-              error: 'Unable to connect to the server. Please try again later.'
-            };
-          }
-        }
-        
-        return { 
-          success: false, 
-          error: error.response?.data || 'Registration failed. Please try again.'
-        };
-      }
-    };
-    
-    return attemptRegister();
+      // Use our new makeProxiedRequest function
+      const registrationData = await makeProxiedRequest(
+        REGISTER_URL,
+        'POST',
+        userData,
+        getProxyHeaders()
+      );
+      
+      console.log('Registration successful:', registrationData);
+      return { success: true, user: registrationData };
+    } catch (error) {
+      console.error('Registration error:', error);
+      return { 
+        success: false, 
+        error: error.message || 'Registration failed. Please try again.'
+      };
+    }
   };
 
   // Context value
