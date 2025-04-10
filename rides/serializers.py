@@ -226,6 +226,8 @@ class RideRequestSerializer(serializers.ModelSerializer):
     dropoff_longitude = serializers.FloatField(required=True)
     departure_time = serializers.DateTimeField(required=False)
     rider_details = serializers.SerializerMethodField()
+    optimal_pickup_info = serializers.SerializerMethodField()
+    nearest_dropoff_info = serializers.SerializerMethodField()
     
     class Meta:
         model = RideRequest
@@ -233,7 +235,9 @@ class RideRequestSerializer(serializers.ModelSerializer):
             'id', 'ride', 'rider', 'pickup_location', 'dropoff_location', 
             'seats_needed', 'status', 'created_at', 'updated_at',
             'pickup_latitude', 'pickup_longitude', 'dropoff_latitude', 
-            'dropoff_longitude', 'rider_details', 'departure_time'
+            'dropoff_longitude', 'rider_details', 'departure_time',
+            'optimal_pickup_point', 'nearest_dropoff_point',
+            'optimal_pickup_info', 'nearest_dropoff_info'
         ]
 
     def create(self, validated_data):
@@ -317,6 +321,126 @@ class RideRequestSerializer(serializers.ModelSerializer):
                 print(f"Error adding driver information: {e}")
                 
         return representation
+
+    def get_optimal_pickup_info(self, obj):
+        """Extracts and formats optimal pickup point information in a user-friendly way"""
+        if not obj.optimal_pickup_point:
+            return None
+        
+        try:
+            # Attempt to parse the JSON or handle it if it's already parsed
+            pickup_point = obj.optimal_pickup_point
+            if isinstance(pickup_point, str):
+                try:
+                    pickup_point = json.loads(pickup_point)
+                except:
+                    pass
+            
+            # Determine the coordinate format
+            coordinates = None
+            if isinstance(pickup_point, dict):
+                if 'coordinates' in pickup_point:
+                    coordinates = pickup_point['coordinates']
+                elif 'latitude' in pickup_point and 'longitude' in pickup_point:
+                    coordinates = [pickup_point['latitude'], pickup_point['longitude']]
+                elif 'lat' in pickup_point and 'lng' in pickup_point:
+                    coordinates = [pickup_point['lat'], pickup_point['lng']]
+            elif isinstance(pickup_point, list) and len(pickup_point) >= 2:
+                coordinates = pickup_point
+            
+            # If coordinates are found, generate an address
+            if coordinates:
+                try:
+                    from geopy.geocoders import Nominatim
+                    
+                    # Format the coordinates based on their arrangement
+                    if len(coordinates) >= 2:
+                        lat = coordinates[0] if isinstance(coordinates[0], float) else float(coordinates[0])
+                        lng = coordinates[1] if isinstance(coordinates[1], float) else float(coordinates[1])
+                        
+                        # Get address using geocoding
+                        geolocator = Nominatim(user_agent="chalbeyy")
+                        location = geolocator.reverse((lat, lng), exactly_one=True)
+                        address = location.address if location and location.address else f"Near ({lat:.6f}, {lng:.6f})"
+                        
+                        return {
+                            'coordinates': [lat, lng],
+                            'address': address,
+                            'formatted': f"{address}"
+                        }
+                except Exception as e:
+                    logger.error(f"Error getting address for optimal pickup: {str(e)}")
+            
+            # If we have the original pickup point but couldn't parse it properly
+            return {
+                'coordinates': coordinates if coordinates else None,
+                'address': "Optimized pickup location",
+                'formatted': "Optimized pickup location"
+            }
+            
+        except Exception as e:
+            logger.error(f"Error processing optimal pickup point: {str(e)}")
+            return None
+    
+    def get_nearest_dropoff_info(self, obj):
+        """Extracts and formats nearest dropoff point information in a user-friendly way"""
+        if not obj.nearest_dropoff_point:
+            return None
+        
+        try:
+            # Attempt to parse the JSON or handle it if it's already parsed
+            dropoff_point = obj.nearest_dropoff_point
+            if isinstance(dropoff_point, str):
+                try:
+                    dropoff_point = json.loads(dropoff_point)
+                except:
+                    pass
+            
+            # Determine the coordinate format
+            coordinates = None
+            if isinstance(dropoff_point, dict):
+                if 'coordinates' in dropoff_point:
+                    coordinates = dropoff_point['coordinates']
+                elif 'latitude' in dropoff_point and 'longitude' in dropoff_point:
+                    coordinates = [dropoff_point['latitude'], dropoff_point['longitude']]
+                elif 'lat' in dropoff_point and 'lng' in dropoff_point:
+                    coordinates = [dropoff_point['lat'], dropoff_point['lng']]
+            elif isinstance(dropoff_point, list) and len(dropoff_point) >= 2:
+                coordinates = dropoff_point
+            
+            # If coordinates are found, generate an address
+            if coordinates:
+                try:
+                    from geopy.geocoders import Nominatim
+                    
+                    # Format the coordinates based on their arrangement
+                    if len(coordinates) >= 2:
+                        lat = coordinates[0] if isinstance(coordinates[0], float) else float(coordinates[0])
+                        lng = coordinates[1] if isinstance(coordinates[1], float) else float(coordinates[1])
+                        
+                        # Get address using geocoding
+                        geolocator = Nominatim(user_agent="chalbeyy")
+                        location = geolocator.reverse((lat, lng), exactly_one=True)
+                        address = location.address if location and location.address else f"Near ({lat:.6f}, {lng:.6f})"
+                        
+                        return {
+                            'coordinates': [lat, lng],
+                            'address': address,
+                            'formatted': f"{address}"
+                        }
+                except Exception as e:
+                    logger.error(f"Error getting address for nearest dropoff: {str(e)}")
+            
+            # If we have the original dropoff point but couldn't parse it properly
+            return {
+                'coordinates': coordinates if coordinates else None,
+                'address': "Nearest dropoff location",
+                'formatted': "Nearest dropoff location"
+            }
+            
+        except Exception as e:
+            logger.error(f"Error processing nearest dropoff point: {str(e)}")
+            return None
 
 class RideDetailSerializer(RideSerializer):
     driver_info = serializers.SerializerMethodField()
