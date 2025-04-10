@@ -1213,185 +1213,26 @@ class RideRequestViewSet(viewsets.ModelViewSet):
             )
             
     def create(self, request):
-        serializer = self.get_serializer(data=request.data)
+        serializer = self.get_serializer(data=request.data, context={'request': request})
 
         try:
             serializer.is_valid(raise_exception=True)
-    
+        
             # Debug logging
             logger.info(f"Creating ride request for user: {request.user.id} - {request.user.username}")
+            logger.info(f"Serializer validated data: {serializer.validated_data}")
+            logger.info(f"Request data: {request.data}")
 
-            # Get selected ride
-            selected_ride_id = serializer.validated_data.get('ride')
-            selected_ride = None
-            if selected_ride_id:
-                try:
-                    selected_ride = Ride.objects.get(id=selected_ride_id.id)
-                except Ride.DoesNotExist:
-                    logger.warning(f"Selected ride with ID {selected_ride_id} does not exist")
-
-            # Process standalone request
-            if not selected_ride_id and not serializer.validated_data.get('pickup_longitude'):
-                ride_request = serializer.save()
-                ride_request.rider = request.user
-                ride_request.save()
-                return Response({
-                    'status': 'success',
-                    'message': 'Your ride request has been saved.'
-                }, status=status.HTTP_201_CREATED)
-
-            # Find best match logic
-            available_rides = Ride.objects.filter(
-                status='SCHEDULED',
-                departure_time__gte=timezone.now(),
-                available_seats__gte=serializer.validated_data.get('seats_needed', 1)
-            ).exclude(driver=request.user)
-
-            best_match = None
-            best_score = 0
-            COMPATIBILITY_THRESHOLD = 60
-
-            for ride in available_rides:
-                if None in (ride.start_longitude, ride.start_latitude, ride.end_longitude, ride.end_latitude):
-                    continue
-
-                compatibility_result = calculate_route_overlap(
-                    driver_start=(ride.start_longitude, ride.start_latitude),
-                    driver_end=(ride.end_longitude, ride.end_latitude),
-                    rider_pickup=(
-                        float(serializer.validated_data['pickup_longitude']), 
-                        float(serializer.validated_data['pickup_latitude'])
-                    ),
-                    rider_dropoff=(
-                        float(serializer.validated_data['dropoff_longitude']), 
-                        float(serializer.validated_data['dropoff_latitude'])
-                    ),
-                    get_optimal_points=True,
-                    log_prefix=f"[Ride {ride.id}] "
-                )
-
-                compatibility_score = compatibility_result.get('compatibility_score', 0)
-                if compatibility_score > best_score and compatibility_score >= COMPATIBILITY_THRESHOLD:
-                    best_match = ride
-                    best_score = compatibility_score
-
-            # Handle no match found
-            if not best_match:
-                target_ride = selected_ride or available_rides.first()
-                if not target_ride:
-                    return Response({
-                        'status': 'error',
-                        'error': 'No available rides found.'
-                    }, status=status.HTTP_400_BAD_REQUEST)
-
-                ride_request = RideRequest(
-                    ride=target_ride,
-                    rider=request.user,
-                    pickup_location=serializer.validated_data['pickup_location'],
-                    dropoff_location=serializer.validated_data['dropoff_location'],
-                    pickup_latitude=serializer.validated_data['pickup_latitude'],
-                    pickup_longitude=serializer.validated_data['pickup_longitude'],
-                    dropoff_latitude=serializer.validated_data['dropoff_latitude'],
-                    dropoff_longitude=serializer.validated_data['dropoff_longitude'],
-                    departure_time=serializer.validated_data['departure_time'],
-                    seats_needed=serializer.validated_data.get('seats_needed', 1),
-                    status='PENDING'
-                )
-                ride_request.save()
-                return Response({
-                    'status': 'error',
-                    'has_match': False,
-                    'error': 'No suitable matching rides found. Your request has been saved and will be matched when a compatible ride becomes available.'
-                }, status=status.HTTP_200_OK)
-
-            # Create accepted request
-            ride = best_match
-            optimal_pickup_point = compatibility_result.get('optimal_pickup_point')
-            optimal_dropoff_point = compatibility_result.get('optimal_dropoff_point')
-            compatibility_score = best_score
-
-            ride_request = RideRequest(
-                ride=ride,
-                rider=request.user,
-                pickup_location=serializer.validated_data['pickup_location'],
-                dropoff_location=serializer.validated_data['dropoff_location'],
-                pickup_latitude=serializer.validated_data['pickup_latitude'],
-                pickup_longitude=serializer.validated_data['pickup_longitude'],
-                dropoff_latitude=serializer.validated_data['dropoff_latitude'],
-                dropoff_longitude=serializer.validated_data['dropoff_longitude'],
-                departure_time=serializer.validated_data['departure_time'],
-                seats_needed=serializer.validated_data.get('seats_needed', 1),
-                status='ACCEPTED',
-                optimal_pickup_point=optimal_pickup_point,
-                nearest_dropoff_point=optimal_dropoff_point
-            )
-            ride_request.save()
-
-            # Update ride seats
-            if ride.available_seats > 0:
-                ride.available_seats -= serializer.validated_data.get('seats_needed', 1)
-                ride.save()
-                
-                if ride.available_seats <= 0:
-                    ride.status = 'FULL'
-                    ride.save()
-
-            # Create notification
-            Notification.objects.create(
-                recipient=ride.driver,
-                notification_type='RIDE_REQUEST',
-                message=f"{request.user.username} has requested to join your ride.",
-                ride_request=ride_request
-            )
-    
-            # Create map URL
-            def format_coord(coord):
-                return f"{coord[1]},{coord[0]}" if isinstance(coord, tuple) else f"{coord['latitude']},{coord['longitude']}"
-
-            driver_start = (ride.start_longitude, ride.start_latitude)
-            driver_end = (ride.end_longitude, ride.end_latitude)
-            rider_pickup = (
-                serializer.validated_data['pickup_longitude'],
-                serializer.validated_data['pickup_latitude']
-            )
-            rider_dropoff = (
-                serializer.validated_data['dropoff_longitude'],
-                serializer.validated_data['dropoff_latitude']
-            )
-
-            map_url = "https://www.openstreetmap.org/directions?"
-            if optimal_pickup_point and 'latitude' in optimal_pickup_point and 'longitude' in optimal_pickup_point:
-                map_url += f"route={format_coord(driver_start)};{format_coord(optimal_pickup_point)};{format_coord(optimal_dropoff_point)};{format_coord(driver_end)}"
-            else:
-                map_url += f"route={format_coord(driver_start)};{format_coord(rider_pickup)};{format_coord(rider_dropoff)};{format_coord(driver_end)}"
-
+            # Save the ride request
+            ride_request = serializer.save()
+            
+            # Return success response
             return Response({
                 'status': 'success',
                 'message': 'Ride request created successfully.',
-                'has_match': True,
-                'match_details': {
-                    'ride_id': ride.id,
-                    'driver': {
-                        'id': ride.driver.id,
-                        'username': ride.driver.username,
-                        'first_name': ride.driver.first_name,
-                        'last_name': ride.driver.last_name,
-                        'profile_image': ride.driver.profile.profile_image.url if hasattr(ride.driver, 'profile') and ride.driver.profile and ride.driver.profile.profile_image else None
-                    },
-                    'vehicle': {
-                        'make': ride.driver.vehicle_make if hasattr(ride.driver, 'vehicle_make') else 'Not specified',
-                        'model': ride.driver.vehicle_model if hasattr(ride.driver, 'vehicle_model') else 'Not specified',
-                        'color': ride.driver.vehicle_color if hasattr(ride.driver, 'vehicle_color') else 'Not specified',
-                        'license_plate': ride.driver.license_plate if hasattr(ride.driver, 'license_plate') else 'Not specified'
-                    },
-                    'optimal_pickup_point': optimal_pickup_point,
-                    'optimal_dropoff_point': optimal_dropoff_point,
-                    'compatibility_score': compatibility_score,
-                    'departure_time': ride.departure_time,
-                    'map_url': map_url
-                }
+                'ride_request': RideRequestSerializer(ride_request).data
             }, status=status.HTTP_201_CREATED)
-    
+        
         except Exception as e:
             logger.error(f"Failed to create ride request: {str(e)}")
             return Response({"error": f"Failed to create ride request: {str(e)}"},

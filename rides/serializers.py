@@ -237,8 +237,8 @@ class RideRequestSerializer(serializers.ModelSerializer):
         ]
 
     def create(self, validated_data):
-        # Get the ride ID from the URL
-        ride_id = self.context['view'].kwargs.get('ride_pk')
+        # Get the ride ID from the request data instead of URL
+        ride_id = self.initial_data.get('ride_id')
         if not ride_id:
             raise serializers.ValidationError("Ride ID is required")
             
