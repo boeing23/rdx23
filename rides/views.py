@@ -1223,8 +1223,60 @@ class RideRequestViewSet(viewsets.ModelViewSet):
             logger.info(f"Serializer validated data: {serializer.validated_data}")
             logger.info(f"Request data: {request.data}")
 
-            # Save the ride request
+            # Save the ride request (this will call our create method in the serializer)
             ride_request = serializer.save()
+            
+            # Calculate optimal pickup and dropoff points
+            try:
+                # Get relevant coordinates
+                ride = ride_request.ride
+                
+                # Driver route - using start and end for now as a simple route
+                driver_start = (ride.start_longitude, ride.start_latitude)
+                driver_end = (ride.end_longitude, ride.end_latitude)
+                
+                # Build a simple route for now - in production this would use the full route
+                driver_route = [(driver_start[1], driver_start[0]), (driver_end[1], driver_end[0])]
+                
+                # Use helper functions to find optimal points
+                rider_pickup = (ride_request.pickup_longitude, ride_request.pickup_latitude)
+                rider_dropoff = (ride_request.dropoff_longitude, ride_request.dropoff_latitude)
+                
+                # Calculate optimal pickup point
+                optimal_pickup, pickup_dist, _ = find_optimal_pickup(
+                    [(p[1], p[0]) for p in driver_route],  # Convert to (lat, lng) format
+                    (rider_pickup[1], rider_pickup[0])
+                )
+                
+                # Calculate optimal dropoff point
+                optimal_dropoff, dropoff_dist, _ = find_optimal_dropoff(
+                    [(p[1], p[0]) for p in driver_route],  # Convert to (lat, lng) format
+                    (rider_pickup[1], rider_pickup[0]),
+                    (rider_dropoff[1], rider_dropoff[0])
+                )
+                
+                # Store the optimal points in the ride request
+                if optimal_pickup:
+                    ride_request.optimal_pickup_point = {
+                        'latitude': optimal_pickup[0],
+                        'longitude': optimal_pickup[1],
+                        'distance': pickup_dist
+                    }
+                
+                if optimal_dropoff:
+                    ride_request.nearest_dropoff_point = {
+                        'latitude': optimal_dropoff[0],
+                        'longitude': optimal_dropoff[1],
+                        'distance': dropoff_dist
+                    }
+                
+                # Save the updated ride request
+                ride_request.save()
+                logger.info(f"Optimal points calculated and saved: pickup={optimal_pickup}, dropoff={optimal_dropoff}")
+                
+            except Exception as e:
+                logger.error(f"Error calculating optimal points: {str(e)}")
+                # Don't fail the request if we can't calculate optimal points
             
             # Return success response
             return Response({
