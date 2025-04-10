@@ -173,9 +173,9 @@ export const AuthProvider = ({ children }) => {
   };
 
   // Social login function
-  const socialLogin = async (provider, accessToken) => {
+  const socialLogin = async (provider, accessToken, userType = 'RIDER') => {
     try {
-      console.log(`Attempting ${provider} login`);
+      console.log(`Attempting ${provider} login as ${userType}`);
       
       // Send request to the social login endpoint
       const response = await fetch(`${API_BASE_URL}/api/users/social/login/`, {
@@ -185,7 +185,8 @@ export const AuthProvider = ({ children }) => {
         },
         body: JSON.stringify({
           provider: provider,
-          access_token: accessToken
+          access_token: accessToken,
+          user_type: userType
         })
       });
       
@@ -210,6 +211,9 @@ export const AuthProvider = ({ children }) => {
       // Save user data if available
       if (loginData.user?.user_type) {
         localStorage.setItem('userType', loginData.user.user_type);
+      } else {
+        // If no user type in response, use the one we sent
+        localStorage.setItem('userType', userType);
       }
       
       if (loginData.user?.id) {
@@ -219,7 +223,7 @@ export const AuthProvider = ({ children }) => {
       // Update auth state
       setAuthState({
         token,
-        user: loginData.user,
+        user: loginData.user || { user_type: userType },
         isAuthenticated: true,
         isLoading: false
       });
@@ -229,8 +233,8 @@ export const AuthProvider = ({ children }) => {
       
       return { 
         success: true, 
-        user: loginData.user,
-        userType: loginData.user?.user_type || 'RIDER'
+        user: loginData.user || { user_type: userType },
+        userType: loginData.user?.user_type || userType
       };
     } catch (error) {
       console.error(`${provider} login error:`, error);

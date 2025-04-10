@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Container, Typography, TextField, Button, Paper, FormControl, FormLabel, Alert, useTheme, useMediaQuery, Divider } from '@mui/material';
+import { Box, Container, Typography, TextField, Button, Paper, FormControl, FormLabel, Alert, useTheme, useMediaQuery, Divider, Dialog, DialogTitle, DialogContent, DialogActions, RadioGroup, FormControlLabel, Radio } from '@mui/material';
 import { styled } from '@mui/material/styles';
 import { useNavigate, useLocation } from 'react-router-dom';
 import DirectionsCarIcon from '@mui/icons-material/DirectionsCar';
@@ -103,6 +103,12 @@ const AuthPage = () => {
   const [userType, setUserType] = useState('RIDER');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  
+  // Google login state
+  const [googleUserInfo, setGoogleUserInfo] = useState(null);
+  const [googleCredential, setGoogleCredential] = useState(null);
+  const [userTypeDialogOpen, setUserTypeDialogOpen] = useState(false);
+  const [selectedUserType, setSelectedUserType] = useState('RIDER');
   
   // Set initial form based on route
   useEffect(() => {
@@ -217,23 +223,49 @@ const AuthPage = () => {
       const decoded = jwtDecode(credentialResponse.credential);
       console.log('Google login successful, decoded info:', decoded);
       
-      // Use the socialLogin method from AuthContext
-      const result = await socialLogin('google', credentialResponse.credential);
+      // Save Google info and credential for later use
+      setGoogleUserInfo(decoded);
+      setGoogleCredential(credentialResponse.credential);
+      
+      // Open user type selection dialog
+      setUserTypeDialogOpen(true);
+    } catch (error) {
+      console.error('Google login error:', error);
+      setError(error.message || 'Failed to authenticate with Google');
+      setLoading(false);
+    }
+  };
+  
+  const handleUserTypeDialogClose = (confirmed) => {
+    setUserTypeDialogOpen(false);
+    
+    if (!confirmed) {
+      // User canceled the dialog
+      setLoading(false);
+      return;
+    }
+    
+    // Now process the social login with the selected user type
+    processSocialLogin(googleCredential, selectedUserType);
+  };
+  
+  const processSocialLogin = async (credential, userType) => {
+    try {
+      // Add user type to the credential payload
+      const result = await socialLogin('google', credential, userType);
       
       if (result.success) {
         console.log('Google login processed successfully');
         
         // Navigate based on user type
-        const userType = result.userType || 'RIDER';
         window.location.href = userType === 'DRIVER' ? '/offer' : '/rides';
       } else {
         console.error('Google login processing failed:', result.error);
         setError(result.error);
       }
-      
     } catch (error) {
-      console.error('Google login error:', error);
-      setError(error.message || 'Failed to authenticate with Google');
+      console.error('Google login processing error:', error);
+      setError(error.message || 'Failed to process Google authentication');
     } finally {
       setLoading(false);
     }
@@ -242,6 +274,7 @@ const AuthPage = () => {
   const handleGoogleError = () => {
     console.error('Google login failed');
     setError('Google login failed. Please try again.');
+    setLoading(false);
   };
 
   const validateRegisterData = () => {
@@ -759,6 +792,78 @@ const AuthPage = () => {
             )}
           </Overlay>
         </OverlayContainer>
+
+        {/* User Type Dialog for Google Login */}
+        <Dialog open={userTypeDialogOpen} onClose={() => handleUserTypeDialogClose(false)}>
+          <DialogTitle sx={{ textAlign: 'center', color: '#861F41' }}>
+            Choose Account Type
+          </DialogTitle>
+          <DialogContent>
+            <Typography variant="body2" sx={{ mb: 2 }}>
+              Welcome {googleUserInfo?.name || ''}! Please select how you want to use ChalBeyy:
+            </Typography>
+            <RadioGroup
+              value={selectedUserType}
+              onChange={(e) => setSelectedUserType(e.target.value)}
+            >
+              <FormControlLabel 
+                value="RIDER" 
+                control={<Radio sx={{ color: '#861F41', '&.Mui-checked': { color: '#861F41' } }} />} 
+                label={
+                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                    <PersonIcon sx={{ color: '#861F41', mr: 1 }} />
+                    <Box>
+                      <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>
+                        Rider
+                      </Typography>
+                      <Typography variant="body2" sx={{ color: '#666' }}>
+                        I want to request rides
+                      </Typography>
+                    </Box>
+                  </Box>
+                } 
+              />
+              <FormControlLabel 
+                value="DRIVER" 
+                control={<Radio sx={{ color: '#861F41', '&.Mui-checked': { color: '#861F41' } }} />} 
+                label={
+                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                    <DirectionsCarIcon sx={{ color: '#861F41', mr: 1 }} />
+                    <Box>
+                      <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>
+                        Driver
+                      </Typography>
+                      <Typography variant="body2" sx={{ color: '#666' }}>
+                        I want to offer rides
+                      </Typography>
+                    </Box>
+                  </Box>
+                } 
+              />
+            </RadioGroup>
+            {selectedUserType === 'DRIVER' && (
+              <Alert severity="info" sx={{ mt: 2 }}>
+                Note: You'll need to provide vehicle information in your profile before offering rides.
+              </Alert>
+            )}
+          </DialogContent>
+          <DialogActions sx={{ justifyContent: 'center', pb: 3 }}>
+            <Button 
+              onClick={() => handleUserTypeDialogClose(false)}
+              variant="outlined"
+              sx={{ borderColor: '#861F41', color: '#861F41' }}
+            >
+              Cancel
+            </Button>
+            <Button 
+              onClick={() => handleUserTypeDialogClose(true)}
+              variant="contained"
+              sx={{ bgcolor: '#861F41', '&:hover': { bgcolor: '#A52A55' } }}
+            >
+              Continue
+            </Button>
+          </DialogActions>
+        </Dialog>
       </Box>
     </StyledContainer>
   );

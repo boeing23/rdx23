@@ -38,6 +38,7 @@ class SocialLoginView(APIView):
             provider = request.data.get('provider', None)
             access_token = request.data.get('access_token', None)
             code = request.data.get('code', None)
+            user_type = request.data.get('user_type', 'RIDER')  # Default to RIDER if not provided
             
             if not provider:
                 return Response({"error": "Provider is required"}, status=status.HTTP_400_BAD_REQUEST)
@@ -47,11 +48,11 @@ class SocialLoginView(APIView):
                 
             # Process based on provider
             if provider == 'google':
-                return self.login_with_google(access_token, code)
+                return self.login_with_google(access_token, code, user_type)
             elif provider == 'facebook':
-                return self.login_with_facebook(access_token)
+                return self.login_with_facebook(access_token, user_type)
             elif provider == 'github':
-                return self.login_with_github(code)
+                return self.login_with_github(code, user_type)
             else:
                 return Response({"error": "Provider not supported"}, status=status.HTTP_400_BAD_REQUEST)
                 
@@ -59,7 +60,7 @@ class SocialLoginView(APIView):
             logger.error(f"Social login error: {str(e)}")
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
-    def login_with_google(self, access_token=None, code=None):
+    def login_with_google(self, access_token=None, code=None, user_type='RIDER'):
         """Handle Google login"""
         try:
             adapter = GoogleOAuth2Adapter()
@@ -88,7 +89,7 @@ class SocialLoginView(APIView):
                     username=email,  # Use email as username
                     first_name=login_data.account.extra_data.get('given_name', ''),
                     last_name=login_data.account.extra_data.get('family_name', ''),
-                    user_type='RIDER',  # Default to RIDER, can be updated later
+                    user_type=user_type,  # Use provided user type instead of default
                     is_verified=True,  # Social users are verified by default
                 )
                 user.set_unusable_password()
@@ -114,7 +115,7 @@ class SocialLoginView(APIView):
             logger.error(f"Google login error: {str(e)}")
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
-    def login_with_facebook(self, access_token):
+    def login_with_facebook(self, access_token, user_type='RIDER'):
         """Handle Facebook login"""
         try:
             adapter = FacebookOAuth2Adapter()
@@ -135,7 +136,7 @@ class SocialLoginView(APIView):
                     username=email,  # Use email as username
                     first_name=login_data.account.extra_data.get('first_name', ''),
                     last_name=login_data.account.extra_data.get('last_name', ''),
-                    user_type='RIDER',  # Default to RIDER, can be updated later
+                    user_type=user_type,  # Use provided user type instead of default
                     is_verified=True,  # Social users are verified by default
                 )
                 user.set_unusable_password()
@@ -161,7 +162,7 @@ class SocialLoginView(APIView):
             logger.error(f"Facebook login error: {str(e)}")
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
-    def login_with_github(self, code):
+    def login_with_github(self, code, user_type):
         """Handle GitHub login"""
         try:
             adapter = GitHubOAuth2Adapter()
@@ -203,7 +204,7 @@ class SocialLoginView(APIView):
                     username=login_data.account.extra_data.get('login', email),
                     first_name=first_name,
                     last_name=last_name,
-                    user_type='RIDER',  # Default to RIDER, can be updated later
+                    user_type=user_type,  # Use provided user type instead of default
                     is_verified=True,  # Social users are verified by default
                 )
                 user.set_unusable_password()
