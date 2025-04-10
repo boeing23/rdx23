@@ -11,4 +11,5 @@ urlpatterns = [
     path('', include(router.urls)),
     path('health/', health_check, name='health-check'),
     path('rides/accepted/', RideRequestViewSet.as_view({'get': 'accepted'}), name='accepted-rides'),
+    path('requests/accepted/', RideRequestViewSet.as_view({'get': 'accepted'}), name='accepted-requests'),
 ] 
