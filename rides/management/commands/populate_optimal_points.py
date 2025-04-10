@@ -25,6 +25,14 @@ class Command(BaseCommand):
                 if not ride:
                     continue
                 
+                # Skip if any required coordinates are missing
+                if (not hasattr(ride_request, 'pickup_latitude') or not hasattr(ride_request, 'pickup_longitude') or
+                    not hasattr(ride_request, 'dropoff_latitude') or not hasattr(ride_request, 'dropoff_longitude') or
+                    not hasattr(ride, 'start_latitude') or not hasattr(ride, 'start_longitude') or
+                    not hasattr(ride, 'end_latitude') or not hasattr(ride, 'end_longitude')):
+                    self.stdout.write(self.style.WARNING(f"Skipping ride request {ride_request.id} due to missing coordinates"))
+                    continue
+                
                 # Get coordinates
                 driver_start = (ride.start_longitude, ride.start_latitude)
                 driver_end = (ride.end_longitude, ride.end_latitude)
