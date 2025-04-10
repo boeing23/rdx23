@@ -1012,13 +1012,15 @@ const RiderAcceptedRides = () => {
               )}
             </Box>
             
-            {/* Route Map - Updated to use direct coordinate fields */}
-            {(ride.pickup_latitude && ride.pickup_longitude && ride.dropoff_latitude && ride.dropoff_longitude) ? (
+            {/* Route Map - Updated to use optimal pickup and nearest dropoff points */}
+            {(
+              (ride.optimal_pickup_point && ride.optimal_pickup_point.latitude && ride.optimal_pickup_point.longitude &&
+              ride.nearest_dropoff_point && ride.nearest_dropoff_point.latitude && ride.nearest_dropoff_point.longitude) ? (
               <Box sx={{ mt: 2, height: '200px', width: '100%', border: '1px solid #ccc', borderRadius: '4px', overflow: 'hidden' }}>
                 <MapContainer 
                   center={[
-                    (ride.pickup_latitude + ride.dropoff_latitude) / 2,
-                    (ride.pickup_longitude + ride.dropoff_longitude) / 2
+                    (ride.optimal_pickup_point.latitude + ride.nearest_dropoff_point.latitude) / 2,
+                    (ride.optimal_pickup_point.longitude + ride.nearest_dropoff_point.longitude) / 2
                   ]} 
                   zoom={13} 
                   style={{ height: '100%', width: '100%' }}
@@ -1028,19 +1030,19 @@ const RiderAcceptedRides = () => {
                     url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                   />
                   <Marker 
-                    position={[ride.pickup_latitude, ride.pickup_longitude]}
+                    position={[ride.optimal_pickup_point.latitude, ride.optimal_pickup_point.longitude]}
                   >
-                    <Popup>Pickup: {ride.pickup_location}</Popup>
+                    <Popup>Optimal Pickup: {ride.pickup_location}</Popup>
                   </Marker>
                   <Marker 
-                    position={[ride.dropoff_latitude, ride.dropoff_longitude]}
+                    position={[ride.nearest_dropoff_point.latitude, ride.nearest_dropoff_point.longitude]}
                   >
-                    <Popup>Dropoff: {ride.dropoff_location}</Popup>
+                    <Popup>Nearest Dropoff: {ride.dropoff_location}</Popup>
                   </Marker>
                   <Polyline 
                     positions={[
-                      [ride.pickup_latitude, ride.pickup_longitude],
-                      [ride.dropoff_latitude, ride.dropoff_longitude]
+                      [ride.optimal_pickup_point.latitude, ride.optimal_pickup_point.longitude],
+                      [ride.nearest_dropoff_point.latitude, ride.nearest_dropoff_point.longitude]
                     ]}
                     color="#861F41"
                     weight={4}
@@ -1048,21 +1050,58 @@ const RiderAcceptedRides = () => {
                 </MapContainer>
               </Box>
             ) : (
-              /* Fallback when coordinates aren't available */
-              <Box sx={{ mt: 2, p: 2, border: '1px dashed #ccc', borderRadius: '4px', textAlign: 'center' }}>
-                <Typography variant="body2" color="textSecondary">
-                  Map view not available for this ride.
-                </Typography>
-                <Button 
-                  variant="outlined" 
-                  size="small" 
-                  sx={{ mt: 1 }}
-                  startIcon={<LocationOn />}
-                  onClick={() => window.open(`https://www.google.com/maps/dir/${ride.pickup_location}/${ride.dropoff_location}`, '_blank')}
-                >
-                  View on Google Maps
-                </Button>
-              </Box>
+              // Fallback to original rider coordinates if optimal points aren't available
+              (ride.pickup_latitude && ride.pickup_longitude && ride.dropoff_latitude && ride.dropoff_longitude) ? (
+                <Box sx={{ mt: 2, height: '200px', width: '100%', border: '1px solid #ccc', borderRadius: '4px', overflow: 'hidden' }}>
+                  <MapContainer 
+                    center={[
+                      (ride.pickup_latitude + ride.dropoff_latitude) / 2,
+                      (ride.pickup_longitude + ride.dropoff_longitude) / 2
+                    ]} 
+                    zoom={13} 
+                    style={{ height: '100%', width: '100%' }}
+                  >
+                    <TileLayer
+                      attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                      url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                    />
+                    <Marker 
+                      position={[ride.pickup_latitude, ride.pickup_longitude]}
+                    >
+                      <Popup>Rider Pickup: {ride.pickup_location}</Popup>
+                    </Marker>
+                    <Marker 
+                      position={[ride.dropoff_latitude, ride.dropoff_longitude]}
+                    >
+                      <Popup>Rider Dropoff: {ride.dropoff_location}</Popup>
+                    </Marker>
+                    <Polyline 
+                      positions={[
+                        [ride.pickup_latitude, ride.pickup_longitude],
+                        [ride.dropoff_latitude, ride.dropoff_longitude]
+                      ]}
+                      color="#861F41"
+                      weight={4}
+                    />
+                  </MapContainer>
+                </Box>
+              ) : (
+                /* Fallback when no coordinates are available */
+                <Box sx={{ mt: 2, p: 2, border: '1px dashed #ccc', borderRadius: '4px', textAlign: 'center' }}>
+                  <Typography variant="body2" color="textSecondary">
+                    Map view not available for this ride.
+                  </Typography>
+                  <Button 
+                    variant="outlined" 
+                    size="small" 
+                    sx={{ mt: 1 }}
+                    startIcon={<LocationOn />}
+                    onClick={() => window.open(`https://www.google.com/maps/dir/${ride.pickup_location}/${ride.dropoff_location}`, '_blank')}
+                  >
+                    View on Google Maps
+                  </Button>
+                </Box>
+              )
             )}
             
             <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 2 }}>
