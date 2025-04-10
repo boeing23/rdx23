@@ -224,6 +224,7 @@ class RideRequestSerializer(serializers.ModelSerializer):
     pickup_longitude = serializers.FloatField(required=True)
     dropoff_latitude = serializers.FloatField(required=True)
     dropoff_longitude = serializers.FloatField(required=True)
+    departure_time = serializers.DateTimeField(required=False)
     rider_details = serializers.SerializerMethodField()
     
     class Meta:
@@ -232,9 +233,31 @@ class RideRequestSerializer(serializers.ModelSerializer):
             'id', 'ride', 'rider', 'pickup_location', 'dropoff_location', 
             'seats_needed', 'status', 'created_at', 'updated_at',
             'pickup_latitude', 'pickup_longitude', 'dropoff_latitude', 
-            'dropoff_longitude', 'rider_details'
+            'dropoff_longitude', 'rider_details', 'departure_time'
         ]
-    
+
+    def create(self, validated_data):
+        # Get the ride ID from the URL
+        ride_id = self.context['view'].kwargs.get('ride_pk')
+        if not ride_id:
+            raise serializers.ValidationError("Ride ID is required")
+            
+        try:
+            ride = Ride.objects.get(pk=ride_id)
+        except Ride.DoesNotExist:
+            raise serializers.ValidationError("Invalid ride ID")
+            
+        # Use the ride's departure time if not provided
+        if 'departure_time' not in validated_data:
+            validated_data['departure_time'] = ride.departure_time
+            
+        # Set the ride and rider
+        validated_data['ride'] = ride
+        validated_data['rider'] = self.context['request'].user
+        validated_data['status'] = 'PENDING'
+        
+        return super().create(validated_data)
+
     def get_rider_details(self, obj):
         if not obj.rider:
             return None

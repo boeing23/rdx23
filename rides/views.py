@@ -1702,49 +1702,21 @@ class NotificationViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        """
-        Return notifications for the requesting user, with pagination and optimized query.
-        Limit to most recent 50 notifications by default to prevent memory issues.
-        """
-        # Get the limit parameter, default to 50
-        limit = self.request.query_params.get('limit', 50)
-        try:
-            limit = int(limit)
-            # Cap at reasonable maximum to prevent memory issues
-            if limit > 100:
-                limit = 100
-        except (ValueError, TypeError):
-            limit = 50
-            
-        # Use select_related to optimize queries for related models
+        """Return notifications for the requesting user"""
         return Notification.objects.filter(
             recipient=self.request.user
         ).select_related(
             'sender', 'ride', 'ride_request'
-        ).order_by(
-            '-created_at'
-        )[:limit]
-        
+        ).order_by('-created_at')
+
     def list(self, request, *args, **kwargs):
-        """
-        Override list to add memory usage information and count of unread notifications.
-        """
-        queryset = self.filter_queryset(self.get_queryset())
-        
-        # Count unread notifications in a separate optimized query
-        unread_count = Notification.objects.filter(
-            recipient=request.user, is_read=False
-        ).count()
-        
-        # Standard serialization with pagination
-        page = self.paginate_queryset(queryset)
-        if page is not None:
-            serializer = self.get_serializer(page, many=True)
-            response = self.get_paginated_response(serializer.data)
-            response.data['unread_count'] = unread_count
-            return response
-            
+        """Override list to return notifications in the expected format"""
+        queryset = self.get_queryset()
         serializer = self.get_serializer(queryset, many=True)
+        
+        # Count unread notifications
+        unread_count = queryset.filter(is_read=False).count()
+        
         return Response({
             'results': serializer.data,
             'unread_count': unread_count
@@ -1754,12 +1726,11 @@ class NotificationViewSet(viewsets.ModelViewSet):
     def mark_as_read(self, request, pk=None):
         notification = self.get_object()
         notification.is_read = True
-        notification.save(update_fields=['is_read'])  # Only update the is_read field
+        notification.save()
         return Response({"status": "success"})
 
     @action(detail=False, methods=['post'])
     def mark_all_as_read(self, request):
-        # Use update method for efficiency instead of loading all objects
         self.get_queryset().update(is_read=True)
         return Response({"status": "success"})
 
