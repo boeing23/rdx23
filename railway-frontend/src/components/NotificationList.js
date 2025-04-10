@@ -138,8 +138,11 @@ function NotificationList() {
         });
         console.log('Notifications received:', response.data);
         
+        // Handle the new response format where notifications are in the 'results' property
+        const notificationsArray = response.data.results || response.data;
+        
         // Process notifications as before
-        const filteredNotifications = response.data.filter(notification => {
+        const filteredNotifications = notificationsArray.filter(notification => {
           if (!notification || !notification.id) return false;
           
           // Skip notifications with incomplete required fields based on type
@@ -156,9 +159,14 @@ function NotificationList() {
         });
         
         setNotifications(filteredNotifications);
-        const count = filteredNotifications.filter(n => !n.is_read).length;
-        setUnreadCount(count);
-        syncUnreadCount(count);
+        
+        // Get unread count either from response or calculate it
+        const unreadCount = response.data.unread_count !== undefined 
+          ? response.data.unread_count 
+          : filteredNotifications.filter(n => !n.is_read).length;
+        
+        setUnreadCount(unreadCount);
+        syncUnreadCount(unreadCount);
         setError(null);
         setServerAvailable(true);
       } catch (error) {

@@ -10,4 +10,5 @@ router.register(r'notifications', NotificationViewSet, basename='notification')
 urlpatterns = [
     path('', include(router.urls)),
     path('health/', health_check, name='health-check'),
+    path('rides/accepted/', RideRequestViewSet.as_view({'get': 'accepted'}), name='accepted-rides'),
 ] 
