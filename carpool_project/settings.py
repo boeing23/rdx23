@@ -45,10 +45,21 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'django.contrib.sites',  # Required for django-allauth
     'rest_framework',
     'corsheaders',
     'users',
     'rides',
+    
+    # Django AllAuth
+    'allauth',
+    'allauth.account',
+    'allauth.socialaccount',
+    
+    # AllAuth providers
+    'allauth.socialaccount.providers.google',
+    'allauth.socialaccount.providers.facebook',
+    'allauth.socialaccount.providers.github',
 ]
 
 MIDDLEWARE = [
@@ -61,6 +72,9 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    
+    # Add allauth middleware
+    'allauth.account.middleware.AccountMiddleware',
 ]
 
 ROOT_URLCONF = "carpool_project.urls"
@@ -80,7 +94,7 @@ SERVER_EMAIL = config('EMAIL_HOST_USER', default='ridex2429@gmail.com')
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [],
+        "DIRS": [os.path.join(BASE_DIR, 'templates')],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
@@ -165,6 +179,7 @@ AUTH_USER_MODEL = 'users.User'
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework_simplejwt.authentication.JWTAuthentication',
+        'rest_framework.authentication.SessionAuthentication',  # Added for django-allauth
     ],
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
@@ -184,6 +199,70 @@ SIMPLE_JWT = {
     'AUTH_TOKEN_CLASSES': ('rest_framework_simplejwt.tokens.AccessToken',),
     'TOKEN_TYPE_CLAIM': 'token_type',
 }
+
+# Required for django-allauth
+SITE_ID = 1
+
+# Django Allauth configuration
+AUTHENTICATION_BACKENDS = (
+    # Django default authentication backend (required)
+    'django.contrib.auth.backends.ModelBackend',
+    
+    # Allauth authentication backend
+    'allauth.account.auth_backends.AuthenticationBackend',
+)
+
+# Allauth configuration
+ACCOUNT_AUTHENTICATION_METHOD = 'email'  # Use email as the primary login method
+ACCOUNT_EMAIL_REQUIRED = True
+ACCOUNT_USERNAME_REQUIRED = False
+ACCOUNT_EMAIL_VERIFICATION = 'optional'  # 'optional' or 'mandatory' or 'none'
+ACCOUNT_UNIQUE_EMAIL = True
+ACCOUNT_SESSION_REMEMBER = True
+ACCOUNT_USER_MODEL_USERNAME_FIELD = None  # If your User model doesn't have a username field
+
+# Social account providers configuration
+SOCIALACCOUNT_PROVIDERS = {
+    'google': {
+        'APP': {
+            'client_id': config('GOOGLE_CLIENT_ID', default=''),
+            'secret': config('GOOGLE_CLIENT_SECRET', default=''),
+            'key': ''
+        },
+        'SCOPE': [
+            'profile',
+            'email',
+        ],
+        'AUTH_PARAMS': {
+            'access_type': 'online',
+        }
+    },
+    'facebook': {
+        'APP': {
+            'client_id': config('FACEBOOK_CLIENT_ID', default=''),
+            'secret': config('FACEBOOK_CLIENT_SECRET', default=''),
+            'key': ''
+        },
+        'METHOD': 'oauth2',
+        'SCOPE': ['email', 'public_profile'],
+        'VERIFIED_EMAIL': True,
+    },
+    'github': {
+        'APP': {
+            'client_id': config('GITHUB_CLIENT_ID', default=''),
+            'secret': config('GITHUB_CLIENT_SECRET', default=''),
+            'key': ''
+        },
+        'SCOPE': ['user', 'email']
+    }
+}
+
+# Callback URLs
+LOGIN_REDIRECT_URL = '/'
+LOGOUT_REDIRECT_URL = '/'
+
+# Frontend URL for OAuth redirects
+FRONTEND_URL = config('FRONTEND_URL', default='http://localhost:3000')
 
 # CORS settings
 CORS_ALLOW_ALL_ORIGINS = True  # For development only

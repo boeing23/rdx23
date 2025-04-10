@@ -11,9 +11,256 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from django.views.decorators.csrf import csrf_exempt
 import logging
+import json
+from django.http import JsonResponse
+from django.contrib.auth import login
+from django.urls import reverse
+from django.shortcuts import redirect
+from allauth.socialaccount.models import SocialApp, SocialAccount, SocialToken
+from allauth.socialaccount.providers.google.views import GoogleOAuth2Adapter
+from allauth.socialaccount.providers.facebook.views import FacebookOAuth2Adapter
+from allauth.socialaccount.providers.github.views import GitHubOAuth2Adapter
+from allauth.socialaccount.providers.oauth2.client import OAuth2Client
+from rest_framework.views import APIView
 
 User = get_user_model()
 logger = logging.getLogger(__name__)
+
+# Adding Social Authentication views
+class SocialLoginView(APIView):
+    permission_classes = (AllowAny,)
+    
+    def post(self, request):
+        """
+        Handle social authentication and return JWT tokens
+        """
+        try:
+            provider = request.data.get('provider', None)
+            access_token = request.data.get('access_token', None)
+            code = request.data.get('code', None)
+            
+            if not provider:
+                return Response({"error": "Provider is required"}, status=status.HTTP_400_BAD_REQUEST)
+                
+            if not (access_token or code):
+                return Response({"error": "Either access_token or code is required"}, status=status.HTTP_400_BAD_REQUEST)
+                
+            # Process based on provider
+            if provider == 'google':
+                return self.login_with_google(access_token, code)
+            elif provider == 'facebook':
+                return self.login_with_facebook(access_token)
+            elif provider == 'github':
+                return self.login_with_github(code)
+            else:
+                return Response({"error": "Provider not supported"}, status=status.HTTP_400_BAD_REQUEST)
+                
+        except Exception as e:
+            logger.error(f"Social login error: {str(e)}")
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    def login_with_google(self, access_token=None, code=None):
+        """Handle Google login"""
+        try:
+            adapter = GoogleOAuth2Adapter()
+            if code:
+                # Exchange code for token
+                client = OAuth2Client(
+                    settings.SOCIALACCOUNT_PROVIDERS['google']['APP']['client_id'],
+                    settings.SOCIALACCOUNT_PROVIDERS['google']['APP']['secret'],
+                    redirect_uri=request.build_absolute_uri(reverse('google_callback'))
+                )
+                token = client.get_access_token(code)
+                access_token = token['access_token']
+            
+            # Authenticate with the token
+            social_token = SocialToken(token=access_token)
+            login_data = adapter.complete_login(request, app, token, response=None)
+            email = login_data.account.extra_data.get('email')
+            
+            # Get or create user
+            try:
+                user = User.objects.get(email=email)
+            except User.DoesNotExist:
+                # Create new user from Google data
+                user = User.objects.create(
+                    email=email,
+                    username=email,  # Use email as username
+                    first_name=login_data.account.extra_data.get('given_name', ''),
+                    last_name=login_data.account.extra_data.get('family_name', ''),
+                    user_type='RIDER',  # Default to RIDER, can be updated later
+                    is_verified=True,  # Social users are verified by default
+                )
+                user.set_unusable_password()
+                user.save()
+                
+                # Create social account link
+                SocialAccount.objects.create(
+                    user=user, 
+                    provider='google',
+                    uid=login_data.account.uid, 
+                    extra_data=login_data.account.extra_data
+                )
+                
+            # Generate JWT tokens
+            refresh = RefreshToken.for_user(user)
+            return Response({
+                'refresh': str(refresh),
+                'access': str(refresh.access_token),
+                'user': UserSerializer(user).data
+            })
+            
+        except Exception as e:
+            logger.error(f"Google login error: {str(e)}")
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    def login_with_facebook(self, access_token):
+        """Handle Facebook login"""
+        try:
+            adapter = FacebookOAuth2Adapter()
+            app = SocialApp.objects.get(provider='facebook')
+            
+            # Authenticate with the token
+            social_token = SocialToken(token=access_token)
+            login_data = adapter.complete_login(request, app, social_token, response=None)
+            email = login_data.account.extra_data.get('email')
+            
+            # Get or create user
+            try:
+                user = User.objects.get(email=email)
+            except User.DoesNotExist:
+                # Create new user from Facebook data
+                user = User.objects.create(
+                    email=email,
+                    username=email,  # Use email as username
+                    first_name=login_data.account.extra_data.get('first_name', ''),
+                    last_name=login_data.account.extra_data.get('last_name', ''),
+                    user_type='RIDER',  # Default to RIDER, can be updated later
+                    is_verified=True,  # Social users are verified by default
+                )
+                user.set_unusable_password()
+                user.save()
+                
+                # Create social account link
+                SocialAccount.objects.create(
+                    user=user, 
+                    provider='facebook',
+                    uid=login_data.account.uid, 
+                    extra_data=login_data.account.extra_data
+                )
+                
+            # Generate JWT tokens
+            refresh = RefreshToken.for_user(user)
+            return Response({
+                'refresh': str(refresh),
+                'access': str(refresh.access_token),
+                'user': UserSerializer(user).data
+            })
+            
+        except Exception as e:
+            logger.error(f"Facebook login error: {str(e)}")
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    def login_with_github(self, code):
+        """Handle GitHub login"""
+        try:
+            adapter = GitHubOAuth2Adapter()
+            app = SocialApp.objects.get(provider='github')
+            
+            # Exchange code for token
+            client = OAuth2Client(
+                settings.SOCIALACCOUNT_PROVIDERS['github']['APP']['client_id'],
+                settings.SOCIALACCOUNT_PROVIDERS['github']['APP']['secret'],
+                redirect_uri=request.build_absolute_uri(reverse('github_callback'))
+            )
+            token = client.get_access_token(code)
+            access_token = token['access_token']
+            
+            # Authenticate with the token
+            social_token = SocialToken(token=access_token)
+            login_data = adapter.complete_login(request, app, social_token, response=None)
+            email = login_data.account.extra_data.get('email')
+            
+            # Handle case where GitHub doesn't provide email
+            if not email:
+                return Response({"error": "Email not provided by GitHub"}, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Get or create user
+            try:
+                user = User.objects.get(email=email)
+            except User.DoesNotExist:
+                # Get name from GitHub data
+                name = login_data.account.extra_data.get('name', '')
+                first_name, last_name = '', ''
+                if name:
+                    name_parts = name.split(' ', 1)
+                    first_name = name_parts[0]
+                    last_name = name_parts[1] if len(name_parts) > 1 else ''
+                
+                # Create new user from GitHub data
+                user = User.objects.create(
+                    email=email,
+                    username=login_data.account.extra_data.get('login', email),
+                    first_name=first_name,
+                    last_name=last_name,
+                    user_type='RIDER',  # Default to RIDER, can be updated later
+                    is_verified=True,  # Social users are verified by default
+                )
+                user.set_unusable_password()
+                user.save()
+                
+                # Create social account link
+                SocialAccount.objects.create(
+                    user=user, 
+                    provider='github',
+                    uid=login_data.account.uid, 
+                    extra_data=login_data.account.extra_data
+                )
+                
+            # Generate JWT tokens
+            refresh = RefreshToken.for_user(user)
+            return Response({
+                'refresh': str(refresh),
+                'access': str(refresh.access_token),
+                'user': UserSerializer(user).data
+            })
+            
+        except Exception as e:
+            logger.error(f"GitHub login error: {str(e)}")
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+# OAuth callback views for redirecting back from providers
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def google_callback(request):
+    """Handle Google OAuth callback and redirect to frontend with token in URL params"""
+    try:
+        code = request.GET.get('code')
+        if not code:
+            return Response({"error": "Authorization code not provided"}, status=status.HTTP_400_BAD_REQUEST)
+            
+        # Redirect to frontend with the code
+        redirect_url = f"{settings.FRONTEND_URL}/auth/google/callback?code={code}"
+        return redirect(redirect_url)
+    except Exception as e:
+        logger.error(f"Google callback error: {str(e)}")
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def github_callback(request):
+    """Handle GitHub OAuth callback and redirect to frontend with token in URL params"""
+    try:
+        code = request.GET.get('code')
+        if not code:
+            return Response({"error": "Authorization code not provided"}, status=status.HTTP_400_BAD_REQUEST)
+            
+        # Redirect to frontend with the code
+        redirect_url = f"{settings.FRONTEND_URL}/auth/github/callback?code={code}"
+        return redirect(redirect_url)
+    except Exception as e:
+        logger.error(f"GitHub callback error: {str(e)}")
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class UserViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all()

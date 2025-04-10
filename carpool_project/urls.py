@@ -124,6 +124,10 @@ urlpatterns = [
     path('railway-status/', status_check, name='railway_status'),
     # Add health check at root level for Railway
     path('health/', include('rides.urls')),
+    # Django allauth URLs
+    path('accounts/', include('allauth.urls')),
+    # Add SSO endpoints
+    path('api/auth/', include('allauth.socialaccount.urls')),
     path('api/check_driver_name/', check_driver_name_field),
     path('api/cors-check/', cors_preflight_check, name='cors-check'),
     path('', TemplateView.as_view(template_name='index.html')),
