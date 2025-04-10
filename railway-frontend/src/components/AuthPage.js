@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Container, Typography, TextField, Button, Paper, FormControl, FormLabel, Alert, useTheme, useMediaQuery } from '@mui/material';
+import { Box, Container, Typography, TextField, Button, Paper, FormControl, FormLabel, Alert, useTheme, useMediaQuery, Divider } from '@mui/material';
 import { styled } from '@mui/material/styles';
 import { useNavigate, useLocation } from 'react-router-dom';
 import DirectionsCarIcon from '@mui/icons-material/DirectionsCar';
 import PersonIcon from '@mui/icons-material/Person';
+import { GoogleLogin } from '@react-oauth/google';
+import { jwtDecode } from 'jwt-decode';
 import { API_BASE_URL, getAuthHeadersWithContentType } from '../config';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -95,7 +97,7 @@ const AuthPage = () => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const location = useLocation();
-  const { login, register } = useAuth();
+  const { login, register, socialLogin } = useAuth();
   
   const [isSignUp, setIsSignUp] = useState(false);
   const [userType, setUserType] = useState('RIDER');
@@ -204,6 +206,42 @@ const AuthPage = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleGoogleSuccess = async (credentialResponse) => {
+    try {
+      setLoading(true);
+      setError('');
+      
+      // Decode the credential to get user info
+      const decoded = jwtDecode(credentialResponse.credential);
+      console.log('Google login successful, decoded info:', decoded);
+      
+      // Use the socialLogin method from AuthContext
+      const result = await socialLogin('google', credentialResponse.credential);
+      
+      if (result.success) {
+        console.log('Google login processed successfully');
+        
+        // Navigate based on user type
+        const userType = result.userType || 'RIDER';
+        window.location.href = userType === 'DRIVER' ? '/offer' : '/rides';
+      } else {
+        console.error('Google login processing failed:', result.error);
+        setError(result.error);
+      }
+      
+    } catch (error) {
+      console.error('Google login error:', error);
+      setError(error.message || 'Failed to authenticate with Google');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGoogleError = () => {
+    console.error('Google login failed');
+    setError('Google login failed. Please try again.');
   };
 
   const validateRegisterData = () => {
@@ -375,6 +413,21 @@ const AuthPage = () => {
                 {loading ? 'Signing In...' : 'Sign In'}
               </Button>
             </form>
+            
+            <Divider sx={{ my: 2 }}>OR</Divider>
+            
+            <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>
+              <GoogleLogin
+                onSuccess={handleGoogleSuccess}
+                onError={handleGoogleError}
+                useOneTap
+                theme="filled_blue"
+                text="signin_with"
+                shape="rectangular"
+                size="large"
+              />
+            </Box>
+            
             <Typography 
               variant="body2" 
               sx={{ 
