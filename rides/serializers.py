@@ -219,11 +219,11 @@ class RideRequestSerializer(serializers.ModelSerializer):
     ride = RideSerializer(read_only=True)
     rider = UserSerializer(read_only=True)
     
-    # Add these fields to ensure they're included in the serialized data
-    pickup_latitude = serializers.SerializerMethodField()
-    pickup_longitude = serializers.SerializerMethodField()
-    dropoff_latitude = serializers.SerializerMethodField()
-    dropoff_longitude = serializers.SerializerMethodField()
+    # Change these from SerializerMethodField to regular fields
+    pickup_latitude = serializers.FloatField(required=True)
+    pickup_longitude = serializers.FloatField(required=True)
+    dropoff_latitude = serializers.FloatField(required=True)
+    dropoff_longitude = serializers.FloatField(required=True)
     rider_details = serializers.SerializerMethodField()
     
     class Meta:
@@ -234,30 +234,6 @@ class RideRequestSerializer(serializers.ModelSerializer):
             'pickup_latitude', 'pickup_longitude', 'dropoff_latitude', 
             'dropoff_longitude', 'rider_details'
         ]
-    
-    def get_pickup_latitude(self, obj):
-        try:
-            return float(obj.pickup_location.split(',')[0])
-        except (AttributeError, IndexError, ValueError):
-            return None
-    
-    def get_pickup_longitude(self, obj):
-        try:
-            return float(obj.pickup_location.split(',')[1])
-        except (AttributeError, IndexError, ValueError):
-            return None
-    
-    def get_dropoff_latitude(self, obj):
-        try:
-            return float(obj.dropoff_location.split(',')[0])
-        except (AttributeError, IndexError, ValueError):
-            return None
-    
-    def get_dropoff_longitude(self, obj):
-        try:
-            return float(obj.dropoff_location.split(',')[1])
-        except (AttributeError, IndexError, ValueError):
-            return None
     
     def get_rider_details(self, obj):
         if not obj.rider:
@@ -271,7 +247,6 @@ class RideRequestSerializer(serializers.ModelSerializer):
             'phone_number': getattr(user, 'phone_number', None) or "Not provided"
         }
         
-        # Get the rider profile if available
         try:
             if hasattr(user, 'riderprofile'):
                 profile = user.riderprofile
@@ -286,11 +261,15 @@ class RideRequestSerializer(serializers.ModelSerializer):
     def to_representation(self, instance):
         representation = super().to_representation(instance)
         
-        # Add display names for locations if available
-        representation['pickup_display_name'] = get_display_name_from_coordinates(representation.get('pickup_latitude'), representation.get('pickup_longitude'))
-        representation['dropoff_display_name'] = get_display_name_from_coordinates(representation.get('dropoff_latitude'), representation.get('dropoff_longitude'))
+        representation['pickup_display_name'] = get_display_name_from_coordinates(
+            instance.pickup_latitude, 
+            instance.pickup_longitude
+        )
+        representation['dropoff_display_name'] = get_display_name_from_coordinates(
+            instance.dropoff_latitude,
+            instance.dropoff_longitude
+        )
         
-        # If ride is included, add driver information
         if instance.ride:
             try:
                 driver = instance.ride.driver
@@ -302,7 +281,6 @@ class RideRequestSerializer(serializers.ModelSerializer):
                         'phone_number': getattr(driver, 'phone_number', None) or "Not provided"
                     }
                     
-                    # Add vehicle information if available
                     if hasattr(driver, 'driverprofile') and driver.driverprofile:
                         vehicle = driver.driverprofile.vehicle
                         if vehicle:
