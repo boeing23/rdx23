@@ -1,7 +1,10 @@
 import React, { useState } from 'react';
-import { TextField, Button, Typography, Box, Paper, Container, Alert } from '@mui/material';
+import { TextField, Button, Typography, Box, Paper, Container, Alert, Divider } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { GoogleLogin } from '@react-oauth/google';
+import { jwtDecode } from 'jwt-decode';
+import { API_BASE_URL } from '../config';
 
 const Login = () => {
   const [username, setUsername] = useState('');
@@ -9,7 +12,7 @@ const Login = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { login, socialLogin } = useAuth();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -60,6 +63,41 @@ const Login = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleGoogleSuccess = async (credentialResponse) => {
+    try {
+      setLoading(true);
+      setError('');
+      
+      // Decode the credential to get user info
+      const decoded = jwtDecode(credentialResponse.credential);
+      console.log('Google login successful, decoded info:', decoded);
+      
+      // Use the socialLogin method from AuthContext
+      const result = await socialLogin('google', credentialResponse.credential);
+      
+      if (result.success) {
+        console.log('Google login processed successfully');
+        
+        // Navigate based on user type
+        navigate(result.userType === 'DRIVER' ? '/offer' : '/rides');
+      } else {
+        console.error('Google login processing failed:', result.error);
+        setError(result.error);
+      }
+      
+    } catch (error) {
+      console.error('Google login error:', error);
+      setError(error.message || 'Failed to authenticate with Google');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGoogleError = () => {
+    console.error('Google login failed');
+    setError('Google login failed. Please try again.');
   };
 
   return (
@@ -113,7 +151,21 @@ const Login = () => {
             {loading ? 'Logging in...' : 'Login'}
           </Button>
           
-          <Box sx={{ mt: 2, textAlign: 'center' }}>
+          <Divider sx={{ my: 2 }}>OR</Divider>
+          
+          <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>
+            <GoogleLogin
+              onSuccess={handleGoogleSuccess}
+              onError={handleGoogleError}
+              useOneTap
+              theme="filled_blue"
+              text="signin_with"
+              shape="rectangular"
+              size="large"
+            />
+          </Box>
+          
+          <Box sx={{ mt: 3, textAlign: 'center' }}>
             <Typography variant="body2">
               Don't have an account?{' '}
               <Button 

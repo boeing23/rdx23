@@ -172,6 +172,76 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  // Social login function
+  const socialLogin = async (provider, accessToken) => {
+    try {
+      console.log(`Attempting ${provider} login`);
+      
+      // Send request to the social login endpoint
+      const response = await fetch(`${API_BASE_URL}/api/users/social/login/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          provider: provider,
+          access_token: accessToken
+        })
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || `Failed to authenticate with ${provider}`);
+      }
+      
+      const loginData = await response.json();
+      console.log(`${provider} login successful:`, loginData);
+      
+      // Extract the token from response
+      const token = loginData.token || loginData.access;
+      
+      if (!token) {
+        throw new Error('No token received in login response');
+      }
+      
+      // Save token to local storage
+      localStorage.setItem('token', token);
+      
+      // Save user data if available
+      if (loginData.user?.user_type) {
+        localStorage.setItem('userType', loginData.user.user_type);
+      }
+      
+      if (loginData.user?.id) {
+        localStorage.setItem('userId', loginData.user.id);
+      }
+      
+      // Update auth state
+      setAuthState({
+        token,
+        user: loginData.user,
+        isAuthenticated: true,
+        isLoading: false
+      });
+      
+      // Dispatch auth change event
+      window.dispatchEvent(new Event('auth-change'));
+      
+      return { 
+        success: true, 
+        user: loginData.user,
+        userType: loginData.user?.user_type || 'RIDER'
+      };
+    } catch (error) {
+      console.error(`${provider} login error:`, error);
+      
+      return {
+        success: false,
+        error: error.message || `${provider} login failed.`
+      };
+    }
+  };
+
   // Logout function
   const logout = () => {
     console.log('Logging out, clearing localStorage and authState');
@@ -217,7 +287,8 @@ export const AuthProvider = ({ children }) => {
     authState,
     login,
     logout,
-    register
+    register,
+    socialLogin
   };
 
   return (

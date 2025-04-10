@@ -16,7 +16,7 @@ import DriverAcceptedRides from './components/DriverAcceptedRides';
 import RiderAcceptedRides from './components/RiderAcceptedRides';
 import UserProfile from './components/UserProfile';
 import AuthPage from './components/AuthPage';
-import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { useAuth } from './contexts/AuthContext';
 import './App.css';
 
 function Home() {
