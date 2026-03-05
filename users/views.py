@@ -22,6 +22,7 @@ from allauth.socialaccount.providers.facebook.views import FacebookOAuth2Adapter
 from allauth.socialaccount.providers.github.views import GitHubOAuth2Adapter
 from allauth.socialaccount.providers.oauth2.client import OAuth2Client
 from rest_framework.views import APIView
+from django.conf import settings
 
 User = get_user_model()
 logger = logging.getLogger(__name__)
@@ -69,14 +70,15 @@ class SocialLoginView(APIView):
                 client = OAuth2Client(
                     settings.SOCIALACCOUNT_PROVIDERS['google']['APP']['client_id'],
                     settings.SOCIALACCOUNT_PROVIDERS['google']['APP']['secret'],
-                    redirect_uri=request.build_absolute_uri(reverse('google_callback'))
+                    redirect_uri=self.request.build_absolute_uri(reverse('google_callback'))
                 )
                 token = client.get_access_token(code)
                 access_token = token['access_token']
-            
+
             # Authenticate with the token
+            app = SocialApp.objects.get(provider='google')
             social_token = SocialToken(token=access_token)
-            login_data = adapter.complete_login(request, app, token, response=None)
+            login_data = adapter.complete_login(self.request, app, social_token, response=None)
             email = login_data.account.extra_data.get('email')
             
             # Get or create user
@@ -123,9 +125,9 @@ class SocialLoginView(APIView):
             
             # Authenticate with the token
             social_token = SocialToken(token=access_token)
-            login_data = adapter.complete_login(request, app, social_token, response=None)
+            login_data = adapter.complete_login(self.request, app, social_token, response=None)
             email = login_data.account.extra_data.get('email')
-            
+
             # Get or create user
             try:
                 user = User.objects.get(email=email)
@@ -172,14 +174,14 @@ class SocialLoginView(APIView):
             client = OAuth2Client(
                 settings.SOCIALACCOUNT_PROVIDERS['github']['APP']['client_id'],
                 settings.SOCIALACCOUNT_PROVIDERS['github']['APP']['secret'],
-                redirect_uri=request.build_absolute_uri(reverse('github_callback'))
+                redirect_uri=self.request.build_absolute_uri(reverse('github_callback'))
             )
             token = client.get_access_token(code)
             access_token = token['access_token']
-            
+
             # Authenticate with the token
             social_token = SocialToken(token=access_token)
-            login_data = adapter.complete_login(request, app, social_token, response=None)
+            login_data = adapter.complete_login(self.request, app, social_token, response=None)
             email = login_data.account.extra_data.get('email')
             
             # Handle case where GitHub doesn't provide email
@@ -370,7 +372,7 @@ class UserViewSet(viewsets.ModelViewSet):
             response = Response()
             response["Access-Control-Allow-Origin"] = "*"
             response["Access-Control-Allow-Methods"] = "POST, OPTIONS"
-            response["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With, Accept, Origin"
+            response["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With, Accept, Origin, X-CSRFToken"
             response["Access-Control-Allow-Credentials"] = "true"
             response["Access-Control-Max-Age"] = "86400"  # 24 hours
             return response
@@ -449,7 +451,7 @@ def register_user(request):
         response = Response()
         response["Access-Control-Allow-Origin"] = "*"
         response["Access-Control-Allow-Methods"] = "POST, OPTIONS"
-        response["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With, Accept, Origin"
+        response["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With, Accept, Origin, X-CSRFToken"
         response["Access-Control-Allow-Credentials"] = "true"
         response["Access-Control-Max-Age"] = "86400"  # 24 hours
         return response
@@ -497,7 +499,7 @@ def login_user(request):
         response = Response()
         response["Access-Control-Allow-Origin"] = "*"
         response["Access-Control-Allow-Methods"] = "POST, OPTIONS"
-        response["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With, Accept, Origin"
+        response["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With, Accept, Origin, X-CSRFToken"
         response["Access-Control-Allow-Credentials"] = "true"
         response["Access-Control-Max-Age"] = "86400"  # 24 hours
         return response
@@ -514,31 +516,13 @@ def login_user(request):
         refresh = RefreshToken.for_user(user)
         access_token = str(refresh.access_token)
         
-        # Serialize user data with UserSerializer to ensure proper field handling
+        # Use full serializer for all users; vehicle fields will be null for RIDERs naturally
         user_data = UserSerializer(user).data
-        
-        # For RIDER users, explicitly set vehicle fields to null to prevent validation errors
-        if user.user_type == 'RIDER':
-            logger.info(f"Setting vehicle fields to null for RIDER user: {username}")
-            user_data_for_response = {
-                'id': user.id,
-                'username': user.username,
-                'email': user.email,
-                'user_type': user.user_type
-            }
-        else:
-            user_data_for_response = {
-                'id': user.id,
-                'username': user.username,
-                'email': user.email,
-                'user_type': user.user_type
-            }
-        
-        # Return response in the format expected by the frontend
+
         return Response({
             'token': access_token,
             'user_type': user.user_type,
-            'user': user_data_for_response
+            'user': user_data
         })
     else:
         return Response(

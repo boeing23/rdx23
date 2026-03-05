@@ -1,7 +1,7 @@
 from django.shortcuts import render, get_object_or_404
 from rest_framework import viewsets, permissions, status
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.decorators import action, api_view
+from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
 from django.db.models import Q
 from datetime import datetime, timedelta
@@ -39,7 +39,6 @@ import ast
 from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
-from django.core.exceptions import PermissionDenied
 from django.core.serializers import serialize
 from django.shortcuts import redirect
 from django.utils.decorators import method_decorator
@@ -51,6 +50,7 @@ from django.db import connection
 # Import additional modules for health check
 import psutil
 import gc
+from .utils import calculate_route_overlap, get_route_details # Import the correct function
 
 logger = logging.getLogger(__name__)
 
@@ -155,8 +155,9 @@ def get_coordinates(address):
     return None
 
 
-def get_route_driving_distance(start_coords, end_coords):
+def get_route_driving_distance(start_coords, end_coords, _retries=0):
     """Get the actual driving distance between two points using OpenRouteService API"""
+    MAX_RETRIES = 2
     try:
         url = f"{OPENROUTE_BASE_URL}/directions/driving-car"
         headers = {
@@ -164,39 +165,35 @@ def get_route_driving_distance(start_coords, end_coords):
             'Authorization': ORS_API_KEY,
             'Content-Type': 'application/json; charset=utf-8'
         }
-        
+
         body = {
             "coordinates": [[start_coords[0], start_coords[1]], [end_coords[0], end_coords[1]]],
             "format": "json"
         }
-        
+
         response = requests.post(url, json=body, headers=headers, timeout=10)
-        
+
         if response.status_code == 200:
             data = response.json()
             # Convert distance from meters to kilometers
             if 'routes' in data and len(data['routes']) > 0:
                 return data['routes'][0]['summary']['distance'] / 1000.0
-        elif response.status_code == 429:  # Rate limit hit
-            logger.warning("OpenRouteService API rate limit hit")
-            # Wait for a bit before retrying
+        elif response.status_code == 429 and _retries < MAX_RETRIES:
+            logger.warning(f"OpenRouteService API rate limit hit (retry {_retries + 1}/{MAX_RETRIES})")
             time.sleep(2)
-            return get_route_driving_distance(start_coords, end_coords)
-            
+            return get_route_driving_distance(start_coords, end_coords, _retries=_retries + 1)
+
         # If API call fails, fall back to great_circle
         logger.warning(
             "Failed to get driving distance from API, falling back to straight-line distance")
         return great_circle(
-            # Convert (lng, lat) to (lat, lng)
             (start_coords[1], start_coords[0]),
             (end_coords[1], end_coords[0])
         ).kilometers
-            
+
     except Exception as e:
         logger.error(f"Error calculating driving distance: {str(e)}")
-        # Fall back to great_circle
         return great_circle(
-            # Convert (lng, lat) to (lat, lng)
             (start_coords[1], start_coords[0]),
             (end_coords[1], end_coords[0])
         ).kilometers
@@ -226,147 +223,6 @@ def closest_point_on_segment(p1, p2, d):
     return closest
 
 
-def find_optimal_pickup(driver_route, rider_pickup):
-    """
-    Find the optimal pickup point for a rider along a driver's route.
-    Enhanced to use driving distance where possible.
-    
-    Parameters:
-    driver_route: List of (lat, lng) coordinates representing the driver's route
-    rider_pickup: (lat, lng) coordinate of the rider's requested pickup location
-    
-    Returns:
-    Tuple of (optimal_pickup_point, distance_to_pickup, pickup_index)
-    """
-    # Find the segment on driver's route closest to pickup point
-    min_pickup_dist = float('inf')
-    pickup_index = 0
-    optimal_pickup = None
-    
-    # Find the closest point on each segment
-    for i in range(len(driver_route) - 1):
-        p1 = driver_route[i]
-        p2 = driver_route[i + 1]
-        closest = closest_point_on_segment(p1, p2, rider_pickup)
-        
-        # Try to use actual driving distance if possible
-        try:
-            # Convert from (lat, lng) to (lng, lat) for the API
-            closest_lng_lat = (closest[1], closest[0])
-            rider_pickup_lng_lat = (rider_pickup[1], rider_pickup[0])
-            
-            dist = get_route_driving_distance(
-    closest_lng_lat, rider_pickup_lng_lat)
-        except Exception as e:
-            logger.warning(
-        f"Failed to get driving distance, using great_circle: {str(e)}")
-            dist = great_circle(closest, rider_pickup).kilometers
-            
-        if dist < min_pickup_dist:
-            min_pickup_dist = dist
-            pickup_index = i
-            optimal_pickup = closest
-    
-    if not optimal_pickup:
-        # Fallback to the point on route closest to pickup
-        for i, point in enumerate(driver_route):
-            try:
-                # Convert from (lat, lng) to (lng, lat) for the API
-                point_lng_lat = (point[1], point[0])
-                rider_pickup_lng_lat = (rider_pickup[1], rider_pickup[0])
-                
-                dist = get_route_driving_distance(
-                    point_lng_lat, rider_pickup_lng_lat)
-            except Exception as e:
-                logger.warning(
-    f"Failed to get driving distance, using great_circle: {str(e)}")
-                dist = great_circle(point, rider_pickup).kilometers
-                
-            if dist < min_pickup_dist:
-                min_pickup_dist = dist
-                pickup_index = i
-                optimal_pickup = point
-    
-    return optimal_pickup, min_pickup_dist, pickup_index
-
-
-def find_optimal_dropoff(driver_route, rider_pickup, rider_dropoff):
-    """
-    Find the optimal drop-off point for a rider along a driver's route.
-    Enhanced to use driving distance where possible.
-    
-    Parameters:
-    driver_route: List of (lat, lng) coordinates representing the driver's route
-    rider_pickup: (lat, lng) coordinate of the rider's pickup location
-    rider_dropoff: (lat, lng) coordinate of the rider's destination
-    
-    Returns:
-    Tuple of (optimal_dropoff_point, distance_to_destination, pickup_index)
-    """
-    # Find the index on driver's route closest to pickup point
-    min_pickup_dist = float('inf')
-    pickup_index = 0
-    
-    for i, point in enumerate(driver_route):
-        try:
-            # Convert from (lat, lng) to (lng, lat) for the API
-            point_lng_lat = (point[1], point[0])
-            rider_pickup_lng_lat = (rider_pickup[1], rider_pickup[0])
-            
-            dist = get_route_driving_distance(
-                point_lng_lat, rider_pickup_lng_lat)
-        except Exception as e:
-            logger.warning(
-    f"Failed to get driving distance, using great_circle: {str(e)}")
-            dist = great_circle(point, rider_pickup).kilometers
-            
-        if dist < min_pickup_dist:
-            min_pickup_dist = dist
-            pickup_index = i
-    
-    # Find the optimal drop-off point after the pickup point
-    min_dist = float('inf')
-    optimal_point = None
-    
-    # Only consider segments after the pickup point
-    for i in range(pickup_index, len(driver_route) - 1):
-        p1 = driver_route[i]
-        p2 = driver_route[i + 1]
-        closest = closest_point_on_segment(p1, p2, rider_dropoff)
-        
-        try:
-            # Convert from (lat, lng) to (lng, lat) for the API
-            closest_lng_lat = (closest[1], closest[0])
-            rider_dropoff_lng_lat = (rider_dropoff[1], rider_dropoff[0])
-            
-            dist = get_route_driving_distance(
-    closest_lng_lat, rider_dropoff_lng_lat)
-        except Exception as e:
-            logger.warning(
-    f"Failed to get driving distance, using great_circle: {str(e)}")
-            dist = great_circle(closest, rider_dropoff).kilometers
-            
-        if dist < min_dist:
-            min_dist = dist
-            optimal_point = closest
-    
-    if not optimal_point:
-        # Fallback to final point if no optimal point found
-        optimal_point = driver_route[-1]
-        
-        try:
-            # Convert from (lat, lng) to (lng, lat) for the API
-            point_lng_lat = (optimal_point[1], optimal_point[0])
-            rider_dropoff_lng_lat = (rider_dropoff[1], rider_dropoff[0])
-            
-            min_dist = get_route_driving_distance(
-                point_lng_lat, rider_dropoff_lng_lat)
-        except Exception as e:
-            logger.warning(
-    f"Failed to get driving distance, using great_circle: {str(e)}")
-            min_dist = great_circle(optimal_point, rider_dropoff).kilometers
-    
-    return optimal_point, min_dist, pickup_index
 
 
 def calculate_direction_similarity(vec1, vec2):
@@ -560,8 +416,7 @@ def calculate_route_overlap(
 
     # Calculate route coverage
     coverage_ratio = calculate_segment_overlap(driver_route, rider_route)
-    coverage_score = coverage_ratio * 100
-    logger.info(f"{log_prefix}Coverage score: {coverage_score:.2f} (coverage: {coverage_ratio:.2f})")
+    logger.info(f"{log_prefix}Coverage ratio: {coverage_ratio:.2f}")
 
     # Calculate deviation
     deviation_score = 0
@@ -611,7 +466,7 @@ def calculate_route_overlap(
     weights = {'direction': 0.4, 'coverage': 0.3, 'deviation': 0.3}
     compatibility_score = (
         weights['direction'] * direction_score +
-        weights['coverage'] * coverage_score +
+        weights['coverage'] * coverage_ratio +
         weights['deviation'] * deviation_score
     )
 
@@ -634,9 +489,9 @@ def calculate_route_overlap(
         pickup_distance = calculate_distance(optimal_pickup_point, rider_pickup)
         dropoff_distance = calculate_distance(optimal_dropoff_point, rider_dropoff)
 
-        # MAX DISTANCE CHECK: Pickup point must be within 500 meters of requested pickup
-        if pickup_distance > 500:
-            logger.warning(f"{log_prefix}Pickup point too far: {pickup_distance:.2f} meters exceeds maximum 500 meters")
+        # MAX DISTANCE CHECK: Pickup point must be within 600 meters of requested pickup
+        if pickup_distance > 600:
+            logger.warning(f"{log_prefix}Pickup point too far: {pickup_distance:.2f} meters exceeds maximum 600 meters (debug threshold)")
             return {
                 "compatibility_score": compatibility_score,
                 "optimal_pickup_point": None,
@@ -900,10 +755,14 @@ class RideViewSet(viewsets.ModelViewSet):
         This method is called when a new ride is created.
         """
         try:
-            # Find pending requests that might match rides
+            time.sleep(5) # Add delay to potentially allow DB changes to become visible
+            logger.info("CHECK_PENDING: Starting check after 5s delay.")
+
+            # Restore original query
+            now_time = timezone.now()
             pending_requests = PendingRideRequest.objects.filter(
                 status='PENDING',
-                departure_time__gte=timezone.now()
+                departure_time__gte=now_time 
             )
 
             logger.info(f"Checking {pending_requests.count()} pending requests against available rides")
@@ -922,72 +781,134 @@ class RideViewSet(viewsets.ModelViewSet):
 
                 logger.info(f"Found {available_rides.count()} available rides to check for pending request {pending_request.id}")
 
-                # Variables to track the best match
                 best_match = None
                 best_score = 0
-                best_compatibility = None
 
-                # Check each ride for compatibility
                 for ride in available_rides:
-                    # Calculate route overlap
-                    overlap_result = calculate_route_overlap(
-                        (ride.start_longitude, ride.start_latitude),
-                        (ride.end_longitude, ride.end_latitude),
-                        (pending_request.pickup_longitude, pending_request.pickup_latitude),
-                        (pending_request.dropoff_longitude, pending_request.dropoff_latitude),
-                        get_optimal_points=True,
-                        log_prefix=f"[Pending Request {pending_request.id} - Ride {ride.id}] "
-                    )
+                    try:
+                        # Get geometry from the ride object (assuming it's stored)
+                        # Use .get to handle potential missing attribute gracefully, though ideally it should exist
+                        driver_geom_str = getattr(ride, 'route_geometry', None)
+                        driver_geom = None
+                        if driver_geom_str:
+                            try:
+                                # Assuming route_geometry is stored as a JSON string list of [lon, lat]
+                                driver_geom = json.loads(driver_geom_str) 
+                            except (json.JSONDecodeError, TypeError):
+                                logger.warning(f"[PR {pending_request.id} - Ride {ride.id}] Could not decode route_geometry: {driver_geom_str}")
+                                driver_geom = None # Fallback if decoding fails
+                        
+                        # Get geometry lazily ONLY if needed and not present
+                        if not driver_geom and ride.start_longitude and ride.start_latitude and ride.end_longitude and ride.end_latitude:
+                            logger.warning(f"[PR {pending_request.id} - Ride {ride.id}] Ride geometry missing, attempting to fetch...")
+                            # Note: This fetch might hit rate limits or fail
+                            route_details = get_route_details(
+                                (ride.start_longitude, ride.start_latitude),
+                                (ride.end_longitude, ride.end_latitude)
+                            )
+                            if route_details and route_details.get('geometry'):
+                                driver_geom = route_details['geometry'] # Assuming geometry is the list
+                                # Optionally save it back to the ride object here if desired
+                                # ride.route_geometry = json.dumps(driver_geom)
+                                # ride.save(update_fields=['route_geometry'])
+                            else:
+                                logger.error(f"[PR {pending_request.id} - Ride {ride.id}] Failed to fetch missing geometry.")
+                                continue # Skip ride if geometry cannot be obtained
 
-                    compatibility_score = overlap_result.get(
-                        "compatibility_score", 0)
+                        if not driver_geom:
+                            logger.warning(f"[PR {pending_request.id} - Ride {ride.id}] Skipping ride, missing or could not obtain geometry.")
+                            continue # Skip if ride has no geometry
 
-                    # If compatible and better than current best match
-                    if (compatibility_score >= 60 and  # Minimum 60% compatibility required
-                        compatibility_score > best_score and
-                        overlap_result.get("optimal_pickup_point") and
-                        overlap_result.get("optimal_dropoff_point")):
+                        # Call the imported function with the correct arguments
+                        overlap_result = calculate_route_overlap(
+                            driver_route_geometry=driver_geom, # Pass geometry list
+                            rider_start_lat=pending_request.pickup_latitude,
+                            rider_start_lon=pending_request.pickup_longitude,
+                            rider_end_lat=pending_request.dropoff_latitude,
+                            rider_end_lon=pending_request.dropoff_longitude
+                            # Using default thresholds defined in calculate_route_overlap in utils.py
+                        )
+                        compatibility_score = overlap_result.get('score', 0)
+                    except Exception as calc_err:
+                         logger.error(f"Error during calculate_route_overlap for PR {pending_request.id} / Ride {ride.id}: {calc_err}", exc_info=True)
+                         compatibility_score = 0 # Treat error as incompatible
 
+                    if compatibility_score >= 60 and compatibility_score > best_score: 
                         best_match = ride
                         best_score = compatibility_score
-                        best_compatibility = overlap_result
-                        logger.info(f"Found better match: Ride {ride.id} with score {compatibility_score:.2f}")
+                        logger.info(f"Found potential better match: Ride {ride.id} with score {compatibility_score:.2f} for PR {pending_request.id}")
 
-                # If we found a good match
-                if best_match and best_score >= 60:
-                    logger.info(f"Found best match: Ride {best_match.id} with score {best_score:.2f}")
+                if best_match: # Found a suitable match
+                    logger.info(f"Found potential match for PR {pending_request.id}: Ride {best_match.id} (Score: {best_score:.2f})")
+                    logger.info(f"Proposing match: PR {pending_request.id} to Ride {best_match.id}")
+                    try:
+                        with transaction.atomic():
+                            # Reload the pending request and ride inside the transaction
+                            # to ensure we have the latest state and lock the rows.
+                            pr_to_update = PendingRideRequest.objects.select_for_update().get(id=pending_request.id)
+                            ride_to_update = Ride.objects.select_for_update().get(id=best_match.id)
 
-                    # Update the pending request
-                    pending_request.status = 'MATCH_PROPOSED'
-                    pending_request.proposed_ride = best_match
-                    pending_request.save()
+                            # Double-check status and seats before proceeding
+                            if pr_to_update.status != 'PENDING':
+                                logger.warning(f"PR {pr_to_update.id} status changed to {pr_to_update.status} before update. Skipping proposal.")
+                                continue # Skip to the next pending request in the outer loop
 
-                    # Get optimal points from the best match
-                    optimal_pickup = best_compatibility.get(
-                        "optimal_pickup_point")
-                    optimal_dropoff = best_compatibility.get(
-                        "optimal_dropoff_point")
+                            if ride_to_update.available_seats < pr_to_update.seats_needed:
+                                logger.warning(f"Ride {ride_to_update.id} seats ({ride_to_update.available_seats}) became insufficient for PR {pr_to_update.id} ({pr_to_update.seats_needed}). Skipping proposal.")
+                                continue # Skip to the next pending request in the outer loop
 
-                    # Create notification for the rider
-                    notification_message = (
-                        f"We found a potential ride match from {pending_request.pickup_location} to "
-                        f"{pending_request.dropoff_location} with driver {best_match.driver.get_full_name()}"
-                    )
+                            # --- Perform Updates ---
+                            pr_to_update.status = 'MATCH_PROPOSED'
+                            pr_to_update.proposed_ride = ride_to_update
+                            pr_to_update.save(update_fields=['status', 'proposed_ride'])
+                            logger.info(f"Updating PR {pr_to_update.id} status to MATCH_PROPOSED...")
 
-                    notification = Notification.objects.create(
-                        recipient=pending_request.rider,
-                        notification_type='MATCH_PROPOSED',
-                        message=notification_message,
-                        pending_request=pending_request,
-                        ride=best_match
-                    )
-                    logger.info(f"Created notification {notification.id} for pending request {pending_request.id}")
-                else:
+                            ride_to_update.available_seats -= pr_to_update.seats_needed
+                            ride_to_update.save(update_fields=['available_seats'])
+                            logger.info(f"Ride {ride_to_update.id} seats decremented to {ride_to_update.available_seats}...")
+
+                            # Create driver notification
+                            Notification.objects.create(
+                                recipient=ride_to_update.driver,
+                                sender=None, # Assuming system notification
+                                notification_type='MATCH_PROPOSED',
+                                message=f"Your ride (ID {ride_to_update.id}) has a proposed match with a rider request (ID {pr_to_update.id}).",
+                                related_pending_request=pr_to_update,
+                                related_ride=ride_to_update
+                            )
+                            logger.info(f"Notification created for driver (ID: {ride_to_update.driver.id})...")
+
+                            # Create rider notification
+                            Notification.objects.create(
+                                recipient=pr_to_update.rider,
+                                sender=None, # Assuming system notification
+                                notification_type='MATCH_PROPOSED',
+                                message=f"We found a match for your request (ID {pr_to_update.id})! Check Ride ID {ride_to_update.id}.",
+                                related_pending_request=pr_to_update,
+                                related_ride=ride_to_update
+                            )
+                            logger.info(f"Notification created for rider (ID: {pr_to_update.rider.id})...")
+
+                            # Transaction commits automatically if no exceptions raised
+
+                    except PendingRideRequest.DoesNotExist:
+                         logger.error(f"Concurrency Error: Pending Request {pending_request.id} was deleted before match proposal.")
+                    except Ride.DoesNotExist:
+                         logger.error(f"Concurrency Error: Ride {best_match.id} was deleted before match proposal.")
+                    except Exception as e_atomic:
+                        # Log any other error that occurs during the transaction
+                        logger.error(f"DATABASE TRANSACTION ERROR during match proposal for PR {pending_request.id} / Ride {best_match.id}: {e_atomic}")
+                        # Transaction automatically rolls back on exception
+
+                else: # This corresponds to the 'if best_match:'
                     logger.info(f"No suitable match found for pending request {pending_request.id}")
 
+        # This outer exception handling remains from your original structure
         except Exception as e:
             logger.error(f"Error checking pending requests: {str(e)}")
             logger.exception("Full exception details:")
+
+
 
     def create(self, request, *args, **kwargs):
         """Create a new ride"""
@@ -1039,25 +960,72 @@ class RideViewSet(viewsets.ModelViewSet):
             optimal_pickup_point = None
             optimal_dropoff_point = None
             compatibility_score = 0
-            
+            # --- NEW --- Add variable for optimal points dictionary
+            optimal_points_dict = None 
+
             if pending_request.status == 'MATCH_PROPOSED' and pending_request.proposed_ride:
                 try:
-                    # Get coordinates for rider and driver
-                    driver_start = (pending_request.proposed_ride.start_longitude, pending_request.proposed_ride.start_latitude)
-                    driver_end = (pending_request.proposed_ride.end_longitude, pending_request.proposed_ride.end_latitude)
-                    rider_pickup = (pending_request.pickup_longitude, pending_request.pickup_latitude)
-                    rider_dropoff = (pending_request.dropoff_longitude, pending_request.dropoff_latitude)
-                    
-                    # Calculate route overlap which returns optimal points
-                    overlap_result = calculate_route_overlap(
-                        driver_start, driver_end, rider_pickup, rider_dropoff
-                    )
-                    compatibility_score = overlap_result.get("compatibility_score", 0)
-                    optimal_pickup_point = overlap_result.get("optimal_pickup_point")
-                    optimal_dropoff_point = overlap_result.get("optimal_dropoff_point")
+                    # --- NEW --- Get driver route geometry from the proposed ride
+                    driver_geom = None
+                    if pending_request.proposed_ride.route_geometry:
+                        try:
+                            # Assuming route_geometry is stored as a JSON string list of [lon, lat]
+                            driver_geom = json.loads(pending_request.proposed_ride.route_geometry)
+                            if not isinstance(driver_geom, list) or not all(isinstance(p, list) and len(p) == 2 for p in driver_geom):
+                                logger.warning(f"Ride {pending_request.proposed_ride.id} route geometry is not a valid list of [lon, lat] points.")
+                                driver_geom = None # Invalidate if format is wrong
+                        except json.JSONDecodeError:
+                            logger.error(f"Error decoding route geometry for Ride {pending_request.proposed_ride.id}.")
+                            driver_geom = None
+
+                    if driver_geom:
+                        # --- MODIFIED --- Call calculate_route_overlap with correct keyword arguments
+                        overlap_result = calculate_route_overlap(
+                            driver_route_geometry=driver_geom,
+                            rider_start_lat=pending_request.pickup_latitude,
+                            rider_start_lon=pending_request.pickup_longitude,
+                            rider_end_lat=pending_request.dropoff_latitude,
+                            rider_end_lon=pending_request.dropoff_longitude
+                        )
+                        compatibility_score = overlap_result.get("score", 0)
+                        
+                        # --- NEW --- Fetch optimal points from calculate_optimal_pickup_dropoff (called inside overlap)
+                        # This requires calculate_route_overlap to return the optimal_points_result dict or individual points
+                        # Let's assume calculate_route_overlap returns a dict including optimal points details for now.
+                        # We might need to adjust calculate_route_overlap later if it doesn't.
+                        # Example assumption:
+                        # optimal_pickup_point = overlap_result.get("optimal_pickup_point") # e.g., {'latitude': Y, 'longitude': X, 'distance': D}
+                        # optimal_dropoff_point = overlap_result.get("optimal_dropoff_point")
+
+                        # --> REVISED APPROACH: Calculate optimal points *again* here for display purposes,
+                        # as calculate_route_overlap doesn't directly return them in the desired format for the API.
+                        # This avoids modifying calculate_route_overlap just for this endpoint.
+                        driver_route_points_latlon = [(p[1], p[0]) for p in driver_geom] # Convert to (lat, lon)
+                        optimal_points_dict = calculate_optimal_pickup_dropoff(
+                             driver_route_points_latlon,
+                             pending_request.pickup_latitude, pending_request.pickup_longitude,
+                             pending_request.dropoff_latitude, pending_request.dropoff_longitude
+                        )
+                        if optimal_points_dict:
+                             # Format for the API response
+                             optimal_pickup_point = {
+                                 'latitude': optimal_points_dict['pickup']['point'][0],
+                                 'longitude': optimal_points_dict['pickup']['point'][1],
+                                 'distance_meters': optimal_points_dict['pickup']['distance']
+                             }
+                             optimal_dropoff_point = {
+                                 'latitude': optimal_points_dict['dropoff']['point'][0],
+                                 'longitude': optimal_points_dict['dropoff']['point'][1],
+                                 'distance_meters': optimal_points_dict['dropoff']['distance']
+                             }
+
+                    else:
+                        logger.warning(f"Could not calculate optimal points/score for PR {pending_request.id} because driver geometry is missing for Ride {pending_request.proposed_ride.id}.")
 
                 except Exception as e:
-                    logger.error(f"Error calculating optimal points: {str(e)}")
+                    # Use exc_info=True for full traceback
+                    logger.error(f"Error calculating overlap/optimal points in pending_status for PR {pending_request.id}: {str(e)}", exc_info=True)
+
 
             return Response({
                 "status": pending_request.status,
@@ -1105,15 +1073,209 @@ class RideRequestViewSet(viewsets.ModelViewSet):
     queryset = RideRequest.objects.all()
     serializer_class = RideRequestSerializer
     permission_classes = [IsAuthenticated]
+    
+    def create(self, request):
+        """Create a new ride request with automatic ride matching"""
+        try:
+            # Extract rider data from request
+            ride_data = request.data.copy()
+            
+            # Store original ride_id if provided by user
+            original_ride_id = ride_data.get('ride_id')
+            
+            # Temporarily remove ride_id to validate other fields first
+            if 'ride_id' in ride_data:
+                del ride_data['ride_id']
+                
+            # Create a serializer without the ride to validate other fields first
+            serializer = self.get_serializer(data=ride_data, context={'request': request})
+            
+            if not serializer.is_valid():
+                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            
+            validated_data = serializer.validated_data.copy()
+            
+            # Get rider coordinates
+            rider_pickup = (validated_data.get('pickup_longitude'), validated_data.get('pickup_latitude'))
+            rider_dropoff = (validated_data.get('dropoff_longitude'), validated_data.get('dropoff_latitude'))
+            seats_needed = validated_data.get('seats_needed', 1)
+            
+            logger.info(f"Finding compatible rides for pickup: {rider_pickup}, dropoff: {rider_dropoff}, seats: {seats_needed}")
+            
+            # Get all available rides with sufficient seats
+            available_rides = Ride.objects.filter(
+                status='SCHEDULED',
+                departure_time__gte=timezone.now(),
+                available_seats__gte=seats_needed
+            ).exclude(driver=request.user)  # Rider can't match with their own ride
+            
+            logger.info(f"Found {available_rides.count()} available rides to check for compatibility")
+            
+            # Evaluate compatibility with all available rides
+            compatible_rides = []
+            
+            for ride in available_rides:
+                try:
+                    # Skip if original_ride_id was provided and this isn't it
+                    if original_ride_id and str(ride.id) != str(original_ride_id):
+                        logger.info(f"Skipping ride {ride.id} as user specifically requested ride {original_ride_id}")
+                        continue
+                        
+                    # Get driver coordinates
+                    driver_start = (ride.start_longitude, ride.start_latitude)
+                    driver_end = (ride.end_longitude, ride.end_latitude)
+                    
+                    # Skip rides with missing coordinates
+                    if None in driver_start or None in driver_end:
+                        logger.warning(f"Skipping ride {ride.id}: missing coordinates")
+                        continue
+                    
+                    # Calculate route compatibility
+                    overlap_result = calculate_route_overlap(
+                        driver_start, driver_end, rider_pickup, rider_dropoff,
+                        get_optimal_points=True
+                    )
+                    
+                    if not overlap_result:
+                        logger.info(f"Skipping ride {ride.id}: calculate_route_overlap returned None")
+                        continue
+                        
+                    compatibility_score = overlap_result.get("compatibility_score", 0)
+                    optimal_pickup_point = overlap_result.get("optimal_pickup_point")
+                    optimal_dropoff_point = overlap_result.get("optimal_dropoff_point")
+                    
+                    # Calculate time difference in minutes
+                    rider_departure_time = validated_data.get('departure_time')
+                    if rider_departure_time:
+                        time_diff = abs((ride.departure_time - rider_departure_time).total_seconds() / 60)
+                    else:
+                        time_diff = 0  # No time preference specified
+                        
+                    # Consider rides with good compatibility (minimum 60% score)
+                    MIN_COMPATIBILITY_THRESHOLD = 60
+                    
+                    if compatibility_score >= MIN_COMPATIBILITY_THRESHOLD:
+                        logger.info(f"Ride {ride.id} is compatible with score {compatibility_score:.2f}")
+                        compatible_rides.append({
+                            'ride': ride,
+                            'compatibility_score': compatibility_score,
+                            'time_diff': time_diff,
+                            'optimal_pickup_point': optimal_pickup_point,
+                            'optimal_dropoff_point': optimal_dropoff_point
+                        })
+                except Exception as e:
+                    logger.error(f"Error evaluating ride {ride.id}: {str(e)}")
+                    continue
+            
+            # Sort compatible rides by compatibility score (highest first)
+            compatible_rides.sort(key=lambda x: x['compatibility_score'], reverse=True)
+            
+            if compatible_rides:
+                # Use the most compatible ride
+                best_match = compatible_rides[0]
+                selected_ride = best_match['ride']
+                
+                logger.info(f"Selected best matching ride: {selected_ride.id} with score {best_match['compatibility_score']:.2f}")
+                
+                # Update data with the selected ride and optimal points
+                validated_data['ride'] = selected_ride
+                validated_data['rider'] = request.user
+                validated_data['status'] = 'PENDING'
+                validated_data['optimal_pickup_point'] = best_match['optimal_pickup_point']
+                validated_data['nearest_dropoff_point'] = best_match['optimal_dropoff_point']
+                
+                # Create the ride request
+                ride_request = RideRequest.objects.create(**validated_data)
+                
+                # Return the serialized data with match details
+                response_data = RideRequestSerializer(ride_request).data
+                response_data['match_details'] = {
+                    'ride_id': selected_ride.id,
+                    'compatibility_score': best_match['compatibility_score'],
+                    'optimal_pickup_point': best_match['optimal_pickup_point'],
+                    'optimal_dropoff_point': best_match['optimal_dropoff_point'],
+                    'driver_name': f"{selected_ride.driver.first_name} {selected_ride.driver.last_name}".strip(),
+                    'driver_id': selected_ride.driver.id
+                }
+                
+                return Response(response_data, status=status.HTTP_201_CREATED)
+            else:
+                # No compatible rides found
+                logger.info(f"No compatible rides found for request")
+                
+                # Create a PendingRideRequest instead
+                pending_request = PendingRideRequest.objects.create(
+                    rider=request.user,
+                    pickup_location=validated_data.get('pickup_location'),
+                    dropoff_location=validated_data.get('dropoff_location'),
+                    pickup_latitude=validated_data.get('pickup_latitude'),
+                    pickup_longitude=validated_data.get('pickup_longitude'),
+                    dropoff_latitude=validated_data.get('dropoff_latitude'),
+                    dropoff_longitude=validated_data.get('dropoff_longitude'),
+                    departure_time=validated_data.get('departure_time', timezone.now()),
+                    seats_needed=validated_data.get('seats_needed', 1),
+                    status='PENDING'
+                )
+                
+                # Create a notification for the rider
+                Notification.objects.create(
+                    recipient=request.user,
+                    notification_type='RIDE_PENDING',
+                    message="We've received your ride request. We'll notify you when we find a match.",
+                    related_pending_request=pending_request
+                )
+                
+                return Response({
+                    'status': 'pending',
+                    'message': 'No compatible rides found. Your request has been saved and we will notify you when a match is found.',
+                    'pending_request_id': pending_request.id
+                }, status=status.HTTP_202_ACCEPTED)
+                
+        except Exception as e:
+            logger.error(f"Error creating ride request: {str(e)}")
+            logger.exception("Full exception details:")
+            return Response({
+                'status': 'error',
+                'message': str(e),
+                'code': 'CREATION_ERROR'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-    def get_queryset(self):
-        # Mark past rides as complete
-        mark_past_rides_complete()
-        
-        user = self.request.user
-        # Return all ride requests for this user
-        return RideRequest.objects.filter(rider=user)
+    @action(detail=False, methods=['get'])
+    def accepted(self, request):
+        """
+        Get all accepted ride requests for the current user (both as rider and driver)
+        """
+        try:
+            # Mark past rides as complete before retrieving the list
+            mark_past_rides_complete()
+            
+            # Log detailed information for debugging
+            logger.info(
+                f"Fetching accepted rides for user: {request.user.username} (ID: {request.user.id})")
 
+            # Use Q objects to get rides where the user is either the rider or driver
+            from django.db.models import Q
+            ride_requests = RideRequest.objects.filter(
+                Q(rider=request.user) | Q(ride__driver=request.user),
+                status__in=['ACCEPTED', 'COMPLETED']
+            ).select_related(
+                'ride',
+                'ride__driver',
+                'rider'
+            ).order_by('-departure_time')
+
+            logger.info(f"Found {ride_requests.count()} accepted rides")
+
+            # Serialize the ride requests
+            serializer = RideRequestSerializer(ride_requests, many=True)
+            return Response(serializer.data)
+        except Exception as e:
+            logger.error(f"Error fetching accepted rides: {str(e)}")
+            return Response(
+                {"error": f"Error fetching accepted rides: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+            
     def retrieve(self, request, *args, **kwargs):
         instance = self.get_object()
         logger.info(f"Retrieving detailed data for ride request {instance.id}")
@@ -1176,131 +1338,13 @@ class RideRequestViewSet(viewsets.ModelViewSet):
             
         return Response(data)
 
-    @action(detail=False, methods=['get'])
-    def accepted(self, request):
-        """
-        Get all accepted ride requests for the current user (both as rider and driver)
-        """
-        try:
-            # Mark past rides as complete before retrieving the list
-            mark_past_rides_complete()
-            
-            # Log detailed information for debugging
-            logger.info(
-                f"Fetching accepted rides for user: {request.user.username} (ID: {request.user.id})")
-
-            # Use Q objects to get rides where the user is either the rider or driver
-            from django.db.models import Q
-            ride_requests = RideRequest.objects.filter(
-                Q(rider=request.user) | Q(ride__driver=request.user),
-                status__in=['ACCEPTED', 'COMPLETED']
-            ).select_related(
-                'ride',
-                'ride__driver',
-                'rider'
-            ).order_by('-departure_time')
-
-            logger.info(f"Found {ride_requests.count()} accepted rides")
-
-            # Serialize the ride requests
-            serializer = RideRequestSerializer(ride_requests, many=True)
-            return Response(serializer.data)
-        except Exception as e:
-            logger.error(f"Error fetching accepted rides: {str(e)}")
-            return Response(
-                {"error": f"Error fetching accepted rides: {str(e)}"},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-            
-    def create(self, request):
-        serializer = self.get_serializer(data=request.data, context={'request': request})
-
-        try:
-            serializer.is_valid(raise_exception=True)
-        
-            # Debug logging
-            logger.info(f"Creating ride request for user: {request.user.id} - {request.user.username}")
-            logger.info(f"Serializer validated data: {serializer.validated_data}")
-            logger.info(f"Request data: {request.data}")
-
-            # Save the ride request (this will call our create method in the serializer)
-            ride_request = serializer.save()
-            
-            # Calculate optimal pickup and dropoff points
-            try:
-                # Get relevant coordinates
-                ride = ride_request.ride
-                
-                # Skip if required coordinates are missing
-                if (not hasattr(ride_request, 'pickup_latitude') or not hasattr(ride_request, 'pickup_longitude') or
-                    not hasattr(ride_request, 'dropoff_latitude') or not hasattr(ride_request, 'dropoff_longitude') or
-                    not hasattr(ride, 'start_latitude') or not hasattr(ride, 'start_longitude') or
-                    not hasattr(ride, 'end_latitude') or not hasattr(ride, 'end_longitude')):
-                    logger.warning(f"Skipping optimal point calculation for ride request {ride_request.id} due to missing coordinates")
-                else:
-                    # Driver route - using start and end for now as a simple route
-                    driver_start = (ride.start_longitude, ride.start_latitude)
-                    driver_end = (ride.end_longitude, ride.end_latitude)
-                    
-                    # Build a simple route for now - in production this would use the full route
-                    driver_route = [(driver_start[1], driver_start[0]), (driver_end[1], driver_end[0])]
-                    
-                    # Use helper functions to find optimal points
-                    rider_pickup = (ride_request.pickup_longitude, ride_request.pickup_latitude)
-                    rider_dropoff = (ride_request.dropoff_longitude, ride_request.dropoff_latitude)
-                    
-                    # Calculate optimal pickup point
-                    optimal_pickup, pickup_dist, _ = find_optimal_pickup(
-                        [(p[1], p[0]) for p in driver_route],  # Convert to (lat, lng) format
-                        (rider_pickup[1], rider_pickup[0])
-                    )
-                    
-                    # Calculate optimal dropoff point
-                    optimal_dropoff, dropoff_dist, _ = find_optimal_dropoff(
-                        [(p[1], p[0]) for p in driver_route],  # Convert to (lat, lng) format
-                        (rider_pickup[1], rider_pickup[0]),
-                        (rider_dropoff[1], rider_dropoff[0])
-                    )
-                    
-                    # Store the optimal points in the ride request
-                    if optimal_pickup:
-                        ride_request.optimal_pickup_point = {
-                            'latitude': optimal_pickup[0],
-                            'longitude': optimal_pickup[1],
-                            'distance': pickup_dist
-                        }
-                    
-                    if optimal_dropoff:
-                        ride_request.nearest_dropoff_point = {
-                            'latitude': optimal_dropoff[0],
-                            'longitude': optimal_dropoff[1],
-                            'distance': dropoff_dist
-                        }
-                    
-                    # Save the updated ride request
-                    ride_request.save()
-                    logger.info(f"Optimal points calculated and saved: pickup={optimal_pickup}, dropoff={optimal_dropoff}")
-                
-            except Exception as e:
-                logger.error(f"Error calculating optimal points: {str(e)}")
-                # Don't fail the request if we can't calculate optimal points
-            
-            # Return success response
-            return Response({
-                'status': 'success',
-                'message': 'Ride request created successfully.',
-                'ride_request': RideRequestSerializer(ride_request).data
-            }, status=status.HTTP_201_CREATED)
-        
-        except Exception as e:
-            logger.error(f"Failed to create ride request: {str(e)}")
-            return Response({"error": f"Failed to create ride request: {str(e)}"},
-                          status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
     @action(detail=False, methods=['post'])
     def accept_match(self, request):
         """Accept a proposed ride match"""
         try:
+            # Log the entire request body for debugging
+            logger.info(f"Received accept_match request with data: {request.data}")
+            
             pending_request_id = request.data.get('pending_request_id')
             if not pending_request_id:
                 return Response(
@@ -1315,10 +1359,12 @@ class RideRequestViewSet(viewsets.ModelViewSet):
             
                 # Verify the user is the rider
                 if pending_request.rider != request.user:
+                    logger.warning(f"Permission denied: User {request.user.username} tried to accept a request belonging to {pending_request.rider.username}")
                     raise PermissionDenied("You can only accept your own ride requests")
 
                 # Check if the request is in MATCH_PROPOSED state
                 if pending_request.status != 'MATCH_PROPOSED':
+                    logger.warning(f"Request status check failed: Current status is {pending_request.status}, needed MATCH_PROPOSED")
                     return Response(
                         {"error": f"This request is not in a state to be accepted. Current status: {pending_request.status}"},
                         status=status.HTTP_400_BAD_REQUEST
@@ -1327,6 +1373,7 @@ class RideRequestViewSet(viewsets.ModelViewSet):
                 # Get the proposed ride
                 proposed_ride = pending_request.proposed_ride
                 if not proposed_ride:
+                    logger.warning(f"No proposed ride found for request {pending_request_id}")
                     return Response(
                         {"error": "No proposed ride found for this request"},
                         status=status.HTTP_400_BAD_REQUEST
@@ -1991,3 +2038,44 @@ def health_check(request):
         },
         "response_time_seconds": response_time
     })
+
+@csrf_exempt
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def proxy_openrouteservice(request):
+    """
+    Proxy requests to OpenRouteService API to avoid CORS issues on the frontend
+    """
+    if request.method != 'GET':
+        return JsonResponse({"error": "Only GET requests are supported"}, status=405)
+    
+    # Extract parameters from request
+    api_key = request.GET.get('api_key')
+    start = request.GET.get('start')
+    end = request.GET.get('end')
+    
+    if not all([api_key, start, end]):
+        return JsonResponse({"error": "Missing required parameters"}, status=400)
+    
+    # Build the OpenRouteService API URL
+    ors_url = "https://api.openrouteservice.org/v2/directions/driving-car"
+    
+    try:
+        # Make request to OpenRouteService
+        params = {
+            'api_key': api_key,
+            'start': start,
+            'end': end
+        }
+        
+        headers = {
+            'Accept': 'application/geo+json;charset=UTF-8',
+            'Content-Type': 'application/json'
+        }
+        
+        response = requests.get(ors_url, params=params, headers=headers)
+        
+        # Return the response content and status code
+        return JsonResponse(response.json(), status=response.status_code)
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=500)

@@ -51,6 +51,9 @@ INSTALLED_APPS = [
     'users',
     'rides',
     
+    # JWT token blacklist
+    'rest_framework_simplejwt.token_blacklist',
+    
     # Django AllAuth
     'allauth',
     'allauth.account',
@@ -63,10 +66,10 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
-    'carpool_project.global_cors_middleware.GlobalCorsMiddleware',  # Highest priority global CORS middleware
+    'carpool_project.global_cors_middleware.GlobalCorsMiddleware',  # Handles all CORS (OPTIONS + headers)
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
-    'corsheaders.middleware.CorsMiddleware',
+    # Note: corsheaders.middleware.CorsMiddleware removed — GlobalCorsMiddleware handles CORS to avoid duplicate headers
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -86,10 +89,10 @@ EMAIL_PORT = config('EMAIL_PORT', default=465, cast=int)
 EMAIL_USE_TLS = False
 EMAIL_USE_SSL = config('EMAIL_USE_SSL', default=True, cast=bool)
 EMAIL_TIMEOUT = 30
-EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='ridex2429@gmail.com')
-EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='covhotczhrbzvcfy')
-DEFAULT_FROM_EMAIL = config('EMAIL_HOST_USER', default='ridex2429@gmail.com')
-SERVER_EMAIL = config('EMAIL_HOST_USER', default='ridex2429@gmail.com')
+EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='')
+EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
+DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='')
+SERVER_EMAIL = config('SERVER_EMAIL', default='')
 
 TEMPLATES = [
     {
@@ -188,16 +191,43 @@ REST_FRAMEWORK = {
 
 # JWT settings
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(days=1),
+    'ACCESS_TOKEN_LIFETIME': timedelta(hours=2),  # Shorter access token lifetime
     'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
+    'ROTATE_REFRESH_TOKENS': True,  # Rotate refresh tokens on refresh
+    'BLACKLIST_AFTER_ROTATION': True,  # Blacklist old tokens after rotation
+    'UPDATE_LAST_LOGIN': True,  # Update last login when token is created
+    
     'ALGORITHM': 'HS256',
     'SIGNING_KEY': SECRET_KEY,
+    'VERIFYING_KEY': None,
+    'AUDIENCE': None,
+    'ISSUER': None,
+    'JWK_URL': None,
+    'LEEWAY': 0,
+    
     'AUTH_HEADER_TYPES': ('Bearer',),
     'AUTH_HEADER_NAME': 'HTTP_AUTHORIZATION',
     'USER_ID_FIELD': 'id',
     'USER_ID_CLAIM': 'user_id',
+    'USER_AUTHENTICATION_RULE': 'rest_framework_simplejwt.authentication.default_user_authentication_rule',
+    
     'AUTH_TOKEN_CLASSES': ('rest_framework_simplejwt.tokens.AccessToken',),
     'TOKEN_TYPE_CLAIM': 'token_type',
+    'TOKEN_USER_CLASS': 'rest_framework_simplejwt.models.TokenUser',
+    
+    'JTI_CLAIM': 'jti',  # JWT ID claim, used for blacklisting
+    
+    'SLIDING_TOKEN_REFRESH_EXP_CLAIM': 'refresh_exp',
+    'SLIDING_TOKEN_LIFETIME': timedelta(hours=2),
+    'SLIDING_TOKEN_REFRESH_LIFETIME': timedelta(days=7),
+    
+    # For testing purposes, make it easier to validate tokens
+    'AUTH_COOKIE': 'access_token',  # Cookie name for JWT
+    'AUTH_COOKIE_DOMAIN': None,     # Domain of the cookie
+    'AUTH_COOKIE_SECURE': False,    # Whether cookie should only be sent over HTTPS
+    'AUTH_COOKIE_HTTP_ONLY': True,  # Prevent JavaScript access to the cookie
+    'AUTH_COOKIE_PATH': '/',        # Path of the cookie
+    'AUTH_COOKIE_SAMESITE': 'Lax',  # SameSite attribute of the cookie
 }
 
 # Required for django-allauth
@@ -219,7 +249,7 @@ ACCOUNT_USERNAME_REQUIRED = False
 ACCOUNT_EMAIL_VERIFICATION = 'optional'  # 'optional' or 'mandatory' or 'none'
 ACCOUNT_UNIQUE_EMAIL = True
 ACCOUNT_SESSION_REMEMBER = True
-ACCOUNT_USER_MODEL_USERNAME_FIELD = None  # If your User model doesn't have a username field
+ACCOUNT_USER_MODEL_USERNAME_FIELD = 'username'  # User model inherits AbstractUser which has username
 
 # Social account providers configuration
 SOCIALACCOUNT_PROVIDERS = {
@@ -265,16 +295,23 @@ LOGOUT_REDIRECT_URL = '/'
 FRONTEND_URL = config('FRONTEND_URL', default='http://localhost:3000')
 
 # CORS settings
-CORS_ALLOW_ALL_ORIGINS = True  # For development only
+CORS_ALLOW_ALL_ORIGINS = False  # More secure setting
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOWED_ORIGINS = [
-    "http://localhost:3000",  # React development server
+    "http://localhost:3000",
     "http://127.0.0.1:3000",
-    "http://localhost:3006",  # Additional React port
-    "http://127.0.0.1:3006",
-    "https://ridex-frontend.up.railway.app",
-    "https://rdx23-production-frontend.up.railway.app",
-    "https://compassionate-nurturing-production.up.railway.app"
+    "http://localhost:57225",
+    "http://127.0.0.1:57225",
+    "http://localhost:57226",
+    "http://127.0.0.1:57226",
+    "http://localhost:3004",
+    "http://127.0.0.1:3004"
+]
+
+CORS_EXPOSE_HEADERS = [
+    'Content-Type',
+    'Authorization',
+    'X-CSRFToken'
 ]
 
 CORS_ALLOW_METHODS = [
@@ -298,24 +335,31 @@ CORS_ALLOW_HEADERS = [
     "x-requested-with",
 ]
 
-# CSRF settings for cross-origin requests
-CSRF_COOKIE_SAMESITE = 'None'  # Allow cross-site cookies
-CSRF_COOKIE_DOMAIN = None  # Allow all domains
-CSRF_COOKIE_SECURE = False  # Set to True in production with HTTPS
+# Session settings
+SESSION_COOKIE_SECURE = False  # Set to True in production
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SAMESITE = 'Lax'  # More secure than 'None'
+
+# CSRF settings
+CSRF_COOKIE_SECURE = False  # Set to True in production
 CSRF_COOKIE_HTTPONLY = False
+CSRF_COOKIE_SAMESITE = 'Lax'
+CSRF_COOKIE_DOMAIN = None
 CSRF_TRUSTED_ORIGINS = [
-    "https://ridex-frontend.up.railway.app",
-    "https://rdx23-production-frontend.up.railway.app",
-    "https://compassionate-nurturing-production.up.railway.app",
-    "https://rdx23-production.up.railway.app",
     "http://localhost:3000",
-    "http://127.0.0.1:3000"
+    "http://127.0.0.1:3000",
+    "http://localhost:57225",
+    "http://127.0.0.1:57225",
+    "http://localhost:57226",
+    "http://127.0.0.1:57226",
+    "http://localhost:3004",
+    "http://127.0.0.1:3004"
 ]
 
 # Geocoding API settings
-GEOCODING_API_KEY = config('GEOCODING_API_KEY', default='5b3ce3597851110001cf62482c1ae097a0b848ef81a1e5085aa27c1f')
+GEOCODING_API_KEY = config('GEOCODING_API_KEY', default='')
 MAPBOX_ACCESS_TOKEN = config('MAPBOX_ACCESS_TOKEN', default='')
-OPENROUTE_API_KEY = config('OPENROUTE_API_KEY', default='5b3ce3597851110001cf62482c1ae097a0b848ef81a1e5085aa27c1f')
+OPENROUTE_API_KEY = config('OPENROUTE_API_KEY')
 
 # OpenRouteService settings
 OPENROUTE_BASE_URL = 'https://api.openrouteservice.org/v2'

@@ -23,8 +23,7 @@ import logging
 from railway_status import status_check
 from django.conf import settings
 from django.conf.urls.static import static
-from django.views.generic import TemplateView
-from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.csrf import ensure_csrf_cookie
 
 # Add these imports for model patching
 from django.db import connection
@@ -40,7 +39,7 @@ def api_root(request):
             response = HttpResponse()
             response['Access-Control-Allow-Origin'] = '*'
             response['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
-            response['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With, Accept, Origin'
+            response['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With, Accept, Origin, X-CSRFToken'
             response['Access-Control-Max-Age'] = '86400'  # 24 hours
             return response
         
@@ -58,7 +57,7 @@ def api_root(request):
         # Add CORS headers to all responses
         response['Access-Control-Allow-Origin'] = '*'
         response['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
-        response['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With, Accept, Origin'
+        response['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With, Accept, Origin, X-CSRFToken'
         
         return response
     except Exception as e:
@@ -69,7 +68,7 @@ def api_root(request):
         # Add CORS headers even in case of error
         response['Access-Control-Allow-Origin'] = '*'
         response['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
-        response['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With, Accept, Origin'
+        response['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With, Accept, Origin, X-CSRFToken'
         
         return response
 
@@ -89,35 +88,15 @@ def check_driver_name_field(request):
     except Exception as e:
         return JsonResponse({'success': False, 'error': str(e)})
 
-@csrf_exempt
-def handle_registration_preflight(request):
-    """
-    Special handler for registration endpoint to specifically address CORS preflight issues.
-    This is a direct solution for Railway-specific CORS issues.
-    """
-    logger.info(f"Direct preflight handler for registration: {request.method} from {request.META.get('HTTP_ORIGIN', 'unknown')}")
-    
-    # For OPTIONS requests, return CORS headers immediately
-    if request.method == 'OPTIONS':
-        logger.info("Handling OPTIONS directly for registration endpoint")
-        response = HttpResponse()
-        response.status_code = 200
-        response['Access-Control-Allow-Origin'] = '*'
-        response['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
-        response['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With, Accept, Origin'
-        response['Access-Control-Allow-Credentials'] = 'true'
-        response['Access-Control-Max-Age'] = '86400'  # 24 hours
-        return response
-    
-    # For other methods, import and call the register_user view directly
-    from users.views import register_user
-    return register_user(request)
+# Add CSRF token endpoint
+@ensure_csrf_cookie
+def csrf_token_view(request):
+    return JsonResponse({'detail': 'CSRF cookie set'})
 
 urlpatterns = [
     path('', api_root, name='api-root'),
     path('admin/', admin.site.urls),
-    # Direct handler for registration endpoint
-    path('api/users/register/', handle_registration_preflight, name='register_preflight'),
+    # Registration is handled by users.urls; CORS preflight is handled by GlobalCorsMiddleware
     path('api/users/', include('users.urls')),
     path('api/rides/', include('rides.urls')),
     # Add the railway status endpoint
@@ -130,5 +109,5 @@ urlpatterns = [
     path('api/auth/', include('allauth.socialaccount.urls')),
     path('api/check_driver_name/', check_driver_name_field),
     path('api/cors-check/', cors_preflight_check, name='cors-check'),
-    path('', TemplateView.as_view(template_name='index.html')),
+    path('api/get-csrf-token/', csrf_token_view, name='get_csrf_token'),
 ] + static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)

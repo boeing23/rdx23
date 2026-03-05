@@ -95,7 +95,7 @@ class NotificationSerializer(serializers.ModelSerializer):
                         if isinstance(dropoff_point, str):
                             try:
                                 dropoff_point = json.loads(dropoff_point)
-                            except:
+                            except (json.JSONDecodeError, ValueError):
                                 # If can't parse as JSON, try to extract coordinates directly
                                 import re
                                 coords = re.findall(r"[-+]?\d*\.\d+|\d+", dropoff_point)
@@ -167,15 +167,12 @@ class RideSerializer(serializers.ModelSerializer):
             'id', 'driver', 'start_location', 'end_location',
             'start_latitude', 'start_longitude', 'end_latitude',
             'end_longitude', 'departure_time', 'available_seats',
-            'price_per_seat', 'status', 'created_at', 'updated_at',
+            'status', 'created_at', 'updated_at',
             'distance'
         )
         read_only_fields = ('start_latitude', 'start_longitude',
                            'end_latitude', 'end_longitude', 'created_at',
                            'updated_at')
-        extra_kwargs = {
-            'price_per_seat': {'required': False, 'default': 0}
-        }
 
     def get_distance(self, obj):
         return obj.get_route_distance()
@@ -186,11 +183,6 @@ class RideSerializer(serializers.ModelSerializer):
         if data['available_seats'] < 1:
             logger.warning("Invalid available seats: %s", data['available_seats'])
             raise serializers.ValidationError("Available seats must be at least 1")
-            
-        # If price_per_seat is provided, validate it's not negative
-        if 'price_per_seat' in data and data['price_per_seat'] < 0:
-            logger.warning("Invalid price per seat: %s", data['price_per_seat'])
-            raise serializers.ValidationError("Price per seat cannot be negative")
         
         # Get the driver (current user) from the context
         driver = self.context['request'].user
@@ -239,28 +231,6 @@ class RideRequestSerializer(serializers.ModelSerializer):
             'optimal_pickup_point', 'nearest_dropoff_point',
             'optimal_pickup_info', 'nearest_dropoff_info'
         ]
-
-    def create(self, validated_data):
-        # Get the ride ID from the request data instead of URL
-        ride_id = self.initial_data.get('ride_id')
-        if not ride_id:
-            raise serializers.ValidationError("Ride ID is required")
-            
-        try:
-            ride = Ride.objects.get(pk=ride_id)
-        except Ride.DoesNotExist:
-            raise serializers.ValidationError("Invalid ride ID")
-            
-        # Use the ride's departure time if not provided
-        if 'departure_time' not in validated_data:
-            validated_data['departure_time'] = ride.departure_time
-            
-        # Set the ride and rider
-        validated_data['ride'] = ride
-        validated_data['rider'] = self.context['request'].user
-        validated_data['status'] = 'PENDING'
-        
-        return super().create(validated_data)
 
     def get_rider_details(self, obj):
         if not obj.rider:
@@ -333,7 +303,7 @@ class RideRequestSerializer(serializers.ModelSerializer):
             if isinstance(pickup_point, str):
                 try:
                     pickup_point = json.loads(pickup_point)
-                except:
+                except (json.JSONDecodeError, ValueError):
                     pass
             
             # Determine the coordinate format
@@ -393,7 +363,7 @@ class RideRequestSerializer(serializers.ModelSerializer):
             if isinstance(dropoff_point, str):
                 try:
                     dropoff_point = json.loads(dropoff_point)
-                except:
+                except (json.JSONDecodeError, ValueError):
                     pass
             
             # Determine the coordinate format
@@ -444,7 +414,7 @@ class RideRequestSerializer(serializers.ModelSerializer):
 
 class RideDetailSerializer(RideSerializer):
     driver_info = serializers.SerializerMethodField()
-    ride_requests = RideRequestSerializer(many=True, read_only=True, source='riderequest_set')
+    ride_requests = RideRequestSerializer(many=True, read_only=True)
     
     class Meta:
         model = Ride
