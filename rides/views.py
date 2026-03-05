@@ -304,7 +304,7 @@ def calculate_segment_overlap(route1, route2, threshold=200):
     return (proximity_count / len(route1)) * 100 if route1 else 0
 
 
-def calculate_route_overlap(
+def _calculate_route_overlap_legacy(
     driver_start,
     driver_end,
     rider_pickup,
@@ -312,7 +312,8 @@ def calculate_route_overlap(
     get_optimal_points=True,
     log_prefix=""):
     """
-    Calculate the percentage of route overlap between driver and rider routes.
+    Legacy: Calculate route overlap by generating routes from scratch via API.
+    Use calculate_route_overlap from utils.py for pre-computed route geometry.
     """
     logger.info(f"{log_prefix}Calculating route overlap with inputs:")
     logger.info(f"{log_prefix}  Driver start: {driver_start}, Driver end: {driver_end}")
@@ -1130,17 +1131,26 @@ class RideRequestViewSet(viewsets.ModelViewSet):
                         logger.warning(f"Skipping ride {ride.id}: missing coordinates")
                         continue
                     
-                    # Calculate route compatibility
+                    # Calculate route compatibility using driver's route geometry
+                    route_geometry = ride.route_geometry
+                    if not route_geometry:
+                        logger.warning(f"Skipping ride {ride.id}: no route_geometry available")
+                        continue
+
+                    if isinstance(route_geometry, str):
+                        route_geometry = json.loads(route_geometry)
+
                     overlap_result = calculate_route_overlap(
-                        driver_start, driver_end, rider_pickup, rider_dropoff,
-                        get_optimal_points=True
+                        route_geometry,
+                        validated_data.get('pickup_latitude'), validated_data.get('pickup_longitude'),
+                        validated_data.get('dropoff_latitude'), validated_data.get('dropoff_longitude')
                     )
-                    
+
                     if not overlap_result:
                         logger.info(f"Skipping ride {ride.id}: calculate_route_overlap returned None")
                         continue
-                        
-                    compatibility_score = overlap_result.get("compatibility_score", 0)
+
+                    compatibility_score = overlap_result.get("score", 0)
                     optimal_pickup_point = overlap_result.get("optimal_pickup_point")
                     optimal_dropoff_point = overlap_result.get("optimal_dropoff_point")
                     
@@ -1385,22 +1395,22 @@ class RideRequestViewSet(viewsets.ModelViewSet):
                 compatibility_score = 0
                 
                 try:
-                    # Get coordinates for rider and driver
-                    driver_start = (proposed_ride.start_longitude, proposed_ride.start_latitude)
-                    driver_end = (proposed_ride.end_longitude, proposed_ride.end_latitude)
-                    rider_pickup = (pending_request.pickup_longitude, pending_request.pickup_latitude)
-                    rider_dropoff = (pending_request.dropoff_longitude, pending_request.dropoff_latitude)
-                    
-                    # Calculate route overlap which returns optimal points
-                    overlap_result = calculate_route_overlap(
-                        driver_start, driver_end, rider_pickup, rider_dropoff,
-                        get_optimal_points=True
-                    )
-                    
-                    if overlap_result:
-                        compatibility_score = overlap_result.get("compatibility_score", 0)
-                        optimal_pickup_point = overlap_result.get("optimal_pickup_point")
-                        optimal_dropoff_point = overlap_result.get("optimal_dropoff_point")
+                    # Use route geometry for overlap calculation
+                    route_geometry = proposed_ride.route_geometry
+                    if route_geometry:
+                        if isinstance(route_geometry, str):
+                            route_geometry = json.loads(route_geometry)
+
+                        overlap_result = calculate_route_overlap(
+                            route_geometry,
+                            pending_request.pickup_latitude, pending_request.pickup_longitude,
+                            pending_request.dropoff_latitude, pending_request.dropoff_longitude
+                        )
+
+                        if overlap_result:
+                            compatibility_score = overlap_result.get("score", 0)
+                            optimal_pickup_point = overlap_result.get("optimal_pickup_point")
+                            optimal_dropoff_point = overlap_result.get("optimal_dropoff_point")
                     
                 except Exception as e:
                     logger.error(f"Error calculating optimal points: {str(e)}")
@@ -1949,7 +1959,7 @@ def check_destination_compatibility(driver_start_coords, driver_end_coords, dest
                 coordinates = data['features'][0]['geometry']['coordinates']
                 
                 # Calculate route compatibility using OpenRouteService results
-                result = calculate_route_overlap(
+                result = _calculate_route_overlap_legacy(
                     driver_start_coords, driver_end_coords, coordinates[0], coordinates[-1]
                 )
                 compatibility_score = result.get('compatibility_score', 0)
