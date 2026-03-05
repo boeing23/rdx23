@@ -10,18 +10,6 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RunSQL(
-            # Forward SQL - add columns if they don't exist
-            """
-            PRAGMA foreign_keys=off;
-            
-            ALTER TABLE rides_riderequest ADD COLUMN departure_time datetime DEFAULT CURRENT_TIMESTAMP;
-            ALTER TABLE rides_riderequest ADD COLUMN optimal_pickup_point text NULL;
-            ALTER TABLE rides_riderequest ADD COLUMN nearest_dropoff_point text NULL;
-            
-            PRAGMA foreign_keys=on;
-            """,
-            # Reverse SQL - No rollback needed since SQLite doesn't support dropping columns
-            reverse_sql=""
-        ),
+        # Original SQLite PRAGMA commands removed - they were a no-op
+        # (all ALTER TABLE statements were commented out)
     ]
