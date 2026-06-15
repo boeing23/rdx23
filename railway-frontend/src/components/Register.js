@@ -1,11 +1,20 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Button, Box, Container, Paper, Grid, useTheme, useMediaQuery } from '@mui/material';
-import Typography from '@mui/material/Typography';
-import TextField from '@mui/material/TextField';
-import Alert from '@mui/material/Alert';
-import FormControlLabel from '@mui/material/FormControlLabel';
-import Switch from '@mui/material/Switch';
+import { useNavigate, Link } from 'react-router-dom';
+import { 
+  Button, 
+  Box, 
+  Container, 
+  Paper, 
+  Grid, 
+  useTheme, 
+  useMediaQuery,
+  Typography,
+  TextField,
+  Alert,
+  FormControlLabel,
+  Switch,
+  CircularProgress
+} from '@mui/material';
 import { API_BASE_URL, REGISTER_URL } from '../config';
 
 function Register() {
@@ -30,6 +39,7 @@ function Register() {
     max_passengers: ''
   });
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
   const handleChange = (e) => {
@@ -43,22 +53,26 @@ function Register() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    setLoading(true);
 
     // Validate phone number format
     const phoneRegex = /^\+?[\d\s-]{10,}$/;
     if (!phoneRegex.test(formData.phone_number)) {
       setError('Please enter a valid phone number (at least 10 digits)');
+      setLoading(false);
       return;
     }
 
     if (formData.password !== formData.password2) {
       setError('Passwords do not match');
+      setLoading(false);
       return;
     }
 
     // Validate password strength
     if (formData.password.length < 8) {
       setError('Password must be at least 8 characters long');
+      setLoading(false);
       return;
     }
 
@@ -67,6 +81,7 @@ function Register() {
       if (!formData.vehicle_make || !formData.vehicle_model || !formData.vehicle_year || 
           !formData.vehicle_color || !formData.license_plate || !formData.max_passengers) {
         setError('Please fill in all vehicle information');
+        setLoading(false);
         return;
       }
 
@@ -74,6 +89,7 @@ function Register() {
       const vehicleYear = parseInt(formData.vehicle_year);
       if (vehicleYear < 1900 || vehicleYear > 2025) {
         setError('Please enter a valid vehicle year (1900-2025)');
+        setLoading(false);
         return;
       }
 
@@ -81,6 +97,7 @@ function Register() {
       const maxPassengers = parseInt(formData.max_passengers);
       if (maxPassengers < 1 || maxPassengers > 8) {
         setError('Maximum passengers must be between 1 and 8');
+        setLoading(false);
         return;
       }
 
@@ -88,6 +105,7 @@ function Register() {
       const licensePlateRegex = /^[A-Z0-9-]{2,8}$/;
       if (!licensePlateRegex.test(formData.license_plate.toUpperCase())) {
         setError('Please enter a valid license plate number');
+        setLoading(false);
         return;
       }
     }
@@ -167,6 +185,7 @@ function Register() {
           // If not JSON, show the raw error or a generic message
           setError(`Registration failed: ${errorText.substring(0, 100)}...`);
         }
+        setLoading(false);
         return;
       }
       
@@ -188,6 +207,7 @@ function Register() {
     } catch (err) {
       console.error('Registration error:', err);
       setError('Network error during registration. Please check the console for details.');
+      setLoading(false);
     }
   };
 
@@ -507,29 +527,24 @@ function Register() {
                   type="submit"
                   fullWidth
                   variant="contained"
+                  color="primary"
                   sx={{ 
-                    mt: 2, 
-                    mb: 1, 
-                    py: { xs: 1.5, sm: 2 },
-                    borderRadius: 1.5,
+                    mt: 3, 
+                    mb: 2,
+                    py: 1.5,
                     fontSize: { xs: '0.9rem', sm: '1rem' }
                   }}
+                  disabled={loading}
                 >
-                  Register
+                  {loading ? <CircularProgress size={24} /> : 'Register'}
                 </Button>
               </Grid>
               <Grid item xs={12}>
-                <Button
-                  variant="text"
-                  fullWidth
-                  onClick={() => navigate('/login')}
-                  sx={{ 
-                    mt: 1,
-                    fontSize: { xs: '0.85rem', sm: '0.9rem' }
-                  }}
-                >
-                  Already have an account? Login
-                </Button>
+                <Box sx={{ textAlign: 'center', mt: 2 }}>
+                  <Typography variant="body2">
+                    Already have an account? <Link to="/login">Sign in</Link>
+                  </Typography>
+                </Box>
               </Grid>
             </Grid>
           </Box>

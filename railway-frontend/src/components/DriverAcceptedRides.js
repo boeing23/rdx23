@@ -40,6 +40,7 @@ L.Icon.Default.mergeOptions({
 
 const DriverAcceptedRides = () => {
   const [acceptedRides, setAcceptedRides] = useState([]);
+  const [pendingRequests, setPendingRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [selectedRide, setSelectedRide] = useState(null);
@@ -58,17 +59,14 @@ const DriverAcceptedRides = () => {
         return;
       }
 
-      // Clean the token (remove quotes or spaces)
-      const cleanToken = token.trim().replace(/^["'](.*)["']$/, '$1');
-      
-      // Add a timeout to the fetch request
+      const cleanToken = token.trim().replace(/^['"](.*)['"]$/, '$1');
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 seconds timeout
       
       try {
-        console.log(`Fetching accepted rides from: ${API_BASE_URL}/api/rides/accepted/`);
+        console.log(`Fetching accepted rides from: ${API_BASE_URL}/api/rides/rides/`);
         
-        const response = await fetch(`${API_BASE_URL}/api/rides/accepted/`, {
+        const response = await fetch(`${API_BASE_URL}/api/rides/rides/`, {
           headers: {
             'Authorization': `Bearer ${cleanToken}`,
             'Content-Type': 'application/json',
@@ -77,56 +75,49 @@ const DriverAcceptedRides = () => {
           signal: controller.signal
         });
 
-        // Handle common status codes
-        if (response.status === 404) {
-          console.log('No rides endpoint found (404) - user may have no trips yet');
-          setAcceptedRides([]);
+        if (!response.ok) {
+          console.error(`API response error: ${response.status} ${response.statusText}`);
+          setError(`Failed to fetch accepted rides: ${response.status}`);
           setLoading(false);
-          setError('');
           return;
         } 
-        else if (response.status === 401) {
-          console.log('Authentication failed (401) - token may be expired');
-          localStorage.removeItem('token'); // Clear invalid token
-          setError('Your session has expired. Please log in again.');
-          setLoading(false);
-          return;
-        }
-        else if (response.status === 403) {
-          console.log('Permission denied (403) - user may not have driver role');
-          setAcceptedRides([]);
-          setError('You do not have permission to view trips. Please ensure you are registered as a driver.');
-          setLoading(false);
-          return;
-        }
-        else if (response.status === 500) {
-          console.error('Server error (500) - backend issue');
-          setError('The server encountered an error. Our team has been notified. Please try again later.');
-          setLoading(false);
-          return;
-        }
-        else if (!response.ok) {
-          // For any other non-successful response
-          console.error(`API response error: ${response.status} ${response.statusText}`);
-          
-          // Try to get error details from response
-          let errorMessage = `Failed to fetch accepted rides: ${response.status}`;
-          try {
-            const errorData = await response.json();
-            if (errorData.detail || errorData.message) {
-              errorMessage = `Error: ${errorData.detail || errorData.message}`;
-            }
-          } catch (e) {
-            // If JSON parsing fails, use the status text
-            errorMessage = `Failed to fetch accepted rides: ${response.status} ${response.statusText}`;
-          }
-          
-          setError(errorMessage);
-          setLoading(false);
-          return;
-        }
 
         const data = await response.json();
+        
+        // DEBUG: Log the raw response structure to examine the fields
+        console.log('---------------- DEBUGGING API RESPONSE ----------------');
+        console.log('Raw API response data structure:', Array.isArray(data) ? 'Array of ' + data.length + ' items' : typeof data);
+        
+        // Check the first item in detail if available
+        if (Array.isArray(data) && data.length > 0) {
+          const firstRide = data[0];
+          console.log('First ride object keys:', Object.keys(firstRide));
+          console.log('First ride optimal_pickup_point:', firstRide.optimal_pickup_point);
+          console.log('First ride nearest_dropoff_point:', firstRide.nearest_dropoff_point);
+          console.log('First ride coordinates:', {
+            pickup: {
+              direct: { lat: firstRide.pickup_latitude, lng: firstRide.pickup_longitude },
+              fromAPI: firstRide.optimal_pickup_point
+            },
+            dropoff: {
+              direct: { lat: firstRide.dropoff_latitude, lng: firstRide.dropoff_longitude },
+              fromAPI: firstRide.nearest_dropoff_point
+            }
+          });
+
+          // Check location data
+          console.log('Location data check:', {
+            pickup_location: firstRide.pickup_location,
+            dropoff_location: firstRide.dropoff_location,
+            start_location: firstRide.start_location,
+            end_location: firstRide.end_location,
+            nested_ride: firstRide.ride ? {
+              start: firstRide.ride.start_location,
+              end: firstRide.ride.end_location
+            } : 'No nested ride object'
+          });
+        }
+        console.log('-------------------------------------------------------');
         
         if (!Array.isArray(data)) {
           console.error('Expected array but got:', typeof data, data);
@@ -136,118 +127,265 @@ const DriverAcceptedRides = () => {
           return;
         }
         
-        // Log details of the first ride to see its structure
-        if (data.length > 0) {
-          console.log('Sample accepted ride data:', data[0]);
-          console.log('Available fields:', Object.keys(data[0]));
-          console.log('Coordinate fields present:', {
-            pickup_latitude: 'pickup_latitude' in data[0],
-            pickup_longitude: 'pickup_longitude' in data[0],
-            dropoff_latitude: 'dropoff_latitude' in data[0],
-            dropoff_longitude: 'dropoff_longitude' in data[0]
-          });
-        }
-        
-        // Process rides to ensure coordinate fields are properly mapped
         const processedRides = data.map(ride => {
-          // Log the ride data structure to debug driver info
           console.log(`Processing ride ${ride.id}:`, {
-            ride_driver: ride.ride?.driver,
-            driver_field: ride.driver,
-            driver_id_field: ride.driver_id,
-            has_rider: !!ride.rider
+            raw: ride,
+            pickup: {
+              direct: { lat: ride.pickup_latitude, lng: ride.pickup_longitude },
+              optimal: ride.optimal_pickup_point,
+              info: ride.optimal_pickup_info
+            },
+            dropoff: {
+              direct: { lat: ride.dropoff_latitude, lng: ride.dropoff_longitude },
+              nearest: ride.nearest_dropoff_point,
+              info: ride.nearest_dropoff_info
+            }
           });
+
+          // DEBUG: Inspect the original API response structure to find why optimal points are missing
+          console.log(`DEBUG: Ride ${ride.id} available fields:`, Object.keys(ride));
           
-          // Get driver information using our helper function
-          const driverInfo = getDriverInfo(ride);
-          console.log('Driver info extracted:', driverInfo);
+          // Check if the optimal points exist but under different field names
+          const allPossibleFields = {
+            pickup: [
+              'optimal_pickup_point', 'optimal_pickup', 'pickup_optimal_point', 
+              'pickup_point', 'start_optimal', 'optimized_pickup'
+            ],
+            dropoff: [
+              'nearest_dropoff_point', 'nearest_dropoff', 'dropoff_nearest_point',
+              'dropoff_point', 'end_nearest', 'optimized_dropoff'
+            ]
+          };
           
-          // Return a new object with all existing properties plus any needed mapping
+          let foundOptimalPickup = null;
+          let foundNearestDropoff = null;
+          
+          // Check all possible field names
+          for (const field of allPossibleFields.pickup) {
+            if (ride[field] && typeof ride[field] === 'object') {
+              console.log(`DEBUG: Found potential optimal pickup in field "${field}":`, ride[field]);
+              foundOptimalPickup = ride[field];
+              break;
+            }
+          }
+          
+          for (const field of allPossibleFields.dropoff) {
+            if (ride[field] && typeof ride[field] === 'object') {
+              console.log(`DEBUG: Found potential nearest dropoff in field "${field}":`, ride[field]);
+              foundNearestDropoff = ride[field];
+              break;
+            }
+          }
+          
+          // Check if coordinates might be nested inside another object
+          if (!foundOptimalPickup && ride.pickup && typeof ride.pickup === 'object') {
+            console.log(`DEBUG: Checking for optimal pickup inside 'pickup' object:`);
+            for (const field of allPossibleFields.pickup) {
+              if (ride.pickup[field] && typeof ride.pickup[field] === 'object') {
+                console.log(`DEBUG: Found nested optimal pickup in pickup.${field}:`, ride.pickup[field]);
+                foundOptimalPickup = ride.pickup[field];
+                break;
+              }
+            }
+          }
+          
+          if (!foundNearestDropoff && ride.dropoff && typeof ride.dropoff === 'object') {
+            console.log(`DEBUG: Checking for nearest dropoff inside 'dropoff' object:`);
+            for (const field of allPossibleFields.dropoff) {
+              if (ride.dropoff[field] && typeof ride.dropoff[field] === 'object') {
+                console.log(`DEBUG: Found nested nearest dropoff in dropoff.${field}:`, ride.dropoff[field]);
+                foundNearestDropoff = ride.dropoff[field];
+                break;
+              }
+            }
+          }
+          
+          // Continue with existing processing
+          let pickupLat = ride.pickup_latitude || ride.start_latitude;
+          let pickupLng = ride.pickup_longitude || ride.start_longitude;
+          let dropoffLat = ride.dropoff_latitude || ride.end_latitude;
+          let dropoffLng = ride.dropoff_longitude || ride.end_longitude;
+
+          // Check for optimal pickup point
+          if ((!pickupLat || !pickupLng) && ride.optimal_pickup_point) {
+            if (typeof ride.optimal_pickup_point.latitude === 'number' && 
+                typeof ride.optimal_pickup_point.longitude === 'number') {
+              pickupLat = ride.optimal_pickup_point.longitude;
+              pickupLng = ride.optimal_pickup_point.latitude;
+              console.log(`Using optimal pickup point for ride ${ride.id}:`, {
+                lat: pickupLat,
+                lng: pickupLng
+              });
+            }
+          }
+
+          // Check for nearest dropoff point
+          if ((!dropoffLat || !dropoffLng) && ride.nearest_dropoff_point) {
+            if (typeof ride.nearest_dropoff_point.latitude === 'number' && 
+                typeof ride.nearest_dropoff_point.longitude === 'number') {
+              dropoffLat = ride.nearest_dropoff_point.longitude;
+              dropoffLng = ride.nearest_dropoff_point.latitude;
+              console.log(`Using nearest dropoff point for ride ${ride.id}:`, {
+                lat: dropoffLat,
+                lng: dropoffLng
+              });
+            }
+          }
+
+          // Check for coordinates in info objects
+          if ((!pickupLat || !pickupLng) && ride.optimal_pickup_info?.coordinates) {
+            if (Array.isArray(ride.optimal_pickup_info.coordinates) && 
+                ride.optimal_pickup_info.coordinates.length >= 2) {
+              pickupLng = ride.optimal_pickup_info.coordinates[0];
+              pickupLat = ride.optimal_pickup_info.coordinates[1];
+              console.log(`Using optimal pickup info for ride ${ride.id}:`, {
+                lat: pickupLat,
+                lng: pickupLng
+              });
+            }
+          }
+
+          if ((!dropoffLat || !dropoffLng) && ride.nearest_dropoff_info?.coordinates) {
+            if (Array.isArray(ride.nearest_dropoff_info.coordinates) && 
+                ride.nearest_dropoff_info.coordinates.length >= 2) {
+              dropoffLng = ride.nearest_dropoff_info.coordinates[0];
+              dropoffLat = ride.nearest_dropoff_info.coordinates[1];
+              console.log(`Using nearest dropoff info for ride ${ride.id}:`, {
+                lat: dropoffLat,
+                lng: dropoffLng
+              });
+            }
+          }
+
+          if (!pickupLat || !pickupLng) {
+            console.warn(`Missing pickup coordinates for ride ${ride.id}`);
+          }
+          if (!dropoffLat || !dropoffLng) {
+            console.warn(`Missing dropoff coordinates for ride ${ride.id}`);
+          }
+
+          // Create fallback optimal points if we found alternative fields or use direct coordinates
+          let optimal_pickup_point = ride.optimal_pickup_point || foundOptimalPickup;
+          let nearest_dropoff_point = ride.nearest_dropoff_point || foundNearestDropoff;
+          
+          // If still no optimal points but we have coordinates, create fallbacks
+          if (!optimal_pickup_point && pickupLat && pickupLng) {
+            console.log(`DEBUG: Creating fallback optimal_pickup_point for ride ${ride.id}`);
+            optimal_pickup_point = {
+              latitude: pickupLng, // API swaps lat/lng
+              longitude: pickupLat,
+              address: ride.pickup_location || "Pickup Location",
+              distance: 0
+            };
+          }
+          
+          if (!nearest_dropoff_point && dropoffLat && dropoffLng) {
+            console.log(`DEBUG: Creating fallback nearest_dropoff_point for ride ${ride.id}`);
+            nearest_dropoff_point = {
+              latitude: dropoffLng, // API swaps lat/lng
+              longitude: dropoffLat,
+              address: ride.dropoff_location || "Dropoff Location",
+              distance: 0
+            };
+          }
+
+          // Preserve all coordinate-related fields
           return {
             ...ride,
-            // Make sure coordinate fields are properly handled
-            pickup_latitude: ride.pickup_latitude || (ride.optimal_pickup_point ? ride.optimal_pickup_point.latitude : null),
-            pickup_longitude: ride.pickup_longitude || (ride.optimal_pickup_point ? ride.optimal_pickup_point.longitude : null),
-            dropoff_latitude: ride.dropoff_latitude || (ride.nearest_dropoff_point ? ride.nearest_dropoff_point.latitude : null),
-            dropoff_longitude: ride.dropoff_longitude || (ride.nearest_dropoff_point ? ride.nearest_dropoff_point.longitude : null),
-            // Ensure driver data is properly mapped
-            driver_id: driverInfo?.id || ride.driver_id || (ride.ride && ride.ride.driver) || null,
-            // Add the extracted driver info
-            driver: driverInfo || ride.driver
+            pickup_latitude: pickupLat,
+            pickup_longitude: pickupLng,
+            dropoff_latitude: dropoffLat,
+            dropoff_longitude: dropoffLng,
+            optimal_pickup_point: optimal_pickup_point,
+            optimal_pickup_info: ride.optimal_pickup_info,
+            nearest_dropoff_point: nearest_dropoff_point,
+            nearest_dropoff_info: ride.nearest_dropoff_info,
+            rider_id: ride.rider_id || (ride.rider && ride.rider.id) || null,
+            rider_details: ride.rider_details || null
           };
         });
-        
-        // Sort rides by departure time (most recent first)
-        const sortedRides = processedRides.sort((a, b) => 
-          new Date(b.departure_time) - new Date(a.departure_time)
-        );
-        
-        console.log(`Processed ${sortedRides.length} rides with coordinates`);
-        setAcceptedRides(sortedRides);
-        
-        // After setting the rides, fetch driver details if needed
-        if (sortedRides.length > 0) {
-          // Get unique driver IDs
-          const driverIds = [...new Set(
-            sortedRides
-              .filter(ride => ride.driver_id && !ride.driver?.full_name)
-              .map(ride => ride.driver_id)
-          )];
-          
-          if (driverIds.length > 0) {
-            console.log('Fetching details for drivers:', driverIds);
-            
-            // Fetch details for all drivers in parallel
-            const driversDetailsPromises = driverIds.map(fetchDriverDetails);
-            const driversDetails = await Promise.all(driversDetailsPromises);
-            
-            // Update rides with driver details
-            const updatedRides = sortedRides.map(ride => {
-              if (!ride.driver_id) return ride;
-              
-              const driverDetail = driversDetails.find(d => d && d.id === ride.driver_id);
-              if (!driverDetail) return ride;
-              
-              return {
-                ...ride,
-                driver: {
-                  ...ride.driver,
-                  ...driverDetail,
-                  full_name: driverDetail.full_name || 
-                             `${driverDetail.first_name || ''} ${driverDetail.last_name || ''}`.trim()
-                }
-              };
-            });
-            
-            setAcceptedRides(updatedRides);
-          }
-        }
-        
-        setError(''); // Clear any previous errors
+
+        setAcceptedRides(processedRides);
+        setError('');
         setLoading(false);
       } finally {
-        clearTimeout(timeoutId); // Always clear the timeout
+        clearTimeout(timeoutId);
       }
     } catch (err) {
       console.error('Error fetching accepted rides:', err);
-      
-      // Special handling for common errors
-      if (err.name === 'AbortError') {
-        setError('Request timed out. Please check your connection and try again.');
-      } else if (err.name === 'TypeError' && err.message.includes('Failed to fetch')) {
-        setError('Network error. Please check your internet connection and try again.');
-      } else {
         setError(`Error: ${err.message || 'Something went wrong'}`);
+      setLoading(false);
+    }
+  };
+
+  // Fetch pending ride requests to show drivers what riders are waiting
+  const fetchPendingRequests = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      
+      if (!token) {
+        return;
+      }
+
+      // Clean the token (remove quotes or spaces)
+      const cleanToken = token.trim().replace(/^["'](.*)["']$/, '$1');
+      
+      console.log(`Fetching pending ride requests from: ${API_BASE_URL}/api/rides/pending-requests/`);
+      
+      const response = await fetch(`${API_BASE_URL}/api/rides/pending-requests/`, {
+        headers: {
+          'Authorization': `Bearer ${cleanToken}`,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        console.log('Failed to fetch pending requests:', response.status);
+        return;
+      }
+
+      const data = await response.json();
+      
+      if (!Array.isArray(data)) {
+        console.error('Expected array but got:', typeof data, data);
+        return;
       }
       
-      setLoading(false);
-    } finally {
-      setIsRetrying(false);
+      // Sort by priority (waiting time)
+      const sortedRequests = data.sort((a, b) => {
+        // Sort by submission time (oldest first for FIFO priority)
+        return new Date(a.created_at) - new Date(b.created_at);
+      });
+      
+      console.log(`Found ${sortedRequests.length} pending ride requests`);
+      setPendingRequests(sortedRequests);
+    } catch (err) {
+      console.error('Error fetching pending requests:', err);
     }
   };
 
   useEffect(() => {
     fetchAcceptedRides();
+    fetchPendingRequests();
+    
+    // Set up polling for pending ride requests
+    const pendingRequestsInterval = setInterval(() => {
+      fetchPendingRequests();
+    }, 60000); // Every minute
+    
+    // Listen for new ride request events from the notification system
+    const handleNewRideRequests = () => {
+      console.log('New ride requests detected, refreshing...');
+      fetchPendingRequests();
+    };
+    
+    window.addEventListener('newRideRequests', handleNewRideRequests);
+    
+    return () => {
+      clearInterval(pendingRequestsInterval);
+      window.removeEventListener('newRideRequests', handleNewRideRequests);
+    };
   }, []);
 
   const handleRetry = () => {
@@ -264,9 +402,93 @@ const DriverAcceptedRides = () => {
       pickup_location: ride.pickup_location,
       dropoff_location: ride.dropoff_location,
       rider: ride.rider,
+      rider_id: ride.rider_id,
+      rider_details: ride.rider_details,
       driver_id: ride.driver_id,
-      driver: ride.driver
+      driver: ride.driver,
+      ride_obj: ride.ride
     });
+
+    // DEBUG: More detailed logging for coordinate data
+    console.log("DEBUG: Selected ride coordinate data:", {
+      direct_coordinates: {
+        pickup: { lat: ride.pickup_latitude, lng: ride.pickup_longitude },
+        dropoff: { lat: ride.dropoff_latitude, lng: ride.dropoff_longitude }
+      },
+      optimal_pickup: ride.optimal_pickup_point,
+      nearest_dropoff: ride.nearest_dropoff_point,
+      optimal_info: ride.optimal_pickup_info,
+      nearest_info: ride.nearest_dropoff_info
+    });
+    
+    let updatedRide = { ...ride };
+    let shouldUpdateRide = false;
+    
+    // Ensure we have pickup/dropoff locations from the nested ride object if not available directly
+    if (!updatedRide.pickup_location && updatedRide.ride && updatedRide.ride.start_location) {
+      console.log(`DEBUG: Using nested start_location: ${updatedRide.ride.start_location}`);
+      updatedRide.pickup_location = updatedRide.ride.start_location;
+      shouldUpdateRide = true;
+    } else if (!updatedRide.pickup_location) {
+      // Try to get pickup location from the address in optimal_pickup_point
+      if (updatedRide.optimal_pickup_point && updatedRide.optimal_pickup_point.address) {
+        console.log(`DEBUG: Using address from optimal_pickup_point: ${updatedRide.optimal_pickup_point.address}`);
+        updatedRide.pickup_location = updatedRide.optimal_pickup_point.address;
+        shouldUpdateRide = true;
+      } else {
+        console.warn("DEBUG: No pickup location available from any source");
+      }
+    }
+    
+    if (!updatedRide.dropoff_location && updatedRide.ride && updatedRide.ride.end_location) {
+      console.log(`DEBUG: Using nested end_location: ${updatedRide.ride.end_location}`);
+      updatedRide.dropoff_location = updatedRide.ride.end_location;
+      shouldUpdateRide = true;
+    } else if (!updatedRide.dropoff_location) {
+      // Try to get dropoff location from the address in nearest_dropoff_point
+      if (updatedRide.nearest_dropoff_point && updatedRide.nearest_dropoff_point.address) {
+        console.log(`DEBUG: Using address from nearest_dropoff_point: ${updatedRide.nearest_dropoff_point.address}`);
+        updatedRide.dropoff_location = updatedRide.nearest_dropoff_point.address;
+        shouldUpdateRide = true;
+      } else {
+        console.warn("DEBUG: No dropoff location available from any source");
+      }
+    }
+    
+    // If the optimal pickup point is missing but we have direct coordinates, create a fallback
+    if (!updatedRide.optimal_pickup_point && updatedRide.pickup_latitude && updatedRide.pickup_longitude) {
+      console.log("DEBUG: Creating fallback optimal_pickup_point from direct coordinates");
+      updatedRide.optimal_pickup_point = {
+        latitude: updatedRide.pickup_longitude, // API swaps lat/lng
+        longitude: updatedRide.pickup_latitude,
+        address: updatedRide.pickup_location || "Pickup Location",
+        distance: 0
+      };
+      shouldUpdateRide = true;
+    }
+    
+    // If the nearest dropoff point is missing but we have direct coordinates, create a fallback
+    if (!updatedRide.nearest_dropoff_point && updatedRide.dropoff_latitude && updatedRide.dropoff_longitude) {
+      console.log("DEBUG: Creating fallback nearest_dropoff_point from direct coordinates");
+      updatedRide.nearest_dropoff_point = {
+        latitude: updatedRide.dropoff_longitude, // API swaps lat/lng
+        longitude: updatedRide.dropoff_latitude,
+        address: updatedRide.dropoff_location || "Dropoff Location",
+        distance: 0
+      };
+      shouldUpdateRide = true;
+    }
+    
+    // Try to extract rider ID from various sources if not already set
+    if (!updatedRide.rider_id) {
+      if (updatedRide.rider && updatedRide.rider.id) {
+        updatedRide.rider_id = updatedRide.rider.id;
+        shouldUpdateRide = true;
+      } else if (typeof updatedRide.rider === 'number') {
+        updatedRide.rider_id = updatedRide.rider;
+        shouldUpdateRide = true;
+      }
+    }
     
     // If the ride doesn't have complete driver info but has a driver ID, fetch it
     if (ride.driver_id && (!ride.driver || !ride.driver.full_name)) {
@@ -275,31 +497,72 @@ const DriverAcceptedRides = () => {
         const driverDetail = await fetchDriverDetails(ride.driver_id);
         
         if (driverDetail) {
-          // Update this specific ride with driver details
-          const updatedRide = {
-            ...ride,
+          // Update driver details
+          updatedRide = {
+            ...updatedRide,
             driver: {
-              ...ride.driver,
+              ...updatedRide.driver,
               ...driverDetail
             }
           };
-          
-          // Update in the list
-          setAcceptedRides(prevRides => 
-            prevRides.map(r => r.id === ride.id ? updatedRide : r)
-          );
-          
-          // Select the updated ride
-          setSelectedRide(updatedRide);
-          return;
+          shouldUpdateRide = true;
         }
       } catch (err) {
         console.error('Error fetching driver details:', err);
       }
     }
     
-    // If no driver details fetching was needed or it failed, just select the ride
-    setSelectedRide(ride);
+    // If rider_details exists, use that info directly for the rider field
+    if (ride.rider_details && !ride.rider) {
+      updatedRide.rider = {
+        ...ride.rider_details,
+        id: ride.rider_details.id,
+        full_name: ride.rider_details.full_name,
+        email: ride.rider_details.email,
+        phone_number: ride.rider_details.phone_number
+      };
+      shouldUpdateRide = true;
+    }
+    // If the ride doesn't have complete rider info but has a rider ID, fetch it
+    else if (ride.rider_id && (!ride.rider_details) && (!ride.rider || typeof ride.rider === 'number' || !ride.rider.first_name)) {
+      try {
+        console.log(`Fetching complete rider details for ID: ${ride.rider_id}`);
+        const riderDetail = await fetchRiderDetails(ride.rider_id);
+        
+        if (riderDetail) {
+          // Update rider details
+          updatedRide = {
+            ...updatedRide,
+            rider: {
+              ...updatedRide.rider,
+              ...riderDetail,
+              full_name: riderDetail.full_name || 
+                          `${riderDetail.first_name || ''} ${riderDetail.last_name || ''}`.trim()
+            }
+          };
+          shouldUpdateRide = true;
+        }
+      } catch (err) {
+        console.error('Error fetching rider details:', err);
+      }
+    }
+    
+    // Update the ride in the list if needed
+    if (shouldUpdateRide) {
+      console.log("DEBUG: Updating ride with new data:", {
+        pickup_location: updatedRide.pickup_location,
+        dropoff_location: updatedRide.dropoff_location,
+        has_optimal_pickup: !!updatedRide.optimal_pickup_point,
+        has_nearest_dropoff: !!updatedRide.nearest_dropoff_point
+      });
+      
+      setAcceptedRides(prevRides => 
+        prevRides.map(r => r.id === ride.id ? updatedRide : r)
+      );
+    }
+    
+    // Select the updated ride
+    setSelectedRide(updatedRide);
   };
 
   const getStatusChip = (status) => {
@@ -372,20 +635,17 @@ const DriverAcceptedRides = () => {
   };
 
   const getFullName = (user) => {
-    if (!user) return 'Unknown';
+    if (!user) return 'Unknown User';
+    return `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.email || 'Unknown User';
+  };
+
+  // Helper function to check and use rider_details
+  const getRiderInfo = (ride) => {
+    if (ride.rider_details && ride.rider_details.full_name) {
+      return ride.rider_details;
+    }
     
-    // Check various places the name might be stored
-    if (user.full_name) return user.full_name;
-    if (user.firstName && user.lastName) return `${user.firstName} ${user.lastName}`;
-    if (user.first_name && user.last_name) return `${user.first_name} ${user.last_name}`;
-    if (user.name) return user.name;
-    if (user.user && user.user.full_name) return user.user.full_name;
-    if (user.username) return user.username;
-    
-    // If we have id but no name, return a placeholder with the ID
-    if (user.id) return `User #${user.id}`;
-    
-    return 'Unknown';
+    return ride.rider;
   };
 
   // Helper function to extract driver info from ride object
@@ -478,6 +738,272 @@ const DriverAcceptedRides = () => {
     return null;
   };
 
+  // Fetch rider details using rider_id
+  const fetchRiderDetails = async (riderId) => {
+    try {
+      if (!riderId) return null;
+      
+      const token = localStorage.getItem('token');
+      if (!token) return null;
+
+      // Clean the token
+      const cleanToken = token.trim().replace(/^["'](.*)["']$/, '$1');
+      
+      console.log(`Fetching rider details for ID: ${riderId}`);
+      
+      // Use the users API endpoint to get rider details
+      const response = await axios.get(`${API_BASE_URL}/api/users/${riderId}/`, {
+        headers: {
+          'Authorization': `Bearer ${cleanToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.data) {
+        console.log('Rider details fetched:', response.data);
+        return response.data;
+      }
+    } catch (err) {
+      console.error(`Error fetching rider ${riderId} details:`, err);
+    }
+    return null;
+  };
+
+  // Render pending ride requests section
+  const renderPendingRequests = () => {
+    if (pendingRequests.length === 0) {
+      return null;
+    }
+    
+    return (
+      <Paper sx={{ p: 3, mb: 4, borderRadius: '12px' }}>
+        <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center' }}>
+          <Person sx={{ mr: 1 }} /> Pending Ride Requests ({pendingRequests.length})
+        </Typography>
+        
+        <Alert severity="info" sx={{ mb: 2 }}>
+          These riders are waiting for a driver. Consider offering a ride to help them out!
+        </Alert>
+        
+        <List>
+          {pendingRequests.map((request, index) => {
+            // Calculate waiting time
+            const waitingTime = Math.round((new Date() - new Date(request.created_at)) / (1000 * 60));
+            const isPriority = waitingTime > 10; // More than 10 minutes is priority
+            
+            return (
+              <Paper 
+                key={request.id} 
+                elevation={1} 
+                sx={{ 
+                  mb: 2, 
+                  p: 2, 
+                  borderLeft: isPriority ? '4px solid #f44336' : '1px solid #e0e0e0',
+                  backgroundColor: index === 0 ? '#f9f9f9' : 'white' // Highlight first in queue
+                }}
+              >
+                <Grid container spacing={2}>
+                  <Grid item xs={12} sm={6}>
+                    <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>
+                      From: {request.pickup_location}
+                    </Typography>
+                    <Typography variant="body2">
+                      To: {request.dropoff_location}
+                    </Typography>
+                    <Typography variant="body2">
+                      Departure: {formatDate(request.departure_time)}
+                    </Typography>
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <Typography variant="body2">
+                      <EventSeat sx={{ fontSize: 16, mr: 0.5, verticalAlign: 'text-bottom' }} />
+                      Seats needed: {request.seats_needed}
+                    </Typography>
+                    <Typography variant="body2">
+                      <AccessTime sx={{ fontSize: 16, mr: 0.5, verticalAlign: 'text-bottom' }} />
+                      Waiting for: {waitingTime} minutes
+                    </Typography>
+                    
+                    {index === 0 && (
+                      <Chip 
+                        label="First in Queue" 
+                        color="primary" 
+                        size="small" 
+                        sx={{ mt: 1 }} 
+                      />
+                    )}
+                    
+                    {isPriority && (
+                      <Chip 
+                        label="Priority Request" 
+                        color="error" 
+                        size="small" 
+                        sx={{ mt: 1, ml: index === 0 ? 1 : 0 }} 
+                      />
+                    )}
+                    
+                    <Box sx={{ mt: 2 }}>
+                      <Button
+                        variant="contained"
+                        color="primary"
+                        size="small"
+                        onClick={() => window.location.href = '/offer-ride'}
+                      >
+                        Offer a Ride
+                      </Button>
+                    </Box>
+                  </Grid>
+                </Grid>
+              </Paper>
+            );
+          })}
+        </List>
+      </Paper>
+    );
+  };
+
+  // Debugging steps
+  const sampleRide = {
+    id: 1,
+    rider_details: {
+      id: 101,
+      full_name: "Yashodhan Hakke",
+      first_name: "Yashodhan",
+      last_name: "Hakke",
+      email: "yashodhan@example.com",
+      phone_number: "123-456-7890"
+    },
+    rider: {
+      id: 101,
+      first_name: "Yashodhan",
+      last_name: "Hakke",
+      email: "yashodhan@example.com",
+      phone_number: "123-456-7890"
+    },
+    pickup_location: "123 Main St",
+    dropoff_location: "456 Elm St",
+    departure_time: "2023-10-10T14:00:00Z",
+    status: "ACCEPTED"
+  };
+
+  const riderInfo = getRiderInfo(sampleRide);
+  console.log("Rider Info:", riderInfo);
+
+  const fullName = getFullName(riderInfo);
+  console.log("Full Name:", fullName);
+
+  // Helper function to extract coordinates consistently
+  const extractCoordinates = (ride, type = 'pickup') => {
+    console.log(`Extracting ${type} coordinates for ride ${ride.id}:`, {
+      direct: type === 'pickup' 
+        ? { lat: ride.pickup_latitude, lng: ride.pickup_longitude }
+        : { lat: ride.dropoff_latitude, lng: ride.dropoff_longitude },
+      optimal: type === 'pickup' ? ride.optimal_pickup_point : ride.nearest_dropoff_point,
+      info: type === 'pickup' ? ride.optimal_pickup_info : ride.nearest_dropoff_info
+    });
+
+    // Get direct coordinates as primary source
+    let lat, lng;
+    if (type === 'pickup') {
+      lat = ride.pickup_latitude;
+      lng = ride.pickup_longitude;
+    } else {
+      lat = ride.dropoff_latitude;
+      lng = ride.dropoff_longitude;
+    }
+
+    // Validate direct coordinates before proceeding
+    const hasDirectCoords = typeof lat === 'number' && typeof lng === 'number' && 
+      !isNaN(lat) && !isNaN(lng) && 
+      lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180;
+    
+    // Get optimal/nearest point
+    const point = type === 'pickup' ? ride.optimal_pickup_point : ride.nearest_dropoff_point;
+    
+    // Check if point exists and has valid coordinates
+    if (point && typeof point.latitude === 'number' && typeof point.longitude === 'number') {
+      // Check if the distance is reasonable (API reports distance in meters)
+      // Skip using this point if distance > 5km or if distance is suspiciously large
+      const pointHasValidDistance = typeof point.distance === 'number' && point.distance < 5000;
+      
+      // Calculate rough distance if direct coordinates are available (using Haversine formula)
+      let calculatedDistance = null;
+      if (hasDirectCoords) {
+        // Remember the API swaps lat/lng, so use point.longitude as lat and point.latitude as lng
+        const pointLat = point.longitude;
+        const pointLng = point.latitude;
+        
+        // Calculate distance between points using Haversine formula (rough approximation)
+        const toRad = value => value * Math.PI / 180;
+        const R = 6371000; // Earth radius in meters
+        const dLat = toRad(pointLat - lat);
+        const dLon = toRad(pointLng - lng);
+        const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                Math.cos(toRad(lat)) * Math.cos(toRad(pointLat)) *
+                Math.sin(dLon/2) * Math.sin(dLon/2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+        calculatedDistance = R * c; // Distance in meters
+        
+        console.log(`DEBUG: Calculated distance between direct and ${type} optimal point:`, {
+          direct: { lat, lng },
+          optimal: { lat: pointLat, lng: pointLng },
+          apiDistance: point.distance,
+          calculatedDistance
+        });
+      }
+      
+      // Use point only if distance is valid or we can't calculate it
+      if (pointHasValidDistance || (calculatedDistance !== null && calculatedDistance < 5000)) {
+        // API returns coordinates as {latitude: lng, longitude: lat}
+        const pointLat = point.longitude;
+        const pointLng = point.latitude;
+        
+        // Validate point coordinates
+        if (pointLat >= -90 && pointLat <= 90 && pointLng >= -180 && pointLng <= 180) {
+          console.log(`Using ${type} point coordinates:`, { lat: pointLat, lng: pointLng });
+          return { lat: pointLat, lng: pointLng };
+        } else {
+          console.warn(`Invalid ${type} point coordinates:`, { lat: pointLat, lng: pointLng });
+        }
+      } else {
+        console.warn(`${type} optimal point is too far away (${point.distance || calculatedDistance}m), using direct coordinates instead`);
+      }
+    }
+    
+    // Try coordinates from info object if available
+    const info = type === 'pickup' ? ride.optimal_pickup_info : ride.nearest_dropoff_info;
+    if (info && Array.isArray(info.coordinates) && info.coordinates.length >= 2) {
+      // Coordinates array is [longitude, latitude]
+      const infoLng = info.coordinates[0];
+      const infoLat = info.coordinates[1];
+      
+      // Validate info coordinates
+      if (infoLat >= -90 && infoLat <= 90 && infoLng >= -180 && infoLng <= 180) {
+        console.log(`Using ${type} info coordinates:`, { lat: infoLat, lng: infoLng });
+        return { lat: infoLat, lng: infoLng };
+      } else {
+        console.warn(`Invalid ${type} info coordinates:`, { lat: infoLat, lng: infoLng });
+      }
+    }
+
+    // Fallback to direct coordinates if they're valid
+    if (hasDirectCoords) {
+      console.log(`Using direct ${type} coordinates:`, { lat, lng });
+      return { lat, lng };
+    }
+    
+    // All options exhausted, no valid coordinates
+    console.warn(`No valid ${type} coordinates found:`, { lat, lng });
+    return null;
+  };
+
+  // Helper function to check if coordinates are valid
+  const hasValidCoordinates = (coords) => {
+    return coords && typeof coords.lat === 'number' && typeof coords.lng === 'number' &&
+           !isNaN(coords.lat) && !isNaN(coords.lng) &&
+           coords.lat >= -90 && coords.lat <= 90 && coords.lng >= -180 && coords.lng <= 180;
+  };
+
   if (loading) {
     return (
       <Container maxWidth="lg" sx={{ pt: 4 }}>
@@ -558,6 +1084,9 @@ const DriverAcceptedRides = () => {
         My Trips
       </Typography>
 
+      {/* Render pending ride requests at the top */}
+      {renderPendingRequests()}
+
       {acceptedRides.length === 0 ? (
         <Paper elevation={2} sx={{ p: 4, borderRadius: '12px', mt: 3, textAlign: 'center' }}>
           <Box sx={{ 
@@ -610,7 +1139,7 @@ const DriverAcceptedRides = () => {
                       </Avatar>
                     </ListItemIcon>
                     <ListItemText
-                      primary={getFullName(ride.rider)}
+                      primary={getFullName(getRiderInfo(ride))}
                       secondary={
                         <Box>
                           <Typography variant="body2" color="text.secondary">
@@ -669,19 +1198,21 @@ const DriverAcceptedRides = () => {
                       <Paper elevation={1} sx={{ p: 2, mb: 2 }}>
                         <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
                           <Person sx={{ mr: 1, color: 'primary.main' }} />
-                          <Typography variant="body1" fontWeight="medium">{getFullName(selectedRide.rider)}</Typography>
+                          <Typography variant="body1" fontWeight="medium">
+                            {selectedRide.rider_details?.full_name || getFullName(getRiderInfo(selectedRide)) || 'Unknown Passenger'}
+                          </Typography>
                         </Box>
                         <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
                           <Phone sx={{ mr: 1, color: 'primary.main' }} />
                           <Typography variant="body1">
-                            {getPhoneNumber(selectedRide.rider) !== 'Not provided' ? (
+                            {selectedRide.rider_details?.phone_number || getPhoneNumber(getRiderInfo(selectedRide)) !== 'Not provided' ? (
                               <Button 
                                 size="small" 
                                 startIcon={<Phone fontSize="small" />}
                                 variant="outlined"
-                                onClick={() => window.open(`tel:${getPhoneNumber(selectedRide.rider)}`, '_blank')}
+                                onClick={() => window.open(`tel:${selectedRide.rider_details?.phone_number || getPhoneNumber(getRiderInfo(selectedRide))}`, '_blank')}
                               >
-                                {getPhoneNumber(selectedRide.rider)}
+                                {selectedRide.rider_details?.phone_number || getPhoneNumber(getRiderInfo(selectedRide))}
                               </Button>
                             ) : (
                               'Phone number not provided'
@@ -691,14 +1222,14 @@ const DriverAcceptedRides = () => {
                         <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
                           <Email sx={{ mr: 1, color: 'primary.main' }} />
                           <Typography variant="body1">
-                            {getEmail(selectedRide.rider) !== 'Not provided' ? (
+                            {selectedRide.rider_details?.email || getEmail(getRiderInfo(selectedRide)) !== 'Not provided' ? (
                               <Button 
                                 size="small" 
                                 startIcon={<Email fontSize="small" />}
                                 variant="outlined"
-                                onClick={() => window.open(`mailto:${getEmail(selectedRide.rider)}`, '_blank')}
+                                onClick={() => window.open(`mailto:${selectedRide.rider_details?.email || getEmail(getRiderInfo(selectedRide))}`, '_blank')}
                               >
-                                {getEmail(selectedRide.rider)}
+                                {selectedRide.rider_details?.email || getEmail(getRiderInfo(selectedRide))}
                               </Button>
                             ) : (
                               'Email not provided'
@@ -737,7 +1268,14 @@ const DriverAcceptedRides = () => {
                                   startIcon={<LocationOn fontSize="small" />}
                                   variant="outlined"
                                   color="success"
-                                  onClick={() => window.open(`https://maps.google.com/?q=${selectedRide.pickup_latitude},${selectedRide.pickup_longitude}`, '_blank')}
+                                  onClick={() => {
+                                    const pickupCoords = extractCoordinates(selectedRide, 'pickup');
+                                    if (hasValidCoordinates(pickupCoords)) {
+                                      window.open(`https://maps.google.com/?q=${pickupCoords.lat},${pickupCoords.lng}`, '_blank');
+                                    } else {
+                                      console.error('Invalid pickup coordinates for maps link');
+                                    }
+                                  }}
                                 >
                                   Open in Maps
                                 </Button>
@@ -756,7 +1294,14 @@ const DriverAcceptedRides = () => {
                                   startIcon={<LocationOn fontSize="small" />}
                                   variant="outlined"
                                   color="error"
-                                  onClick={() => window.open(`https://maps.google.com/?q=${selectedRide.dropoff_latitude},${selectedRide.dropoff_longitude}`, '_blank')}
+                                  onClick={() => {
+                                    const dropoffCoords = extractCoordinates(selectedRide, 'dropoff');
+                                    if (hasValidCoordinates(dropoffCoords)) {
+                                      window.open(`https://maps.google.com/?q=${dropoffCoords.lat},${dropoffCoords.lng}`, '_blank');
+                                    } else {
+                                      console.error('Invalid dropoff coordinates for maps link');
+                                    }
+                                  }}
                                 >
                                   Open in Maps
                                 </Button>
@@ -774,7 +1319,24 @@ const DriverAcceptedRides = () => {
                             variant="contained" 
                             color="primary"
                             startIcon={<DirectionsCar />}
-                            onClick={() => window.open(`https://www.google.com/maps/dir/?api=1&origin=${selectedRide.pickup_latitude},${selectedRide.pickup_longitude}&destination=${selectedRide.dropoff_latitude},${selectedRide.dropoff_longitude}&travelmode=driving`, '_blank')}
+                            onClick={() => {
+                              const pickupCoords = extractCoordinates(selectedRide, 'pickup');
+                              const dropoffCoords = extractCoordinates(selectedRide, 'dropoff');
+                              
+                              console.log('Coordinates for driving directions:', {
+                                pickup: pickupCoords,
+                                dropoff: dropoffCoords
+                              });
+
+                              if (hasValidCoordinates(pickupCoords) && hasValidCoordinates(dropoffCoords)) {
+                                window.open(
+                                  `https://www.google.com/maps/dir/?api=1&origin=${pickupCoords.lat},${pickupCoords.lng}&destination=${dropoffCoords.lat},${dropoffCoords.lng}&travelmode=driving`,
+                                  '_blank'
+                                );
+                              } else {
+                                console.error('Invalid coordinates for driving directions');
+                              }
+                            }}
                           >
                             Get Driving Directions
                           </Button>
@@ -790,27 +1352,37 @@ const DriverAcceptedRides = () => {
                       <Paper elevation={1} sx={{ p: 0, overflow: 'hidden' }}>
                         <Box sx={{ height: '300px', width: '100%', overflow: 'hidden' }}>
                           {(() => {
-                            // Log available coordinates for debugging
-                            console.log("Ride coordinates:", {
-                              pickup_lat: selectedRide.pickup_latitude,
-                              pickup_lng: selectedRide.pickup_longitude,
-                              dropoff_lat: selectedRide.dropoff_latitude,
-                              dropoff_lng: selectedRide.dropoff_longitude
+                            if (!selectedRide) return null;
+
+                            // Extract coordinates using helper function
+                            const pickupCoords = extractCoordinates(selectedRide, 'pickup');
+                            const dropoffCoords = extractCoordinates(selectedRide, 'dropoff');
+
+                            console.log('Final coordinates for map:', {
+                              pickup: pickupCoords,
+                              dropoff: dropoffCoords
                             });
+
+                            // Only render map if we have valid coordinates
+                            if (!hasValidCoordinates(pickupCoords) || !hasValidCoordinates(dropoffCoords)) {
+                              return (
+                                <Box sx={{ 
+                                  height: '100%', 
+                                  display: 'flex', 
+                                  alignItems: 'center', 
+                                  justifyContent: 'center',
+                                  bgcolor: '#f5f5f5'
+                                }}>
+                                  <Typography color="text.secondary">
+                                    Map cannot be displayed - Invalid or missing coordinates
+                                  </Typography>
+                                </Box>
+                              );
+                            }
                             
-                            // Use direct coordinate fields if available, otherwise fallback to extraction or defaults
-                            const pickupCoords = [
-                              selectedRide.pickup_latitude || 37.2284, 
-                              selectedRide.pickup_longitude || -80.4234
-                            ];
-                            const dropoffCoords = [
-                              selectedRide.dropoff_latitude || 37.2384, 
-                              selectedRide.dropoff_longitude || -80.4134
-                            ];
-                            
-                            // Calculate center and bounds
-                            const centerLat = (pickupCoords[0] + dropoffCoords[0]) / 2;
-                            const centerLng = (pickupCoords[1] + dropoffCoords[1]) / 2;
+                            // Calculate center point
+                            const centerLat = (pickupCoords.lat + dropoffCoords.lat) / 2;
+                            const centerLng = (pickupCoords.lng + dropoffCoords.lng) / 2;
                             
                             return (
                               <MapContainer 
@@ -822,18 +1394,18 @@ const DriverAcceptedRides = () => {
                                   attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                                   url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                                 />
-                                <Marker position={pickupCoords}>
+                                <Marker position={[pickupCoords.lat, pickupCoords.lng]}>
                                   <Popup>
                                     <strong>Pickup:</strong> {selectedRide.pickup_location}
                                   </Popup>
                                 </Marker>
-                                <Marker position={dropoffCoords}>
+                                <Marker position={[dropoffCoords.lat, dropoffCoords.lng]}>
                                   <Popup>
                                     <strong>Dropoff:</strong> {selectedRide.dropoff_location}
                                   </Popup>
                                 </Marker>
                                 <Polyline 
-                                  positions={[pickupCoords, dropoffCoords]}
+                                  positions={[[pickupCoords.lat, pickupCoords.lng], [dropoffCoords.lat, dropoffCoords.lng]]}
                                   color="#861F41"
                                   weight={4}
                                 />

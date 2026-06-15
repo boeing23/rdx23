@@ -1,13 +1,26 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { 
   API_BASE_URL,
+  LOGIN_URL,
+  REGISTER_URL,
   loginUser,
   registerUser, 
   getUserProfile,
-  getAuthHeadersWithContentType
+  getAuthHeadersWithContentType,
+  callApi,
+  getCsrfToken,
+  fetchCsrfToken
 } from '../config';
 
-// Create auth context
+/**
+ * Authentication Context
+ * 
+ * Handles all authentication-related logic including:
+ * - Login (with CSRF token support)
+ * - Registration
+ * - Token management
+ * - User session management
+ */
 const AuthContext = createContext(null);
 
 // Custom hook to use the auth context
@@ -84,9 +97,41 @@ export const AuthProvider = ({ children }) => {
     try {
       console.log('Attempting login with username:', username);
       
-      // Use our login helper function
-      const loginData = await loginUser(username, password);
+      // Fetch CSRF token before making the login request
+      console.log('Fetching CSRF token before login...');
+      await fetchCsrfToken();
       
+      // Get the CSRF token from cookies
+      const csrfToken = getCsrfToken();
+      console.log('Using CSRF token:', csrfToken);
+      
+      // Direct fetch request with CSRF token
+      const response = await fetch(`${API_BASE_URL}/api/users/login/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'X-CSRFToken': csrfToken
+        },
+        body: JSON.stringify({ username, password }),
+        credentials: 'include'
+      });
+      
+      // Handle non-2xx responses
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Login error response:', errorText);
+        
+        try {
+          const errorData = JSON.parse(errorText);
+          throw new Error(errorData.detail || 'Login failed');
+        } catch (e) {
+          throw new Error(errorText || 'Login failed');
+        }
+      }
+      
+      // Parse the successful response
+      const loginData = await response.json();
       console.log('Login successful:', loginData);
       
       // Extract the token from response
@@ -172,80 +217,6 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // Social login function
-  const socialLogin = async (provider, accessToken, userType = 'RIDER') => {
-    try {
-      console.log(`Attempting ${provider} login as ${userType}`);
-      
-      // Send request to the social login endpoint
-      const response = await fetch(`${API_BASE_URL}/api/users/social/login/`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          provider: provider,
-          access_token: accessToken,
-          user_type: userType
-        })
-      });
-      
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || `Failed to authenticate with ${provider}`);
-      }
-      
-      const loginData = await response.json();
-      console.log(`${provider} login successful:`, loginData);
-      
-      // Extract the token from response
-      const token = loginData.token || loginData.access;
-      
-      if (!token) {
-        throw new Error('No token received in login response');
-      }
-      
-      // Save token to local storage
-      localStorage.setItem('token', token);
-      
-      // Save user data if available
-      if (loginData.user?.user_type) {
-        localStorage.setItem('userType', loginData.user.user_type);
-      } else {
-        // If no user type in response, use the one we sent
-        localStorage.setItem('userType', userType);
-      }
-      
-      if (loginData.user?.id) {
-        localStorage.setItem('userId', loginData.user.id);
-      }
-      
-      // Update auth state
-      setAuthState({
-        token,
-        user: loginData.user || { user_type: userType },
-        isAuthenticated: true,
-        isLoading: false
-      });
-      
-      // Dispatch auth change event
-      window.dispatchEvent(new Event('auth-change'));
-      
-      return { 
-        success: true, 
-        user: loginData.user || { user_type: userType },
-        userType: loginData.user?.user_type || userType
-      };
-    } catch (error) {
-      console.error(`${provider} login error:`, error);
-      
-      return {
-        success: false,
-        error: error.message || `${provider} login failed.`
-      };
-    }
-  };
-
   // Logout function
   const logout = () => {
     console.log('Logging out, clearing localStorage and authState');
@@ -272,9 +243,41 @@ export const AuthProvider = ({ children }) => {
     try {
       console.log('Attempting registration with data:', userData);
       
-      // Use our register helper function
-      const registrationData = await registerUser(userData);
+      // Fetch CSRF token before making the registration request
+      console.log('Fetching CSRF token before registration...');
+      await fetchCsrfToken();
       
+      // Get the CSRF token from cookies
+      const csrfToken = getCsrfToken();
+      console.log('Using CSRF token for registration:', csrfToken);
+      
+      // Direct fetch request with CSRF token
+      const response = await fetch(`${API_BASE_URL}/api/users/register/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'X-CSRFToken': csrfToken
+        },
+        body: JSON.stringify(userData),
+        credentials: 'include'
+      });
+      
+      // Handle non-2xx responses
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Registration error response:', errorText);
+        
+        try {
+          const errorData = JSON.parse(errorText);
+          throw new Error(errorData.detail || 'Registration failed');
+        } catch (e) {
+          throw new Error(errorText || 'Registration failed');
+        }
+      }
+      
+      // Parse the successful response
+      const registrationData = await response.json();
       console.log('Registration successful:', registrationData);
       return { success: true, user: registrationData };
     } catch (error) {
@@ -292,7 +295,6 @@ export const AuthProvider = ({ children }) => {
     login,
     logout,
     register,
-    socialLogin
   };
 
   return (

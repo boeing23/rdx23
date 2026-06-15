@@ -291,28 +291,85 @@ function NotificationList() {
   };
 
   useEffect(() => {
+    // Initial fetch
     fetchNotifications();
-    // Poll for new notifications every 30 seconds
-    const interval = setInterval(fetchNotifications, 30000);
-    
-    // Setup global access for Navbar syncing
-    if (!window.navbarSync) {
-      window.navbarSync = {};
+
+    // Set up polling - check for new notifications every minute
+    const intervalId = setInterval(() => {
+      fetchNotifications();
+    }, 30000); // 30 seconds
+
+    // Enhanced notification polling for drivers
+    let driverPollId;
+    if (userType === 'DRIVER') {
+      // Drivers get more frequent polling for ride requests
+      driverPollId = setInterval(() => {
+        checkForRideRequests();
+      }, 15000); // 15 seconds for drivers
     }
-    window.navbarSync.setUnreadCount = (count) => {
-      if (typeof count === 'number') {
-        setUnreadCount(count);
-      }
-    };
-    
+
+    // Clean up on unmount
     return () => {
-      clearInterval(interval);
-      // Clean up global access
-      if (window.navbarSync) {
-        delete window.navbarSync.setUnreadCount;
+      clearInterval(intervalId);
+      if (driverPollId) {
+        clearInterval(driverPollId);
       }
     };
-  }, []);  // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Special function for checking ride requests for drivers
+  const checkForRideRequests = async () => {
+    const token = getToken();
+    if (!token || userType !== 'DRIVER') return;
+    
+    try {
+      const response = await axios.get(`${API_BASE_URL}/api/rides/ride-requests/`, {
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json' 
+        }
+      });
+      
+      const pendingRequests = response.data.filter(req => 
+        req.status === 'PENDING' || req.status === 'WAITING_FOR_MATCH'
+      );
+      
+      // If there are new pending requests that haven't been notified about
+      if (pendingRequests.length > 0) {
+        // Check if we've already notified about these requests
+        const notifiedRequests = JSON.parse(localStorage.getItem('notifiedRequests') || '[]');
+        const newRequests = pendingRequests.filter(req => 
+          !notifiedRequests.includes(req.id)
+        );
+        
+        if (newRequests.length > 0) {
+          // Store these as notified
+          localStorage.setItem('notifiedRequests', 
+            JSON.stringify([...notifiedRequests, ...newRequests.map(r => r.id)])
+          );
+          
+          // Show notification for new ride requests
+          if ('Notification' in window && Notification.permission === 'granted') {
+            new Notification('New Ride Requests', {
+              body: `You have ${newRequests.length} new ride request(s). Click to view.`,
+              icon: '/logo192.png'
+            });
+          }
+          
+          // Also display a message on the page
+          const event = new CustomEvent('newRideRequests', { 
+            detail: { count: newRequests.length } 
+          });
+          window.dispatchEvent(event);
+          
+          // Refresh notifications to include these
+          fetchNotifications();
+        }
+      }
+    } catch (error) {
+      console.error('Error checking for ride requests:', error);
+    }
+  };
 
   const handleMarkAsRead = async (notificationId) => {
     try {
@@ -460,18 +517,12 @@ function NotificationList() {
   const renderAcceptButton = (notification) => {
     try {
       if (!notification) return null;
-
+      
       console.log('Checking notification for Accept button:', notification.id, notification.notification_type);
       
-      // Only show accept buttons for riders, not drivers
-      if (!isRider) {
-        console.log('User is not a rider - not showing accept button');
-        return null;
-      }
-      
-      // Check if notification is a ride match notification and has ride_request data
-      if (notification.notification_type === 'RIDE_MATCH') {
-        console.log(`Found ${notification.notification_type} notification:`, notification.id);
+      // Show accept buttons based on notification type AND user type
+      if (notification.notification_type === 'RIDE_MATCH' && isRider) {
+        console.log(`Found ${notification.notification_type} notification for rider:`, notification.id);
         
         // Use direct ID access - if ride_request is a number/string ID rather than an object
         const rideRequestId = notification.ride_request || 
@@ -496,6 +547,31 @@ function NotificationList() {
         } else {
           console.warn(`${notification.notification_type} notification missing ride_request data:`, notification);
         }
+      } else if (notification.notification_type === 'RIDE_PENDING' && userType === 'DRIVER') {
+        // For drivers, show accept button for pending ride requests
+        console.log(`Found ${notification.notification_type} notification for driver:`, notification.id);
+        
+        const rideRequestId = notification.ride_request || 
+                             (notification.ride_request_id) || 
+                             (notification.related_pending_request?.id);
+        
+        if (rideRequestId) {
+          return (
+            <Box sx={{ mt: 1, display: 'flex', justifyContent: 'flex-end', width: '100%' }}>
+              <Button
+                variant="contained"
+                color="primary"
+                size="small"
+                startIcon={<DirectionsCarIcon />}
+                onClick={() => handleAcceptRideMatch(rideRequestId)}
+              >
+                Accept Ride Request
+              </Button>
+            </Box>
+          );
+        }
+      } else {
+        console.log(`Notification type ${notification.notification_type} does not need accept button for ${userType}`);
       }
       return null;
     } catch (error) {
@@ -506,92 +582,55 @@ function NotificationList() {
 
   // Function to render ride match details for better readability
   const renderRideMatchDetails = (notification) => {
-    try {
-      if (!notification) return null;
-      
-      if (notification.notification_type !== 'RIDE_MATCH' && 
-          notification.notification_type !== 'REQUEST_ACCEPTED') {
-        return null;
-      }
-
-      const driver = notification.sender;
-      const ride = notification.ride_details;
-      const vehicle = notification.sender_vehicle;
-      
-      // Safely check for dropoff info without using any fields that might be missing in the database
-      const dropoffInfo = 
-        // First try the path that might have the missing field
-        (notification.ride_request && notification.ride_request.nearest_dropoff_info) ? 
-          notification.ride_request.nearest_dropoff_info.address :
-          // Then fall back to direct fields if available
-          (notification.dropoff_location || ride?.end_location || 'Near destination');
-          
-      // Get optimal pickup point if available
-      const optimalPickupInfo = 
-        (notification.ride_request && notification.ride_request.optimal_pickup_info) ?
-          notification.ride_request.optimal_pickup_info.address :
-          (notification.pickup_location || ride?.start_location || 'Standard pickup location');
-      
-      return (
-        <Box sx={{ mt: 2, p: 2, bgcolor: 'background.paper', borderRadius: 1, boxShadow: 1 }}>
-          <Typography variant="subtitle1" sx={{ fontWeight: 'bold', mb: 1 }}>
-            Ride Match Found!
-          </Typography>
-          
-          {/* Driver Details */}
-          <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mt: 1 }}>
-            Driver Details
-          </Typography>
-          <Typography variant="body2">
-            Name: {driver ? `${driver.name}` : 'Unknown'}<br />
-            Email: {notification.sender_email || 'Not available'}<br />
-            Phone: {notification.sender_phone || 'Not available'}
-          </Typography>
-          
-          {/* Vehicle Details */}
-          {vehicle && (
-            <>
-              <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mt: 1 }}>
-                Vehicle Details
+    // Extract ride details safely with fallbacks
+    const rideDetails = notification.ride_details || {};
+    const rideRequest = notification.ride_request || {};
+    
+    // Get rider details
+    const riderName = notification.rider_name || 'A passenger';
+    
+    // Get priority info if available
+    const priorityInfo = notification.priority_info || {};
+    const queuePosition = priorityInfo.queue_position;
+    const waitingTime = priorityInfo.waiting_time_minutes;
+    
+    return (
+      <Box sx={{ mt: 1 }}>
+        <Typography variant="body2" color="text.secondary">
+          <DirectionsCarIcon sx={{ fontSize: 16, mr: 0.5, verticalAlign: 'text-bottom' }} />
+          From: {rideDetails.start_location || rideRequest.pickup_location || 'Not specified'}
+        </Typography>
+        <Typography variant="body2" color="text.secondary">
+          <DirectionsCarIcon sx={{ fontSize: 16, mr: 0.5, verticalAlign: 'text-bottom' }} />
+          To: {rideDetails.end_location || rideRequest.dropoff_location || 'Not specified'}
+        </Typography>
+        <Typography variant="body2" color="text.secondary">
+          <DirectionsCarIcon sx={{ fontSize: 16, mr: 0.5, verticalAlign: 'text-bottom' }} />
+          Seats: {rideRequest.seats_needed || '1'}
+        </Typography>
+        
+        {/* Show priority information for drivers */}
+        {userType === 'DRIVER' && (waitingTime || queuePosition) && (
+          <Box sx={{ mt: 1, p: 1, bgcolor: '#f8f9fa', borderRadius: 1 }}>
+            <Typography variant="body2" color="text.secondary" fontWeight="bold">
+              Priority Request
+            </Typography>
+            {waitingTime && (
+              <Typography variant="body2" color="text.secondary">
+                Rider has been waiting for {waitingTime} minutes
               </Typography>
-              <Typography variant="body2">
-                {vehicle.year || ''} {vehicle.make || ''} {vehicle.model || ''}<br />
-                Color: {vehicle.color || 'Not specified'}<br />
-                License Plate: {vehicle.plate || 'Not specified'}<br />
-                {ride && ride.available_seats && <span>Available Seats: {ride.available_seats}</span>}
+            )}
+            {queuePosition === 1 && (
+              <Typography variant="body2" color="error">
+                This rider is first in the queue
               </Typography>
-            </>
-          )}
-          
-          {/* Ride Details */}
-          <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mt: 1 }}>
-            Ride Details
-          </Typography>
-          <Typography variant="body2">
-            From: {ride ? ride.start_location : 'Not specified'}<br />
-            To: {ride ? ride.end_location : 'Not specified'}<br />
-            <span>Rider Dropoff: {dropoffInfo}<br /></span>
-            <span style={{ fontWeight: 'bold', color: '#861F41' }}>Optimal Pickup: {optimalPickupInfo}<br /></span>
-            Departure: {ride ? formatDateTime(ride.departure_time) : 'Not specified'}
-          </Typography>
-          
-          {/* Email Button */}
-          <Box sx={{ mt: 2, display: 'flex', justifyContent: 'flex-end' }}>
-            <Button
-              variant="outlined"
-              size="small"
-              startIcon={<Email />}
-              onClick={() => requestEmailNotification(notification.id)}
-            >
-              Send to Email
-            </Button>
+            )}
           </Box>
-        </Box>
-      );
-    } catch (error) {
-      console.error('Error rendering ride match details:', error);
-      return null; // Return nothing if any error occurs
-    }
+        )}
+        
+        {renderAcceptButton(notification)}
+      </Box>
+    );
   };
 
   // Function to safely render notification content, avoiding references to potentially missing fields

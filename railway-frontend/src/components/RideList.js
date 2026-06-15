@@ -13,22 +13,57 @@ const RideList = () => {
   const [rides, setRides] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const userType = localStorage.getItem('userType') || 'RIDER';
   
-  console.log('RideList - Initial state:');
-  console.log('  Current user type:', userType);
-  console.log('  All localStorage items:', Object.keys(localStorage));
-  console.log('  Token exists:', !!localStorage.getItem('token'));
+  // Safely get userType from localStorage
+  const getUserType = () => {
+    try {
+      const userType = localStorage.getItem('userType');
+      if (!userType) return 'RIDER';
+      
+      // Handle both JSON string and plain string formats
+      try {
+        // Check if it's a JSON string
+        if (userType.startsWith('"') || userType.startsWith('{')) {
+          return JSON.parse(userType);
+        }
+      } catch (e) {
+        console.warn('Error parsing userType JSON:', e);
+      }
+      
+      // Return as is if it's a plain string
+      return userType;
+    } catch (error) {
+      console.error('Error reading userType from localStorage:', error);
+      return 'RIDER';
+    }
+  };
+  
+  const userType = getUserType();
+  
+  console.log('RideList - Initial state:', {
+    userType,
+    hasToken: !!localStorage.getItem('token')
+  });
 
   const fetchRides = async () => {
     console.log('RideList - fetchRides started');
     try {
-      const token = localStorage.getItem('token');
-      console.log('RideList - Token retrieved:', token ? 'Token exists' : 'No token');
+      let token;
+      try {
+        token = localStorage.getItem('token');
+      } catch (error) {
+        console.error('Error reading token from localStorage:', error);
+        setError('Error accessing local storage. Please try logging in again.');
+        navigate('/login');
+        return;
+      }
+
+      console.log('RideList - Token status:', token ? 'exists' : 'missing');
       
       if (!token) {
         console.error('RideList - No token found');
         setError('Please log in to view rides');
+        navigate('/login');
         return;
       }
 
@@ -85,6 +120,24 @@ const RideList = () => {
 
   useEffect(() => {
     console.log('RideList - useEffect triggered');
+    
+    // Test API connection
+    const testConnection = async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/rides/`, {
+          headers: getAuthHeader()
+        });
+        console.log('API Connection Test:', {
+          status: response.status,
+          ok: response.ok,
+          statusText: response.statusText
+        });
+      } catch (error) {
+        console.error('API Connection Test Failed:', error);
+      }
+    };
+    
+    testConnection();
     fetchRides();
   }, [navigate]); // Add navigate to dependencies
 
@@ -251,12 +304,6 @@ const RideList = () => {
                         variant="outlined"
                       />
                     </Box>
-                    
-                    {ride.price_per_seat > 0 && (
-                      <Typography variant="body2">
-                        Price: ${ride.price_per_seat.toFixed(2)} per seat
-                      </Typography>
-                    )}
                   </div>
                   
                   {userType === 'RIDER' && (

@@ -2,7 +2,8 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { ThemeProvider } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
-import { GoogleOAuthProvider } from '@react-oauth/google';
+// Import commented out until SSO is properly configured
+// import { GoogleOAuthProvider } from '@react-oauth/google';
 import theme from './theme';
 import './index.css';
 import App from './App';
@@ -14,20 +15,22 @@ const getGoogleClientId = () => {
   if (process.env.REACT_APP_GOOGLE_CLIENT_ID) {
     return process.env.REACT_APP_GOOGLE_CLIENT_ID;
   }
-  return '398380664395-v4r5utmd4cl4t9f6gcj6cfjt2vgddsqo.apps.googleusercontent.com'; // Placeholder ID
+  // Placeholder - actual client ID should be configured in environment variables
+  return 'GOOGLE_CLIENT_ID_PLACEHOLDER';
 };
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(
   <React.StrictMode>
-    <GoogleOAuthProvider clientId={getGoogleClientId()}>
+    {/* Google auth provider temporarily disabled until properly configured */}
+    {/* <GoogleOAuthProvider clientId={getGoogleClientId()}> */}
       <AuthProvider>
         <ThemeProvider theme={theme}>
           <CssBaseline />
           <App />
         </ThemeProvider>
       </AuthProvider>
-    </GoogleOAuthProvider>
+    {/* </GoogleOAuthProvider> */}
   </React.StrictMode>
 );
 
