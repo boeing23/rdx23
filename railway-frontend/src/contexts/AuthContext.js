@@ -96,25 +96,16 @@ export const AuthProvider = ({ children }) => {
   const login = async (username, password) => {
     try {
       console.log('Attempting login with username:', username);
-      
-      // Fetch CSRF token before making the login request
-      console.log('Fetching CSRF token before login...');
-      await fetchCsrfToken();
-      
-      // Get the CSRF token from cookies
-      const csrfToken = getCsrfToken();
-      console.log('Using CSRF token:', csrfToken);
-      
-      // Direct fetch request with CSRF token
+
+      // JWT login — no CSRF needed
       const response = await fetch(`${API_BASE_URL}/api/users/login/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'X-CSRFToken': csrfToken
+          'Accept': 'application/json'
         },
         body: JSON.stringify({ username, password }),
-        credentials: 'include'
+        credentials: 'omit'
       });
       
       // Handle non-2xx responses
