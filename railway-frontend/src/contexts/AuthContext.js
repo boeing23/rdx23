@@ -16,7 +16,7 @@ import {
  * Authentication Context
  * 
  * Handles all authentication-related logic including:
- * - Login (with CSRF token support)
+ * - Login (JWT)
  * - Registration
  * - Token management
  * - User session management
@@ -233,25 +233,16 @@ export const AuthProvider = ({ children }) => {
   const register = async (userData) => {
     try {
       console.log('Attempting registration with data:', userData);
-      
-      // Fetch CSRF token before making the registration request
-      console.log('Fetching CSRF token before registration...');
-      await fetchCsrfToken();
-      
-      // Get the CSRF token from cookies
-      const csrfToken = getCsrfToken();
-      console.log('Using CSRF token for registration:', csrfToken);
-      
-      // Direct fetch request with CSRF token
+
+      // JWT-based registration — no CSRF needed
       const response = await fetch(`${API_BASE_URL}/api/users/register/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'X-CSRFToken': csrfToken
+          'Accept': 'application/json'
         },
         body: JSON.stringify(userData),
-        credentials: 'include'
+        credentials: 'omit'
       });
       
       // Handle non-2xx responses
@@ -295,4 +286,4 @@ export const AuthProvider = ({ children }) => {
   );
 };
 
-export default AuthContext; 
+export default AuthContext;
