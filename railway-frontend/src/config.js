@@ -9,12 +9,12 @@ const getApiBaseUrl = () => {
   }
   
   // Fallback URLs - use localhost for development
-  return 'http://localhost:8002';
+  return 'https://rdx23-production.up.railway.app';
 };
 
 // Server that handles CORS properly - Railway app with CORS setup
 export const API_BASE_URL = getApiBaseUrl();
-export const FALLBACK_API_URL = 'http://localhost:8002';
+export const FALLBACK_API_URL = 'https://rdx23-production.up.railway.app';
 
 // URLs for API endpoints
 export const REGISTER_URL = `${API_BASE_URL}/api/users/register/`;
