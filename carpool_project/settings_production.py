@@ -175,6 +175,7 @@ if 'corsheaders.middleware.CorsPostCsrfMiddleware' in MIDDLEWARE:
 
 # Explicit CORS allowed origins
 CORS_ALLOWED_ORIGINS = [
+    "https://bountiful-smile-production-0ab2.up.railway.app",   # <-- add
     "https://ridex-frontend.up.railway.app",
     "https://rdx23-production-frontend.up.railway.app",
     "https://compassionate-nurturing-production.up.railway.app",
@@ -264,6 +265,7 @@ CSRF_COOKIE_SECURE = False  # Temporarily disabled for troubleshooting
 CSRF_COOKIE_SAMESITE = 'None'  # Allow cross-site cookies
 CSRF_COOKIE_DOMAIN = None  # Allow all domains
 CSRF_TRUSTED_ORIGINS = [
+    "https://bountiful-smile-production-0ab2.up.railway.app",   # <-- add
     "https://ridex-frontend.up.railway.app",
     "https://rdx23-production-frontend.up.railway.app",
     "https://compassionate-nurturing-production.up.railway.app",
