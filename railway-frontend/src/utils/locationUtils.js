@@ -2,6 +2,8 @@
  * Location utility functions for the ChalBeyy app
  */
 
+import { API_BASE_URL } from '../config';
+
 // Default location for Blacksburg, VA (Virginia Tech)
 export const DEFAULT_LOCATION = {
   lat: 37.2284,
@@ -72,21 +74,18 @@ export const enhanceSearchUrl = (baseUrl, location, radiusKm = 10) => {
  */
 export const geocodeWithPriority = async (locationText, nearLocation = null) => {
   try {
-    // Base URL for Nominatim geocoding
-    let url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(locationText)}`;
-    
+    // Geocode via our backend proxy. The browser cannot call Nominatim
+    // directly (no CORS headers + usage policy), so the server forwards it.
+    // Response shape is identical to Nominatim's.
+    let url = `${API_BASE_URL}/api/rides/geocode/?format=json&q=${encodeURIComponent(locationText)}`;
+
     // Add viewbox or proximity parameters if we have a reference location
     if (nearLocation) {
       url = enhanceSearchUrl(url, nearLocation);
     }
-    
-    // Add a custom user agent as per Nominatim usage policy
-    const response = await fetch(url, {
-      headers: {
-        'User-Agent': 'ChalBeyy-RideSharing-App'
-      }
-    });
-    
+
+    const response = await fetch(url);
+
     const data = await response.json();
     return data && data.length > 0 ? data[0] : null;
   } catch (error) {

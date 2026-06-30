@@ -323,7 +323,7 @@ function NotificationList() {
     if (!token || userType !== 'DRIVER') return;
     
     try {
-      const response = await axios.get(`${API_BASE_URL}/api/rides/ride-requests/`, {
+      const response = await axios.get(`${API_BASE_URL}/api/rides/requests/`, {
         headers: { 
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json' 

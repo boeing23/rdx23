@@ -2128,8 +2128,44 @@ def proxy_openrouteservice(request):
         }
         
         response = requests.get(ors_url, params=params, headers=headers)
-        
+
         # Return the response content and status code
         return JsonResponse(response.json(), status=response.status_code)
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=500)
+
+
+@csrf_exempt
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def geocode_proxy(request):
+    """
+    Server-side proxy for Nominatim geocoding. The browser cannot call
+    nominatim.openstreetmap.org directly (no CORS headers + usage policy), so the
+    frontend calls this endpoint and we forward the query from the server. The
+    response shape is passed through unchanged (a JSON array of results), so the
+    frontend parsing is identical to a direct Nominatim call.
+    """
+    query = request.GET.get('q')
+    if not query:
+        return JsonResponse({"error": "Missing required parameter 'q'"}, status=400)
+
+    # Forward the supported search params (q, viewbox, bounded, limit, etc.).
+    params = {'format': 'json'}
+    for key in ('q', 'viewbox', 'bounded', 'limit', 'countrycodes', 'addressdetails'):
+        if key in request.GET:
+            params[key] = request.GET.get(key)
+    params.setdefault('limit', '5')
+
+    try:
+        # Nominatim usage policy requires a valid identifying User-Agent.
+        resp = requests.get(
+            "https://nominatim.openstreetmap.org/search",
+            params=params,
+            headers={'User-Agent': 'ChalBeyy-RideSharing-App (server proxy)'},
+            timeout=10,
+        )
+        return JsonResponse(resp.json(), status=resp.status_code, safe=False)
+    except Exception as e:
+        logger.error(f"geocode_proxy error: {e}")
+        return JsonResponse({"error": str(e)}, status=502)
