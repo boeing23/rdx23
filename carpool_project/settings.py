@@ -305,11 +305,13 @@ _LOCAL_CORS_ORIGINS = [
     "http://localhost:3004",
     "http://127.0.0.1:3004",
 ]
-# Comma-separated production frontend origins, e.g.
-# "https://rdx23-production.up.railway.app,https://app.example.com"
+# Production frontend origin(s). Accepts FRONTEND_URL (single, used in the
+# Railway env) or FRONTEND_URLS (comma-separated). Either may list multiple,
+# comma-separated, e.g. "https://rdx23-production.up.railway.app,https://app.example.com"
+_frontend_env = config('FRONTEND_URL', default='') or config('FRONTEND_URLS', default='')
 FRONTEND_URLS = [
     o.strip().rstrip('/')
-    for o in config('FRONTEND_URLS', default='').split(',')
+    for o in _frontend_env.split(',')
     if o.strip()
 ]
 CORS_ALLOWED_ORIGINS = _LOCAL_CORS_ORIGINS + FRONTEND_URLS
