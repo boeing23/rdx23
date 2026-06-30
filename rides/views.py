@@ -756,10 +756,13 @@ class RideViewSet(viewsets.ModelViewSet):
         This method is called when a new ride is created.
         """
         try:
-            time.sleep(5) # Add delay to potentially allow DB changes to become visible
-            logger.info("CHECK_PENDING: Starting check after 5s delay.")
+            # This runs synchronously within the ride-creation request (not in a
+            # background thread), so the new ride is already committed and
+            # visible here. The previous time.sleep(5) was a leftover workaround
+            # for a thread-visibility race that no longer exists; it only added
+            # 5s of latency to every ride creation.
+            logger.info("CHECK_PENDING: Starting check for matching pending requests.")
 
-            # Restore original query
             now_time = timezone.now()
             pending_requests = PendingRideRequest.objects.filter(
                 status='PENDING',
@@ -867,13 +870,19 @@ class RideViewSet(viewsets.ModelViewSet):
                             logger.info(f"Ride {ride_to_update.id} seats decremented to {ride_to_update.available_seats}...")
 
                             # Create driver notification
+                            # NOTE: the Notification FK field is `ride`, not
+                            # `related_ride`. The old code passed related_ride=,
+                            # which raised TypeError *inside* this atomic block,
+                            # rolling back the entire match proposal (status,
+                            # seat decrement, notifications) every time — the
+                            # silent "updates don't persist" bug.
                             Notification.objects.create(
                                 recipient=ride_to_update.driver,
                                 sender=None, # Assuming system notification
                                 notification_type='MATCH_PROPOSED',
                                 message=f"Your ride (ID {ride_to_update.id}) has a proposed match with a rider request (ID {pr_to_update.id}).",
                                 related_pending_request=pr_to_update,
-                                related_ride=ride_to_update
+                                ride=ride_to_update
                             )
                             logger.info(f"Notification created for driver (ID: {ride_to_update.driver.id})...")
 
@@ -884,7 +893,7 @@ class RideViewSet(viewsets.ModelViewSet):
                                 notification_type='MATCH_PROPOSED',
                                 message=f"We found a match for your request (ID {pr_to_update.id})! Check Ride ID {ride_to_update.id}.",
                                 related_pending_request=pr_to_update,
-                                related_ride=ride_to_update
+                                ride=ride_to_update
                             )
                             logger.info(f"Notification created for rider (ID: {pr_to_update.rider.id})...")
 
@@ -919,9 +928,14 @@ class RideViewSet(viewsets.ModelViewSet):
         try:
             # Pass the driver to serializer.save() instead of in request.data
             ride = serializer.save(driver=request.user)
-            
-            # Check for pending requests that might match this ride
-            self.check_pending_requests(ride)
+
+            # Check for pending requests that might match this ride. Matching is
+            # best-effort: a failure here must never fail the ride creation that
+            # already succeeded.
+            try:
+                self.check_pending_requests(ride)
+            except Exception as match_err:
+                logger.error(f"check_pending_requests failed for ride {ride.id}: {match_err}", exc_info=True)
 
             return Response(serializer.data, status=status.HTTP_201_CREATED)
 

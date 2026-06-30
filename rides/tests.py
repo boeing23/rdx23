@@ -139,3 +139,135 @@ class MatchingFlowTest(TestCase):
         self.assertEqual(resp.status_code, 201, f"expected match after backfill, got {resp.status_code}: {resp.data}")
         ride.refresh_from_db()
         self.assertTrue(ride.route_geometry, "geometry should have been backfilled during matching")
+
+    # --- request -> pending ---------------------------------------------------
+
+    def test_request_without_any_ride_becomes_pending(self, *_):
+        """No rides exist at all -> request is stored as a PendingRideRequest."""
+        payload = self._request_payload(pickup=(-80.40, 37.231), dropoff=(-80.10, 37.231))
+        url = reverse("ride-request-list")
+        resp = self.client.post(url, payload, format="json")
+
+        self.assertEqual(resp.status_code, 202, f"{resp.status_code}: {resp.data}")
+        self.assertEqual(PendingRideRequest.objects.count(), 1)
+        self.assertEqual(PendingRideRequest.objects.first().status, "PENDING")
+
+
+class BackgroundMatchTest(TestCase):
+    """The driver-posts-a-ride -> match waiting PendingRideRequests path
+    (RideViewSet.check_pending_requests)."""
+
+    DRIVER_START = (-80.50, 37.23)
+    DRIVER_END = (-80.00, 37.23)
+
+    def setUp(self):
+        self.driver = User.objects.create_user(
+            username="driver1", password="pw", user_type="DRIVER", phone_number="1",
+            first_name="Dee", last_name="River",
+            vehicle_make="Toyota", vehicle_model="Prius", vehicle_year=2020,
+            vehicle_color="Blue", license_plate="ABC123", max_passengers=4,
+        )
+        self.rider = User.objects.create_user(
+            username="rider1", password="pw", user_type="RIDER", phone_number="2",
+        )
+
+    @patch("rides.models.get_route_details", side_effect=fake_route)
+    def _make_ride(self, _mock, **overrides):
+        data = dict(
+            driver=self.driver, start_location="A", end_location="B",
+            start_longitude=self.DRIVER_START[0], start_latitude=self.DRIVER_START[1],
+            end_longitude=self.DRIVER_END[0], end_latitude=self.DRIVER_END[1],
+            departure_time=timezone.now() + timezone.timedelta(hours=1),
+            available_seats=3, status="SCHEDULED",
+        )
+        data.update(overrides)
+        return Ride.objects.create(**data)
+
+    def _make_pending(self, pickup, dropoff, seats=1):
+        return PendingRideRequest.objects.create(
+            rider=self.rider, pickup_location="P", dropoff_location="D",
+            pickup_longitude=pickup[0], pickup_latitude=pickup[1],
+            dropoff_longitude=dropoff[0], dropoff_latitude=dropoff[1],
+            departure_time=timezone.now() + timezone.timedelta(hours=1),
+            seats_needed=seats, status="PENDING",
+        )
+
+    @patch("rides.views.get_route_details", side_effect=fake_route)
+    @patch("rides.models.get_route_details", side_effect=fake_route)
+    def test_check_pending_proposes_match_and_persists(self, *_):
+        """The core fix: a matching pending request must end up MATCH_PROPOSED
+        with seats decremented and notifications created — none of which used to
+        persist because of the related_ride TypeError rollback."""
+        from .models import Notification
+        from .views import RideViewSet
+
+        pending = self._make_pending(pickup=(-80.40, 37.231), dropoff=(-80.10, 37.231))
+        ride = self._make_ride()
+
+        RideViewSet.check_pending_requests(ride)
+
+        pending.refresh_from_db()
+        ride.refresh_from_db()
+        self.assertEqual(pending.status, "MATCH_PROPOSED")
+        self.assertEqual(pending.proposed_ride_id, ride.id)
+        self.assertEqual(ride.available_seats, 2, "seat should be decremented (3 - 1)")
+
+        notifs = Notification.objects.filter(notification_type="MATCH_PROPOSED")
+        self.assertEqual(notifs.count(), 2, "driver + rider should both be notified")
+        recipients = set(notifs.values_list("recipient_id", flat=True))
+        self.assertEqual(recipients, {self.driver.id, self.rider.id})
+
+    @patch("rides.views.get_route_details", side_effect=fake_route)
+    @patch("rides.models.get_route_details", side_effect=fake_route)
+    def test_check_pending_no_match_leaves_request_pending(self, *_):
+        from .models import Notification
+        from .views import RideViewSet
+
+        pending = self._make_pending(pickup=(-80.40, 40.00), dropoff=(-80.10, 40.00))
+        ride = self._make_ride()
+
+        RideViewSet.check_pending_requests(ride)
+
+        pending.refresh_from_db()
+        ride.refresh_from_db()
+        self.assertEqual(pending.status, "PENDING")
+        self.assertIsNone(pending.proposed_ride_id)
+        self.assertEqual(ride.available_seats, 3, "no match -> seats unchanged")
+        self.assertEqual(Notification.objects.filter(notification_type="MATCH_PROPOSED").count(), 0)
+
+    @patch("rides.views.get_route_details", side_effect=fake_route)
+    @patch("rides.models.get_route_details", side_effect=fake_route)
+    def test_driver_posting_ride_via_api_triggers_match(self, *_):
+        """End-to-end trigger: rider has a pending request, driver creates a ride
+        through the API, and check_pending_requests fires from create()."""
+        from .models import Notification
+        from rest_framework.test import APIClient
+
+        pending = self._make_pending(pickup=(-80.40, 37.231), dropoff=(-80.10, 37.231))
+
+        # Mock geocoding so Ride.save() resolves the location strings without
+        # network. (lat/lng are read-only on the serializer.)
+        class FakeLoc:
+            def __init__(self, lat, lon):
+                self.latitude, self.longitude = lat, lon
+
+        coords = {"A": FakeLoc(37.23, -80.50), "B": FakeLoc(37.23, -80.00)}
+
+        class FakeGeolocator:
+            def geocode(self, q):
+                return coords.get(q, FakeLoc(37.23, -80.25))
+
+        driver_client = APIClient()
+        driver_client.force_authenticate(user=self.driver)
+        ride_payload = {
+            "start_location": "A", "end_location": "B",
+            "departure_time": (timezone.now() + timezone.timedelta(hours=1)).isoformat(),
+            "available_seats": 3,
+        }
+        with patch("rides.models.Nominatim", return_value=FakeGeolocator()):
+            resp = driver_client.post(reverse("ride-list"), ride_payload, format="json")
+
+        self.assertEqual(resp.status_code, 201, f"{resp.status_code}: {resp.data}")
+        pending.refresh_from_db()
+        self.assertEqual(pending.status, "MATCH_PROPOSED")
+        self.assertEqual(Notification.objects.filter(notification_type="MATCH_PROPOSED").count(), 2)
