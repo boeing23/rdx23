@@ -22,34 +22,37 @@ def check_database_tables():
     """Check if database tables exist"""
     try:
         from django.db import connection
+        # Use Django's introspection so this works on any backend (the previous
+        # information_schema query was Postgres-only and failed on SQLite).
         with connection.cursor() as cursor:
-            cursor.execute("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'")
-            tables = cursor.fetchall()
-            
-            if not tables:
-                logger.error("No tables found in the database!")
-                return False
-                
-            logger.info(f"Found {len(tables)} tables:")
-            for table in tables:
-                logger.info(f"- {table[0]}")
-                
-            # Check for essential tables
-            table_names = [t[0] for t in tables]
-            essential_tables = [
-                'auth_user', 
-                'users_user', 
-                'rides_ride', 
-                'rides_riderequest',
-                'django_migrations'
-            ]
-            
-            missing_tables = [t for t in essential_tables if t not in table_names]
-            if missing_tables:
-                logger.error(f"Missing essential tables: {missing_tables}")
-                return False
-                
-            return True
+            table_names = connection.introspection.table_names(cursor)
+
+        if not table_names:
+            logger.error("No tables found in the database!")
+            return False
+
+        logger.info(f"Found {len(table_names)} tables:")
+        for name in table_names:
+            logger.info(f"- {name}")
+
+        # Check for essential tables.
+        # Note: this project uses a custom user model (users.User), so the
+        # default 'auth_user' table does not exist by design — the user table
+        # is 'users_user'. Checking for 'auth_user' produced a permanent
+        # false "missing table" / "DB not set up" error.
+        essential_tables = [
+            'users_user',
+            'rides_ride',
+            'rides_riderequest',
+            'django_migrations'
+        ]
+
+        missing_tables = [t for t in essential_tables if t not in table_names]
+        if missing_tables:
+            logger.error(f"Missing essential tables: {missing_tables}")
+            return False
+
+        return True
     except Exception as e:
         logger.error(f"Error checking tables: {e}")
         return False
