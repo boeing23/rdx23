@@ -179,26 +179,27 @@ def interpolate_points(points, min_points):
     return result
 
 def find_best_point(target_lat, target_lon, route_points, max_distance):
-    """Find the best point (as tuple lat,lon) along the route within max_distance."""
-    best_point_tuple = None # Changed variable name
+    """Find the route point (tuple lat,lon) geometrically closest to the target,
+    within max_distance metres.
+
+    Uses straight-line (great-circle) distance. This is a geometric
+    nearest-point-on-route search, so straight-line distance is the correct
+    measure. The previous implementation called an OSRM road-distance HTTP
+    request for *every* route point (~50-100 network calls per ride evaluated),
+    which made matching take ~12s per ride and instantly hit ORS rate limits.
+    """
+    best_point_tuple = None
     best_distance = float('inf')
-    best_method = None
-    
-    # Ensure route_points are tuples (lat, lon)
-    route_point_tuples = [(p[0], p[1]) for p in route_points] # Convert to tuple if needed
-    
-    for point_tuple in route_point_tuples:
-        # Pass tuple elements to get_road_distance
-        distance, method = get_road_distance(target_lat, target_lon, point_tuple[0], point_tuple[1]) 
-        
+
+    for p in route_points:
+        point_tuple = (p[0], p[1])
+        distance = great_circle((target_lat, target_lon), point_tuple).meters
+
         if distance <= max_distance and distance < best_distance:
-            best_point_tuple = point_tuple # Store the tuple
+            best_point_tuple = point_tuple
             best_distance = distance
-            best_method = method
-            # Log using tuple elements
-            logger.info(f"Found better point tuple: ({point_tuple[0]}, {point_tuple[1]}) - {distance}m using {method}") 
-    
-    return best_point_tuple, best_distance, best_method # Return tuple
+
+    return best_point_tuple, best_distance, "great_circle"
 
 def calculate_optimal_pickup_dropoff(
     driver_route_points,
