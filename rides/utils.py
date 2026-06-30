@@ -320,8 +320,9 @@ def calculate_route_overlap(
     rider_end_lat: float, rider_end_lon: float,
     # Add parameters for distance thresholds
     max_pickup_dist: int = 600, # meters - Increased for testing
-    max_dropoff_dist: int = 1000, # meters 
-    min_compatibility_score: float = 40.0 # Lower score threshold to increase match chance
+    max_dropoff_dist: int = 1000, # meters
+    min_compatibility_score: float = 40.0, # Lower score threshold to increase match chance
+    rider_original_distance: float = None, # meters; pass to avoid a per-ride ORS call
 ):
     """
     Calculates a compatibility score between a driver's route and a rider's request.
@@ -458,11 +459,15 @@ def calculate_route_overlap(
     
     logger.info(f"COMPATIBILITY: Estimated Driver Segment Distance (Idx {pickup_index}-{dropoff_index}): {driver_segment_distance:.2f}m")
 
-    # Get rider's original route distance using ORS (or estimate)
-    # TODO: OPTIMIZE - Avoid calling ORS again. Pass this in or estimate.
-    rider_route_details = get_route_details((rider_start_lon, rider_start_lat), (rider_end_lon, rider_end_lat))
-    rider_original_distance = rider_route_details['distance'] if rider_route_details else great_circle((rider_start_lat, rider_start_lon), (rider_end_lat, rider_end_lon)).meters
-    
+    # Rider's original route distance. The caller should pass this in
+    # (computed once per request) to avoid an ORS call per candidate ride,
+    # which previously caused 429 rate-limiting and slow matching. Fall back to
+    # a straight-line estimate if not supplied — never call ORS inside this loop.
+    if rider_original_distance is None:
+        rider_original_distance = great_circle(
+            (rider_start_lat, rider_start_lon), (rider_end_lat, rider_end_lon)
+        ).meters
+
     logger.info(f"COMPATIBILITY: Rider Original Distance: {rider_original_distance:.2f}m")
 
     coverage_ratio = 0

@@ -91,10 +91,14 @@ python manage.py check || echo "Django check failed but continuing"
 # Try to get Django version
 python -c "import django; print(f'Django version: {django.__version__}')" || echo "Failed to get Django version"
 
-# Apply database migrations but don't fail if they error
+# Apply database migrations. Fail the deploy if they error — booting with a
+# broken/partial schema silently corrupts behavior (missing tables, desynced
+# migration history) and is the root of many runtime errors. Better to fail
+# loudly here than serve a half-migrated database.
+# --fake-initial reconciles tables that already exist but aren't recorded in
+# migration history (e.g. token_blacklist).
 echo "=== APPLYING MIGRATIONS ==="
-python manage.py migrate --fake-initial || echo "Initial migrations failed but continuing"
-python manage.py migrate || echo "Migrations failed but continuing"
+python manage.py migrate --fake-initial
 
 # Run a post-deployment check
 echo "=== VERIFYING DATABASE SETUP ==="
