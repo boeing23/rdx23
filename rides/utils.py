@@ -286,17 +286,19 @@ def calculate_optimal_pickup_dropoff(
 
     logger.info(f"Found dropoff point (lat,lon): {dropoff_point_tuple} at index {dropoff_index}")
     
-    # --- Sanity Check ---
-    # If pickup index comes after dropoff index, we have a problem
-    # In a real route, pickup should come before dropoff
+    # --- Direction Check ---
+    # If the rider's dropoff lands BEFORE their pickup along the driver's route,
+    # the rider is travelling opposite to the driver — they are not compatible.
+    # The old code swapped the two points to force a valid sequence, which
+    # silently rewrote an opposite-direction rider as same-direction and
+    # produced bogus high-compatibility matches. Reject instead.
     if dropoff_index < pickup_index:
-        logger.warning(f"Calculated dropoff_index ({dropoff_index}) is less than pickup_index ({pickup_index}). Swapping points.")
-        # Swap pickup and dropoff points to maintain proper sequence
-        pickup_point_tuple, dropoff_point_tuple = dropoff_point_tuple, pickup_point_tuple
-        pickup_index, dropoff_index = dropoff_index, pickup_index
-        pickup_distance, dropoff_distance = dropoff_distance, pickup_distance
-        pickup_method, dropoff_method = dropoff_method, pickup_method
-    # --- End Sanity Check ---
+        logger.info(
+            f"Incompatible direction: dropoff_index ({dropoff_index}) < pickup_index "
+            f"({pickup_index}); rider travels opposite to driver."
+        )
+        return None
+    # --- End Direction Check ---
 
     logger.info(f"Final optimal points - Pickup (lat,lon): {pickup_point_tuple} (Index: {pickup_index}, Dist: {pickup_distance}m), Dropoff (lat,lon): {dropoff_point_tuple} (Index: {dropoff_index}, Dist: {dropoff_distance}m)")
     

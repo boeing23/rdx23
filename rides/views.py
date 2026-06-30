@@ -835,6 +835,12 @@ class RideViewSet(viewsets.ModelViewSet):
                          logger.error(f"Error during calculate_route_overlap for PR {pending_request.id} / Ride {ride.id}: {calc_err}", exc_info=True)
                          compatibility_score = 0 # Treat error as incompatible
 
+                    # Reject rides leaving too far from the rider's desired time.
+                    time_diff = abs((ride.departure_time - pending_request.departure_time).total_seconds() / 60)
+                    if time_diff > settings.MATCH_TIME_WINDOW_MINUTES:
+                        logger.info(f"[PR {pending_request.id} - Ride {ride.id}] Skipping: departure {time_diff:.0f}min away exceeds window {settings.MATCH_TIME_WINDOW_MINUTES}min")
+                        continue
+
                     if compatibility_score >= settings.MATCH_MIN_SCORE and compatibility_score > best_score:
                         best_match = ride
                         best_score = compatibility_score
@@ -1195,6 +1201,12 @@ class RideRequestViewSet(viewsets.ModelViewSet):
                         time_diff = abs((ride.departure_time - rider_departure_time).total_seconds() / 60)
                     else:
                         time_diff = 0  # No time preference specified
+
+                    # Reject rides that leave too far from the rider's desired
+                    # time, even if the route overlaps perfectly.
+                    if rider_departure_time and time_diff > settings.MATCH_TIME_WINDOW_MINUTES:
+                        logger.info(f"Skipping ride {ride.id}: departure {time_diff:.0f}min away exceeds window {settings.MATCH_TIME_WINDOW_MINUTES}min")
+                        continue
 
                     if compatibility_score >= settings.MATCH_MIN_SCORE:
                         logger.info(f"Ride {ride.id} is compatible with score {compatibility_score:.2f}")
