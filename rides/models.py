@@ -155,6 +155,42 @@ class Ride(models.Model):
             (self.end_latitude, self.end_longitude)
         ).miles
 
+    def ensure_route_geometry(self):
+        """
+        Return this ride's route geometry, recomputing and persisting it if it
+        is missing. A ride saved while ORS/geocoding was failing ends up with
+        route_geometry=None and is then permanently unmatchable, because the
+        matcher returns score 0 for rides without geometry. This lazily backfills
+        it at match time so a transient API failure at creation doesn't
+        permanently exclude the ride.
+
+        Returns the geometry list, or None if it still can't be obtained.
+        """
+        if self.route_geometry:
+            return self.route_geometry
+
+        if not all([self.start_latitude, self.start_longitude,
+                    self.end_latitude, self.end_longitude]):
+            logger.warning(f"Ride {self.id}: cannot backfill geometry, missing coordinates")
+            return None
+
+        route_details = get_route_details(
+            (self.start_longitude, self.start_latitude),
+            (self.end_longitude, self.end_latitude),
+        )
+        if not route_details or not route_details.get('geometry'):
+            logger.warning(f"Ride {self.id}: geometry backfill failed (ORS unavailable)")
+            return None
+
+        self.route_geometry = route_details.get('geometry')
+        self.route_duration = route_details.get('duration')
+        self.route_distance = route_details.get('distance')
+        # Persist only these fields; avoid re-triggering the heavy save() override.
+        if self.pk:
+            super().save(update_fields=['route_geometry', 'route_duration', 'route_distance'])
+        logger.info(f"Ride {self.id}: route geometry backfilled ({len(self.route_geometry)} points)")
+        return self.route_geometry
+
     def __str__(self):
         return f"Ride from {self.start_location} to {self.end_location} on {self.departure_time}"
 

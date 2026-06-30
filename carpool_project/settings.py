@@ -289,7 +289,13 @@ FRONTEND_URL = config('FRONTEND_URL', default='http://localhost:3000')
 # CORS settings
 CORS_ALLOW_ALL_ORIGINS = False  # More secure setting
 CORS_ALLOW_CREDENTIALS = True
-CORS_ALLOWED_ORIGINS = [
+
+# Origins allowed to make browser requests. Local dev origins are always
+# included; production frontend origin(s) come from the FRONTEND_URLS env var
+# (comma-separated). This keeps the deployed frontend URL out of source and
+# lets GlobalCorsMiddleware echo the *exact* request origin — required when
+# Access-Control-Allow-Credentials is true.
+_LOCAL_CORS_ORIGINS = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
     "http://localhost:57225",
@@ -297,8 +303,16 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:57226",
     "http://127.0.0.1:57226",
     "http://localhost:3004",
-    "http://127.0.0.1:3004"
+    "http://127.0.0.1:3004",
 ]
+# Comma-separated production frontend origins, e.g.
+# "https://rdx23-production.up.railway.app,https://app.example.com"
+FRONTEND_URLS = [
+    o.strip().rstrip('/')
+    for o in config('FRONTEND_URLS', default='').split(',')
+    if o.strip()
+]
+CORS_ALLOWED_ORIGINS = _LOCAL_CORS_ORIGINS + FRONTEND_URLS
 
 CORS_EXPOSE_HEADERS = [
     'Content-Type',
@@ -337,16 +351,7 @@ CSRF_COOKIE_SECURE = False  # Set to True in production
 CSRF_COOKIE_HTTPONLY = False
 CSRF_COOKIE_SAMESITE = 'Lax'
 CSRF_COOKIE_DOMAIN = None
-CSRF_TRUSTED_ORIGINS = [
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-    "http://localhost:57225",
-    "http://127.0.0.1:57225",
-    "http://localhost:57226",
-    "http://127.0.0.1:57226",
-    "http://localhost:3004",
-    "http://127.0.0.1:3004"
-]
+CSRF_TRUSTED_ORIGINS = _LOCAL_CORS_ORIGINS + FRONTEND_URLS
 
 # Geocoding API settings
 GEOCODING_API_KEY = config('GEOCODING_API_KEY', default='')
@@ -355,6 +360,14 @@ OPENROUTE_API_KEY = config('OPENROUTE_API_KEY')
 
 # OpenRouteService settings
 OPENROUTE_BASE_URL = 'https://api.openrouteservice.org/v2'
+
+# Ride-matching settings
+# Single source of truth for the minimum compatibility score a ride must reach
+# to be considered a match. Previously this was hard-coded inconsistently
+# (60 in the view, 40 in utils, 20 in services) so a ride could be "compatible"
+# in one place and rejected in another.
+MATCH_MIN_SCORE = config('MATCH_MIN_SCORE', default=60, cast=float)
+MATCH_TIME_WINDOW_MINUTES = config('MATCH_TIME_WINDOW_MINUTES', default=30, cast=int)
 
 # Logging configuration
 LOGGING = {

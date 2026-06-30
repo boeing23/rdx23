@@ -785,36 +785,33 @@ class RideViewSet(viewsets.ModelViewSet):
                 best_match = None
                 best_score = 0
 
+                # Compute the rider's route distance ONCE for this pending
+                # request, then reuse it for every candidate ride to avoid a
+                # per-ride ORS call (429 rate-limiting / slow matching).
+                pr_route_details = get_route_details(
+                    (pending_request.pickup_longitude, pending_request.pickup_latitude),
+                    (pending_request.dropoff_longitude, pending_request.dropoff_latitude),
+                )
+                if pr_route_details and pr_route_details.get('distance'):
+                    pr_original_distance = pr_route_details['distance']
+                else:
+                    pr_original_distance = great_circle(
+                        (pending_request.pickup_latitude, pending_request.pickup_longitude),
+                        (pending_request.dropoff_latitude, pending_request.dropoff_longitude),
+                    ).meters
+
                 for ride in available_rides:
                     try:
-                        # Get geometry from the ride object (assuming it's stored)
-                        # Use .get to handle potential missing attribute gracefully, though ideally it should exist
-                        driver_geom_str = getattr(ride, 'route_geometry', None)
-                        driver_geom = None
-                        if driver_geom_str:
+                        # Lazily backfill geometry if a transient failure at ride
+                        # creation left it null (otherwise the ride is permanently
+                        # unmatchable). ensure_route_geometry persists the result.
+                        driver_geom = ride.ensure_route_geometry()
+                        if isinstance(driver_geom, str):
                             try:
-                                # Assuming route_geometry is stored as a JSON string list of [lon, lat]
-                                driver_geom = json.loads(driver_geom_str) 
+                                driver_geom = json.loads(driver_geom)
                             except (json.JSONDecodeError, TypeError):
-                                logger.warning(f"[PR {pending_request.id} - Ride {ride.id}] Could not decode route_geometry: {driver_geom_str}")
-                                driver_geom = None # Fallback if decoding fails
-                        
-                        # Get geometry lazily ONLY if needed and not present
-                        if not driver_geom and ride.start_longitude and ride.start_latitude and ride.end_longitude and ride.end_latitude:
-                            logger.warning(f"[PR {pending_request.id} - Ride {ride.id}] Ride geometry missing, attempting to fetch...")
-                            # Note: This fetch might hit rate limits or fail
-                            route_details = get_route_details(
-                                (ride.start_longitude, ride.start_latitude),
-                                (ride.end_longitude, ride.end_latitude)
-                            )
-                            if route_details and route_details.get('geometry'):
-                                driver_geom = route_details['geometry'] # Assuming geometry is the list
-                                # Optionally save it back to the ride object here if desired
-                                # ride.route_geometry = json.dumps(driver_geom)
-                                # ride.save(update_fields=['route_geometry'])
-                            else:
-                                logger.error(f"[PR {pending_request.id} - Ride {ride.id}] Failed to fetch missing geometry.")
-                                continue # Skip ride if geometry cannot be obtained
+                                logger.warning(f"[PR {pending_request.id} - Ride {ride.id}] Could not decode route_geometry")
+                                driver_geom = None
 
                         if not driver_geom:
                             logger.warning(f"[PR {pending_request.id} - Ride {ride.id}] Skipping ride, missing or could not obtain geometry.")
@@ -826,15 +823,16 @@ class RideViewSet(viewsets.ModelViewSet):
                             rider_start_lat=pending_request.pickup_latitude,
                             rider_start_lon=pending_request.pickup_longitude,
                             rider_end_lat=pending_request.dropoff_latitude,
-                            rider_end_lon=pending_request.dropoff_longitude
-                            # Using default thresholds defined in calculate_route_overlap in utils.py
+                            rider_end_lon=pending_request.dropoff_longitude,
+                            min_compatibility_score=settings.MATCH_MIN_SCORE,
+                            rider_original_distance=pr_original_distance,
                         )
                         compatibility_score = overlap_result.get('score', 0)
                     except Exception as calc_err:
                          logger.error(f"Error during calculate_route_overlap for PR {pending_request.id} / Ride {ride.id}: {calc_err}", exc_info=True)
                          compatibility_score = 0 # Treat error as incompatible
 
-                    if compatibility_score >= 60 and compatibility_score > best_score: 
+                    if compatibility_score >= settings.MATCH_MIN_SCORE and compatibility_score > best_score:
                         best_match = ride
                         best_score = compatibility_score
                         logger.info(f"Found potential better match: Ride {ride.id} with score {compatibility_score:.2f} for PR {pending_request.id}")
@@ -966,18 +964,22 @@ class RideViewSet(viewsets.ModelViewSet):
 
             if pending_request.status == 'MATCH_PROPOSED' and pending_request.proposed_ride:
                 try:
-                    # --- NEW --- Get driver route geometry from the proposed ride
-                    driver_geom = None
-                    if pending_request.proposed_ride.route_geometry:
+                    # Get driver route geometry from the proposed ride.
+                    # route_geometry is a JSONField (already a Python list), but
+                    # may legacy-store a JSON string — handle both.
+                    driver_geom = pending_request.proposed_ride.ensure_route_geometry()
+                    if isinstance(driver_geom, str):
                         try:
-                            # Assuming route_geometry is stored as a JSON string list of [lon, lat]
-                            driver_geom = json.loads(pending_request.proposed_ride.route_geometry)
-                            if not isinstance(driver_geom, list) or not all(isinstance(p, list) and len(p) == 2 for p in driver_geom):
-                                logger.warning(f"Ride {pending_request.proposed_ride.id} route geometry is not a valid list of [lon, lat] points.")
-                                driver_geom = None # Invalidate if format is wrong
-                        except json.JSONDecodeError:
+                            driver_geom = json.loads(driver_geom)
+                        except (json.JSONDecodeError, TypeError):
                             logger.error(f"Error decoding route geometry for Ride {pending_request.proposed_ride.id}.")
                             driver_geom = None
+                    if driver_geom and not (
+                        isinstance(driver_geom, list)
+                        and all(isinstance(p, (list, tuple)) and len(p) == 2 for p in driver_geom)
+                    ):
+                        logger.warning(f"Ride {pending_request.proposed_ride.id} route geometry is not a valid list of [lon, lat] points.")
+                        driver_geom = None
 
                     if driver_geom:
                         # --- MODIFIED --- Call calculate_route_overlap with correct keyword arguments
@@ -986,7 +988,8 @@ class RideViewSet(viewsets.ModelViewSet):
                             rider_start_lat=pending_request.pickup_latitude,
                             rider_start_lon=pending_request.pickup_longitude,
                             rider_end_lat=pending_request.dropoff_latitude,
-                            rider_end_lon=pending_request.dropoff_longitude
+                            rider_end_lon=pending_request.dropoff_longitude,
+                            min_compatibility_score=settings.MATCH_MIN_SCORE,
                         )
                         compatibility_score = overlap_result.get("score", 0)
                         
@@ -1111,10 +1114,23 @@ class RideRequestViewSet(viewsets.ModelViewSet):
             ).exclude(driver=request.user)  # Rider can't match with their own ride
             
             logger.info(f"Found {available_rides.count()} available rides to check for compatibility")
-            
+
+            # Compute the rider's route distance ONCE (it's the same for every
+            # candidate ride). Previously calculate_route_overlap fetched this
+            # from ORS on every iteration, causing 429 rate-limiting and slow
+            # matching. Fall back to straight-line distance if ORS is down.
+            rider_route_details = get_route_details(rider_pickup, rider_dropoff)
+            if rider_route_details and rider_route_details.get('distance'):
+                rider_original_distance = rider_route_details['distance']
+            else:
+                rider_original_distance = great_circle(
+                    (validated_data.get('pickup_latitude'), validated_data.get('pickup_longitude')),
+                    (validated_data.get('dropoff_latitude'), validated_data.get('dropoff_longitude')),
+                ).meters
+
             # Evaluate compatibility with all available rides
             compatible_rides = []
-            
+
             for ride in available_rides:
                 try:
                     # Skip if original_ride_id was provided and this isn't it
@@ -1131,8 +1147,11 @@ class RideRequestViewSet(viewsets.ModelViewSet):
                         logger.warning(f"Skipping ride {ride.id}: missing coordinates")
                         continue
                     
-                    # Calculate route compatibility using driver's route geometry
-                    route_geometry = ride.route_geometry
+                    # Calculate route compatibility using driver's route geometry.
+                    # Lazily backfill geometry if a transient ORS/geocode failure
+                    # at ride creation left it null (otherwise the ride is
+                    # permanently unmatchable).
+                    route_geometry = ride.ensure_route_geometry()
                     if not route_geometry:
                         logger.warning(f"Skipping ride {ride.id}: no route_geometry available")
                         continue
@@ -1143,7 +1162,9 @@ class RideRequestViewSet(viewsets.ModelViewSet):
                     overlap_result = calculate_route_overlap(
                         route_geometry,
                         validated_data.get('pickup_latitude'), validated_data.get('pickup_longitude'),
-                        validated_data.get('dropoff_latitude'), validated_data.get('dropoff_longitude')
+                        validated_data.get('dropoff_latitude'), validated_data.get('dropoff_longitude'),
+                        min_compatibility_score=settings.MATCH_MIN_SCORE,
+                        rider_original_distance=rider_original_distance,
                     )
 
                     if not overlap_result:
@@ -1153,18 +1174,15 @@ class RideRequestViewSet(viewsets.ModelViewSet):
                     compatibility_score = overlap_result.get("score", 0)
                     optimal_pickup_point = overlap_result.get("optimal_pickup_point")
                     optimal_dropoff_point = overlap_result.get("optimal_dropoff_point")
-                    
+
                     # Calculate time difference in minutes
                     rider_departure_time = validated_data.get('departure_time')
                     if rider_departure_time:
                         time_diff = abs((ride.departure_time - rider_departure_time).total_seconds() / 60)
                     else:
                         time_diff = 0  # No time preference specified
-                        
-                    # Consider rides with good compatibility (minimum 60% score)
-                    MIN_COMPATIBILITY_THRESHOLD = 60
-                    
-                    if compatibility_score >= MIN_COMPATIBILITY_THRESHOLD:
+
+                    if compatibility_score >= settings.MATCH_MIN_SCORE:
                         logger.info(f"Ride {ride.id} is compatible with score {compatibility_score:.2f}")
                         compatible_rides.append({
                             'ride': ride,
